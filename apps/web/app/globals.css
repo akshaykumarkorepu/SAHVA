@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f8fafc; /* slate-50 */
+  color: #0f172a; /* slate-900 */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Recharts: tighten default look so charts read as one system */
+.recharts-cartesian-axis-tick text {
+  fill: #64748b;
+  font-size: 11px;
+}
+.recharts-tooltip-wrapper {
+  outline: none;
+}
