@@ -1,0 +1,27 @@
+project_id = "sahva"
+
+[db]
+port = 54322
+major_version = 17
+
+[api]
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[studio]
+port = 54323
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = false          # staff are invited by a clinic owner, never self-signup
+
+[auth.email]
+enable_confirmations = true
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false

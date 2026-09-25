@@ -1,113 +1,243 @@
-# ClinicVoice AI — Demo
+# SAHVA
 
-An AI voice receptionist for Indian clinics. Answers inbound calls in **English and Telugu**, books / reschedules / cancels appointments, and sends a **WhatsApp confirmation** — built as a runnable demo for sales pitches to clinic owners.
+**Telugu-and-English AI receptionist for solo and small clinics in Tier 2/3 towns.**
+It answers every call, books real appointments off live availability, and never
+lets a schedule change silently cancel a patient without staff knowing.
 
-> This is a **demo**, not production. Telephony and WhatsApp are simulated. The conversation AI, persistence, and admin dashboard are real.
+> **Branch: `saikirans-version`** — maintained by Saikiran.
+> This branch adds the **production Supabase data layer**. Everything under
+> `apps/` is untouched, so the demo still runs exactly as it does on `main`.
 
-## Architecture
+---
+
+## What's in this branch
+
+| | `main` | `saikirans-version` |
+|---|---|---|
+| Database | SQLite, one hardcoded clinic | **Supabase / PostgreSQL, multi-tenant** |
+| Tenant isolation | none | **120 RLS policies + composite foreign keys** |
+| Availability | TypeScript, computed in the API | **`sahva.available_slots()`, computed in the DB** |
+| Double-booking | application check only | **impossible — `EXCLUDE USING gist` constraint** |
+| Action Required flow | did not exist | **implemented as a trigger, tested** |
+| Knowledge base | hardcoded in the system prompt | **`clinic_faqs` + `clinic_services`, RLS-scoped** |
+| Unit economics | not measured | **`usage_events` → `v_call_costs`, per call** |
+| Phase 2 clinical | — | notes, prescriptions, vaccinations, care loops, invoicing |
+| Tests | none | **46 assertions, all passing** |
+
+**37 tables · 6 views · 128 indexes · 120 RLS policies · 0 tables without RLS.**
+
+`main`'s README lists *"swap to Postgres when going multi-tenant"* under
+*Deploying later*. This branch is that swap.
+
+---
+
+## Repository layout
 
 ```
-apps/
-├── api/   Node 20 + Express + better-sqlite3 + Anthropic SDK
-└── web/   Next.js 14 (app router) + Tailwind + Recharts
+apps/                     unchanged from main — the runnable demo
+├── api/                  Node 20 + Express + better-sqlite3 + Anthropic SDK
+└── web/                  Next.js 14 + Tailwind + Recharts
+
+supabase/                 NEW — the production data layer
+├── config.toml           local dev config
+├── migrations/           16 ordered migrations
+├── seed.sql              one pilot clinic with realistic data
+└── tests/
+    ├── run.sh                        applies everything + asserts
+    ├── 00_supabase_shim.sql          local stand-in for auth.users / auth.uid()
+    ├── 10_scheduling_and_integrity.sql
+    ├── 20_rls_setup.sql
+    └── 21_rls_isolation.sql
+
+docs/                     NEW
+├── status.md             what `main` has, and the gap to the Phase 1 wedge
+├── data-model.md         table-by-table design rationale
+└── security.md           the RLS model and its threat assumptions
 ```
 
-`npm run dev` at the root starts both: API on `:4000`, web on `:3000` (proxied via Next.js rewrites).
+---
 
-## Quick start
+## Migrations
+
+| # | File | Contents |
+|---|---|---|
+| 0100 | `foundation` | extensions, private `sahva` schema, 30 enums, `touch_updated_at` |
+| 0200 | `tenancy_and_staff` | `clinics`, `clinic_settings`, hours, closures, `staff_profiles`, `clinic_members` |
+| 0300 | `doctors_and_schedule` | `doctors`, `doctor_sessions`, `doctor_time_off` |
+| 0400 | `patients` | `patients`, with family-aware identity |
+| 0500 | `appointments` | `appointments` + the no-double-booking EXCLUDE constraint, `appointment_events` |
+| 0600 | `calls` | `calls`, `call_turns`, `call_tool_invocations`, `call_summaries` |
+| 0700 | `knowledge_base` | `clinic_services`, `clinic_faqs` |
+| 0800 | `action_required` | `action_items`, `reschedule_batches`, `reschedule_batch_items` |
+| 0900 | `messaging` | `message_templates`, `messages` |
+| 1000 | `billing_and_usage` | `plans`, `subscriptions`, `usage_events`, `subscription_invoices` |
+| 1100 | `clinical_phase2` | consultations, prescriptions, conditions, vaccinations, care loops, patient invoices |
+| 1200 | `functions_access` | `current_clinic_ids()`, `is_member()`, `has_role()`, `assert_clinic_access()` |
+| 1300 | `functions_scheduling` | `available_slots()`, `book_appointment()`, `cancel_`, `reschedule_` |
+| 1400 | `trust_flow` | the Action Required triggers |
+| 1450 | `views` | six dashboard views, all `security_invoker` |
+| 1500 | `rls` | 120 policies across 37 tables |
+
+---
+
+## Three design decisions worth knowing
+
+### 1. The database is the authority, not the model
+
+`book_appointment()` re-checks live availability *inside the transaction*, and
+an `EXCLUDE USING gist` constraint on `appointments` makes overlapping bookings
+impossible even if that check is bypassed:
+
+```sql
+exclude using gist (
+  doctor_id with =,
+  tstzrange(starts_at, ends_at, '[)') with &&
+) where (status in ('booked','confirmed','checked_in'))
+```
+
+Two simultaneous callers can both pass the availability check; only one commits.
+A hallucinated slot cannot become a real double booking.
+
+### 2. A doctor going unavailable creates work, never a silent cancellation
+
+Inserting a row into `doctor_time_off` fires a trigger that:
+
+1. opens a **draft** `reschedule_batch`;
+2. moves affected appointments to `needs_reschedule` — keeping the row, the
+   patient link and the history, and freeing the slot;
+3. writes a `flagged_for_reschedule` audit event per appointment;
+4. tracks one `reschedule_batch_item` per affected patient;
+5. raises one `action_items` row, severity scaled by how soon the window starts.
+
+Nothing is cancelled. No patient is messaged. A CHECK constraint
+(`reschedule_batches_human_dispatch`) blocks the batch from leaving draft
+without a named human dispatcher.
+
+It is a database trigger rather than application code so the guarantee holds
+regardless of which client wrote the row — dashboard, API, or psql.
+
+### 3. Tenant isolation is structural, not conventional
+
+Every tenant table carries `clinic_id` and is covered by RLS keyed on clinic
+membership through a single function, `sahva.current_clinic_ids()`.
+
+Underneath that, cross-tenant mixing is blocked by **composite foreign keys**:
+
+```sql
+unique (id, clinic_id)                                  -- on doctors, patients
+foreign key (doctor_id, clinic_id)
+  references public.doctors(id, clinic_id)              -- on appointments
+```
+
+Pairing clinic A's doctor with clinic B's patient raises
+`foreign_key_violation`. This holds for `service_role` too — which the
+telephony webhook must use, since an inbound call carries no user JWT — so the
+guarantee survives a bug in the voice agent.
+
+---
+
+## Running the tests
+
+Needs a local PostgreSQL 16 (`brew install postgresql@16`). **No Docker
+required.**
 
 ```bash
-# 1. Install
+./supabase/tests/run.sh
+```
+
+Spins up a throwaway cluster, applies all 16 migrations plus the seed, and runs
+46 assertions covering slot generation, double-booking, the AI cancellation
+gate, the trust flow, the append-only audit log, cross-tenant foreign keys and
+RLS isolation across three users and two clinics.
+
+```
+migrations applied: 18
+assertions passed:  46
+assertions failed:  0
+```
+
+---
+
+## Deploying the database
+
+```bash
+supabase link --project-ref <ref>
+supabase db push
+```
+
+The migrations assume hosted Supabase provides `auth.users`, `auth.uid()`,
+`auth.role()` and the `anon` / `authenticated` / `service_role` roles.
+
+> `supabase/tests/00_supabase_shim.sql` recreates those locally for testing and
+> is **not** a migration. Never apply it to a hosted project.
+
+### Environment
+
+| Variable | Required | Notes |
+|---|---|---|
+| `SUPABASE_URL` | yes | project URL |
+| `SUPABASE_ANON_KEY` | yes | browser / user-JWT requests |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes (server only) | telephony webhook, workers. **Never ship to the browser.** |
+| `ANTHROPIC_API_KEY` | yes | conversation AI |
+
+---
+
+## Running the demo (unchanged from `main`)
+
+```bash
 npm install
-
-# 2. Add your API keys
-cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY=sk-ant-...
-
-# 3. Run
+cp .env.example .env     # set ANTHROPIC_API_KEY
 npm run dev
 ```
 
-- Web: <http://localhost:3000>
-- API: <http://localhost:4000/api/health>
+Web on <http://localhost:3000>, API on <http://localhost:4000/api/health>.
+The demo still uses its own SQLite file; it has not yet been rewired to
+Supabase.
 
-The SQLite database is created on first boot at `apps/api/data/clinicvoice.db` and seeded with **Sri Sai Clinic, Warangal**, 3 doctors, 5 patients, 8 appointments, and 4 past calls.
+---
 
-## What to try
+## Status and next steps
 
-1. **Landing page** (`/`) — explains the product, has a "Start demo call" button.
-2. **Live call** (`/call`) — click the mic, say e.g. *"I'd like to book an appointment with Dr. Anitha Reddy tomorrow at 10 AM"*. The AI receptionist greets you, asks for name/phone, books the slot, and shows a **WhatsApp confirmation preview**. You can also speak in Telugu.
-3. **Dashboard** (`/dashboard`) — KPIs, weekly call chart, language mix, recent calls, today's appointments.
-4. **Calls log** (`/dashboard/calls`) — every call with a click-to-open transcript.
-5. **Appointments** (`/dashboard/appointments`) — calendar and list view.
-6. **Analytics** (`/dashboard/analytics`) — bigger charts and the headline metrics.
+**Done on this branch:** the complete data layer — schema, security, scheduling
+logic, seed and tests.
 
-## Required environment variables
+**Not done:** the app layer still reads SQLite. `apps/api/src/db/client.ts`,
+`seed.ts` and the eight routers need rewriting against `@supabase/supabase-js`.
+The four Claude tools in `apps/api/src/tools/appointments.ts` map cleanly onto
+the new RPCs (`get_available_slots`, `book_appointment`,
+`reschedule_appointment`, `cancel_appointment`) — that is the smallest useful
+first step.
 
-| Variable | Required? | Notes |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** | For the conversation AI (`claude-sonnet-4-6`). |
-| `ELEVENLABS_API_KEY` | No | Reserved. The demo uses browser TTS by default. |
-| `PORT` | No | API port, default `4000`. |
+**After that:** UI/UX for the staff dashboard and clinic onboarding.
 
-## API surface
+---
 
-All routes return JSON. Errors come back as `{ "error": "..." }`.
+## One correction to the product blueprint
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/api/health` | liveness |
-| GET | `/api/clinic` | single clinic profile |
-| GET | `/api/doctors` | list doctors |
-| GET | `/api/patients?q=` | search patients |
-| GET | `/api/appointments?from&to&status` | list with patient + doctor joined |
-| GET | `/api/appointments/calendar?from&to` | grouped by day |
-| GET | `/api/calls?limit&outcome` | recent calls with parsed transcript |
-| GET | `/api/calls/:id` | full call + transcript |
-| GET | `/api/analytics/summary` | KPIs, week chart data, language split |
-| POST | `/api/voice/turn` | `{ callId?, userText, history? }` → Claude + tool loop |
-| POST | `/api/voice/end` | finalises call outcome / summary |
-| POST | `/api/whatsapp/preview` | `{ appointmentId }` → message body |
+Using the blueprint's own quoted vendor rates (STT ₹40/hr, TTS ₹22 per 10k
+chars, telephony ₹0.50/min, GPT-4o-mini-class LLM), a seeded 108-second call
+costs:
 
-### Tools exposed to the model
-
-- `check_availability(doctor, date)` — free 15-min slots, 09:00–17:00 IST, lunch 13:00–14:00 excluded
-- `book_appointment(patient_name, phone, doctor, starts_at, reason?)`
-- `reschedule_appointment(phone, new_starts_at, doctor?)`
-- `cancel_appointment(phone)`
-
-## Voice pipeline
-
-```
-Browser mic ─► Web Speech API (STT) ─► text turn ─► POST /api/voice/turn
-                                                         │
-                                                         ▼
-                                                  Claude Sonnet 4.6
-                                                  (with 4 tools)
-                                                         │
-                                                         ▼
-Browser TTS ◄─ assistantText ◄─ { assistantText, toolCalls, whatsappPreview }
-```
-
-The receptionist is **Maya**. She mirrors the caller's language (Telugu Unicode detection), follows the clinic's hours, and never invents availability.
-
-## Deploying later
-
-- **Web** → Vercel (`apps/web`). No changes required.
-- **API** → Railway / Fly / Render (`apps/api`). The Express service is self-contained; SQLite is fine for a single-instance demo. Swap to Postgres when going multi-tenant.
-
-## Tech stack
-
-| | |
+| Component | ₹ |
 |---|---|
-| Backend | Node 20, Express 4, better-sqlite3 12, TypeScript, Anthropic SDK |
-| Frontend | Next.js 14, React 18, Tailwind 3, Recharts 2, TypeScript |
-| Voice | Web Speech API (browser STT) + `speechSynthesis` (browser TTS) |
-| Data | SQLite (single file, seeded on first boot) |
+| STT | 1.200 |
+| TTS | 1.408 |
+| LLM | 0.080 |
+| Telephony | 0.900 |
+| **Total** | **3.588** |
 
-## Out of scope (deliberately)
+100 calls/month ≈ **₹359**, not the "comfortably under ₹200–300" the blueprint
+assumes — that range is only reachable at the low end of every vendor quote
+simultaneously. **TTS, not STT, is the largest line item.**
 
-- Real telephony (Twilio/Exotel) — the demo uses the browser
-- Real WhatsApp Business API — the UI shows a mock preview
-- Multi-tenant auth — single clinic assumed
-- Production hardening (rate limits, request validation, retries, observability)
+Gross margin on a ₹999 Starter tier is still ~64%, so the pricing holds, but
+the estimate should be corrected before it goes in a deck. `v_call_costs` gives
+the real figure off actual pilot calls — measure before finalising.
+
+---
+
+## Further reading
+
+- [`docs/status.md`](docs/status.md) — what `main` has, and the gap to the Phase 1 wedge
+- [`docs/data-model.md`](docs/data-model.md) — table-by-table rationale, and known limitations
+- [`docs/security.md`](docs/security.md) — the RLS model, its trade-offs, and what it does not cover

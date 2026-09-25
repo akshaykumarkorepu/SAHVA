@@ -20,3 +20,7 @@ apps/api/data/*.db-shm
 *.log
 npm-debug.log*
 .DS_Store
+
+# supabase local dev
+supabase/.temp/
+supabase/.branches/
