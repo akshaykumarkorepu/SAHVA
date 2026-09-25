@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, saikirans-version]
+  pull_request:
+
+jobs:
+  database:
+    name: Database — migrations, seed, 46 assertions
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+      - name: Apply migrations, seed and run assertions
+        env:
+          PGBIN: /usr/lib/postgresql/16/bin
+          PGPASSWORD: postgres
+        run: |
+          # The runner's Postgres is a service container, so reuse it rather
+          # than letting the script start its own cluster.
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          ./supabase/tests/run.sh
+
+      - name: Generated types must match the schema
+        env:
+          PGBIN: /usr/lib/postgresql/16/bin
+        run: |
+          python3 scripts/gen-types.py > /tmp/database.ts
+          if ! diff -q /tmp/database.ts packages/types/database.ts; then
+            echo "::error::packages/types/database.ts is stale."
+            echo "Run: npm run gen:types"
+            diff -u packages/types/database.ts /tmp/database.ts | head -60
+            exit 1
+          fi
+
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

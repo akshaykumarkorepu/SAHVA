@@ -5,8 +5,14 @@ It answers every call, books real appointments off live availability, and never
 lets a schedule change silently cancel a patient without staff knowing.
 
 > **Branch: `saikirans-version`** — maintained by Saikiran.
-> This branch adds the **production Supabase data layer**. Everything under
-> `apps/` is untouched, so the demo still runs exactly as it does on `main`.
+> This branch replaces the demo's data and API layers with production ones:
+> a multi-tenant Supabase schema, and an Express API rewritten on top of it with
+> real authentication.
+>
+> ⚠️ **`apps/web` does not work against this API yet.** It was written for the
+> single-tenant SQLite demo — wrong endpoints, no auth header, integer ids.
+> That is Phase 2. `main` still has the working demo if you need to show
+> something today.
 
 ---
 
@@ -16,41 +22,57 @@ lets a schedule change silently cancel a patient without staff knowing.
 |---|---|---|
 | Database | SQLite, one hardcoded clinic | **Supabase / PostgreSQL, multi-tenant** |
 | Tenant isolation | none | **120 RLS policies + composite foreign keys** |
+| **API authentication** | **middleware existed, never mounted** | **mounted; clinic resolved from `clinic_members`** |
 | Availability | TypeScript, computed in the API | **`sahva.available_slots()`, computed in the DB** |
 | Double-booking | application check only | **impossible — `EXCLUDE USING gist` constraint** |
-| Action Required flow | did not exist | **implemented as a trigger, tested** |
-| Knowledge base | hardcoded in the system prompt | **`clinic_faqs` + `clinic_services`, RLS-scoped** |
-| Unit economics | not measured | **`usage_events` → `v_call_costs`, per call** |
-| Phase 2 clinical | — | notes, prescriptions, vaccinations, care loops, invoicing |
-| Tests | none | **46 assertions, all passing** |
+| Action Required flow | did not exist | **trigger + `/api/actions`, tested** |
+| Knowledge base | hardcoded in the system prompt | **`clinic_faqs` + `clinic_services`, per clinic** |
+| Conversation state | round-tripped through the browser | **server-side, in `call_turns`** |
+| Unit economics | not measured | **metered per turn into `usage_events`** |
+| Request validation | none | **zod on every body, query and param** |
+| Rate limiting / headers | none | **`express-rate-limit` + `helmet`** |
+| Logging | `console.log` | **structured `pino`, redacted, request-correlated** |
+| Types | hand-written | **generated from the schema; CI fails on drift** |
+| Tests / CI | none | **46 DB assertions + typecheck + build, in CI** |
 
 **37 tables · 6 views · 128 indexes · 120 RLS policies · 0 tables without RLS.**
 
 `main`'s README lists *"swap to Postgres when going multi-tenant"* under
-*Deploying later*. This branch is that swap.
+*Deploying later*. This branch is that swap, plus the API rewrite it forces.
 
 ---
 
 ## Repository layout
 
 ```
-apps/                     unchanged from main — the runnable demo
-├── api/                  Node 20 + Express + better-sqlite3 + Anthropic SDK
-└── web/                  Next.js 14 + Tailwind + Recharts
+apps/
+├── api/                  REWRITTEN — Express on Supabase, no SQLite
+│   └── src/
+│       ├── config/env.ts         zod-validated config; refuses to boot if wrong
+│       ├── lib/                  supabase clients, errors, logger, usage, templates
+│       ├── middleware/           auth, validation, request context, error handler
+│       ├── claude/               client, tool definitions, per-clinic system prompt
+│       ├── tools/                the 4 tools, backed by guarded RPCs
+│       └── routes/               clinic doctors patients appointments calls
+│                                 analytics actions messages voice
+└── web/                  UNCHANGED — still the demo; broken against this API
 
-supabase/                 NEW — the production data layer
-├── config.toml           local dev config
+packages/
+└── types/                NEW — Database types generated from the schema
+
+supabase/                 the data layer
 ├── migrations/           16 ordered migrations
 ├── seed.sql              one pilot clinic with realistic data
-└── tests/
-    ├── run.sh                        applies everything + asserts
-    ├── 00_supabase_shim.sql          local stand-in for auth.users / auth.uid()
-    ├── 10_scheduling_and_integrity.sql
-    ├── 20_rls_setup.sql
-    └── 21_rls_isolation.sql
+└── tests/run.sh          applies everything + 46 assertions, no Docker
 
-docs/                     NEW
-├── status.md             what `main` has, and the gap to the Phase 1 wedge
+scripts/
+├── introspect.sql        dumps the live schema as JSON
+└── gen-types.py          renders packages/types/database.ts from it
+
+docs/
+├── setup.md              Phase 0 runbook — what you must do in Supabase
+├── api.md                endpoints, auth model, error codes
+├── status.md             what `main` had, and the gap to the Phase 1 wedge
 ├── data-model.md         table-by-table design rationale
 └── security.md           the RLS model and its threat assumptions
 ```
@@ -198,17 +220,22 @@ Supabase.
 
 ## Status and next steps
 
-**Done on this branch:** the complete data layer — schema, security, scheduling
-logic, seed and tests.
+**Done:** the data layer (schema, RLS, scheduling logic, seed, tests) and the
+API layer (Supabase persistence, real auth, validation, error taxonomy,
+structured logging, rate limiting, usage metering, CI).
 
-**Not done:** the app layer still reads SQLite. `apps/api/src/db/client.ts`,
-`seed.ts` and the eight routers need rewriting against `@supabase/supabase-js`.
-The four Claude tools in `apps/api/src/tools/appointments.ts` map cleanly onto
-the new RPCs (`get_available_slots`, `book_appointment`,
-`reschedule_appointment`, `cancel_appointment`) — that is the smallest useful
-first step.
+**Blocked on accounts, not code:**
 
-**After that:** UI/UX for the staff dashboard and clinic onboarding.
+| | Needs |
+|---|---|
+| Telephony | An Exotel/Twilio account and a number per clinic. `POST /api/voice/calls` is already shaped for the webhook. |
+| STT / TTS | Sarvam or Deepgram. Turns are currently text in, text out. |
+| WhatsApp | A Meta Cloud API account and pre-approved templates. Messages render and queue; nothing sends them. |
+| Workers | Nothing is scheduled yet — reminders and batch dispatch do not run. |
+
+**Next:** Phase 2 — rebuild `apps/web` against this API: login, tenant context,
+the Action Required queue, write actions, settings screens, and a mobile layout
+that works. See the build plan.
 
 ---
 
