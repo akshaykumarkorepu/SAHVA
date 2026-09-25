@@ -91,8 +91,20 @@ rather than starting and failing on the first patient call.
 
 ```bash
 npm install
-npm run dev:api          # http://localhost:4000/api/health
+npm run dev              # api on :4000, web on :3000
 ```
+
+The web app needs the browser-side variables too — only the **anon** key:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_API_BASE=http://localhost:4000
+```
+
+Sign in at <http://localhost:3000/login> with the user you created in step 3.
+Without a `clinic_members` row you will see "No clinic yet" — that is the
+system working, not a bug.
 
 Check auth is actually on:
 
@@ -145,13 +157,13 @@ all 16 migrations plus the seed to a throwaway cluster and runs 46 assertions.
 | STT / TTS | No Sarvam or Deepgram. Turns are text in, text out. |
 | WhatsApp | Messages render and queue; nothing sends them. No Meta account. |
 | Workers | Nothing scheduled. Reminders and batch dispatch are not running. |
-| Frontend | `apps/web` still calls the old demo endpoints and will not work against this API. See below. |
+| Doctor / session / FAQ editing | No screens yet — use the Supabase table editor. |
 
-### The frontend is currently broken against this API
+### The browser voice demo is gone
 
-This is expected, not an accident. `apps/web` was written for the single-tenant
-SQLite demo: it calls `/api/voice/turn`, sends no `Authorization` header, and
-assumes integer ids. Every one of those is now wrong.
+`main`'s `/call` page drove the AI from a laptop microphone. That endpoint now
+sits behind a service key which must never reach a browser, so the page was
+removed rather than left broken or made insecure. Demoing the voice pipeline
+needs real telephony.
 
-`main` still has the working demo if you need to show something today. Phase 2
-rebuilds the frontend against this API.
+`main` still has the old browser demo if you need to show something today.

@@ -9,10 +9,8 @@ lets a schedule change silently cancel a patient without staff knowing.
 > a multi-tenant Supabase schema, and an Express API rewritten on top of it with
 > real authentication.
 >
-> ⚠️ **`apps/web` does not work against this API yet.** It was written for the
-> single-tenant SQLite demo — wrong endpoints, no auth header, integer ids.
-> That is Phase 2. `main` still has the working demo if you need to show
-> something today.
+> The frontend has been rebuilt against it: login, tenant context, the Action
+> Required queue, write actions and a mobile layout that works.
 
 ---
 
@@ -33,6 +31,10 @@ lets a schedule change silently cancel a patient without staff knowing.
 | Rate limiting / headers | none | **`express-rate-limit` + `helmet`** |
 | Logging | `console.log` | **structured `pino`, redacted, request-correlated** |
 | Types | hand-written | **generated from the schema; CI fails on drift** |
+| **Staff login** | **none — dashboard wide open** | **Supabase Auth + role-aware nav** |
+| **Action Required UI** | **did not exist** | **queue, live badge, batch review, dispatch** |
+| **Write actions** | **read-only dashboard** | **book / reschedule / cancel / check-in** |
+| **Mobile** | **nav unreachable below 768px** | **drawer; one nav definition for both** |
 | Tests / CI | none | **46 DB assertions + typecheck + build, in CI** |
 
 **37 tables · 6 views · 128 indexes · 120 RLS policies · 0 tables without RLS.**
@@ -55,7 +57,12 @@ apps/
 │       ├── tools/                the 4 tools, backed by guarded RPCs
 │       └── routes/               clinic doctors patients appointments calls
 │                                 analytics actions messages voice
-└── web/                  UNCHANGED — still the demo; broken against this API
+└── web/                  REBUILT — Next.js on the API, with auth
+    ├── app/login                 Supabase Auth sign-in
+    ├── app/dashboard             overview · actions · appointments
+    │                             calls · patients · analytics · settings
+    ├── components/shell          sidebar + mobile drawer, one nav definition
+    └── lib/                      api client, session, hooks, formatting
 
 packages/
 └── types/                NEW — Database types generated from the schema
@@ -233,9 +240,16 @@ structured logging, rate limiting, usage metering, CI).
 | WhatsApp | A Meta Cloud API account and pre-approved templates. Messages render and queue; nothing sends them. |
 | Workers | Nothing is scheduled yet — reminders and batch dispatch do not run. |
 
-**Next:** Phase 2 — rebuild `apps/web` against this API: login, tenant context,
-the Action Required queue, write actions, settings screens, and a mobile layout
-that works. See the build plan.
+**Frontend (Phase 2) is done:** login, tenant context, the Action Required
+queue with batch review and dispatch, write actions, patients, analytics with
+measured cost, settings, and a working mobile layout.
+
+**Next:** connect a live Supabase project (`docs/setup.md`) and test end to
+end. After that, the vendor integrations above — telephony first, since
+nothing else can be proven with a real clinic until a real phone rings.
+
+Still using the Supabase table editor: editing doctors, weekly sessions, clinic
+hours and the FAQ knowledge base. Those screens are not built yet.
 
 ---
 
