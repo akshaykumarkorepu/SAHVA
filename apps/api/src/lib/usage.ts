@@ -32,6 +32,30 @@ export type UsageEntry = {
 };
 
 /**
+ * Build the rows for a set of metered entries.
+ *
+ * Zero-quantity entries are dropped: a turn with no TTS characters should not
+ * leave a row claiming it cost nothing, because "no row" and "a free row" mean
+ * different things when reconciling against a vendor invoice.
+ */
+export function buildUsageRows(
+  clinicId: string,
+  callId: string | null,
+  entries: UsageEntry[],
+): TablesInsert<"usage_events">[] {
+  return entries
+    .filter((e) => e.quantity > 0)
+    .map((e) => ({
+      clinic_id: clinicId,
+      call_id: callId,
+      kind: e.kind,
+      provider: e.provider,
+      quantity: e.quantity,
+      unit_cost_micro_inr: UNIT_COST_MICRO_INR[e.kind],
+    }));
+}
+
+/**
  * Records metered vendor usage for a call.
  *
  * Deliberately best-effort: a metering failure must never fail a patient's
@@ -45,17 +69,7 @@ export async function recordUsage(
 ): Promise<void> {
   if (entries.length === 0) return;
 
-  const rows: TablesInsert<"usage_events">[] = entries
-    .filter((e) => e.quantity > 0)
-    .map((e) => ({
-      clinic_id: clinicId,
-      call_id: callId,
-      kind: e.kind,
-      provider: e.provider,
-      quantity: e.quantity,
-      unit_cost_micro_inr: UNIT_COST_MICRO_INR[e.kind],
-    }));
-
+  const rows = buildUsageRows(clinicId, callId, entries);
   if (rows.length === 0) return;
 
   const { error } = await dbAdmin.from("usage_events").insert(rows);
