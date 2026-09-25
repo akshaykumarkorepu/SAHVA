@@ -17,6 +17,8 @@ import { calls } from "./routes/calls.js";
 import { analytics } from "./routes/analytics.js";
 import { actions } from "./routes/actions.js";
 import { messages } from "./routes/messages.js";
+import { knowledge } from "./routes/knowledge.js";
+import { staff } from "./routes/staff.js";
 import { voice } from "./routes/voice.js";
 
 const app = express();
@@ -82,6 +84,8 @@ app.use("/api/calls", calls);
 app.use("/api/analytics", analytics);
 app.use("/api/actions", actions);
 app.use("/api/messages", messages);
+app.use("/api/knowledge", knowledge);
+app.use("/api/staff", staff);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

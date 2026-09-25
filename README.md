@@ -59,8 +59,10 @@ apps/
 │                                 analytics actions messages voice
 └── web/                  REBUILT — Next.js on the API, with auth
     ├── app/login                 Supabase Auth sign-in
-    ├── app/dashboard             overview · actions · appointments
-    │                             calls · patients · analytics · settings
+    ├── app/dashboard             overview · actions · appointments · calls
+    │                             patients · analytics
+    ├── app/dashboard/settings    AI permissions · doctors & schedule
+    │                             hours & closures · knowledge base · staff
     ├── components/shell          sidebar + mobile drawer, one nav definition
     └── lib/                      api client, session, hooks, formatting
 
@@ -248,8 +250,9 @@ measured cost, settings, and a working mobile layout.
 end. After that, the vendor integrations above — telephony first, since
 nothing else can be proven with a real clinic until a real phone rings.
 
-Still using the Supabase table editor: editing doctors, weekly sessions, clinic
-hours and the FAQ knowledge base. Those screens are not built yet.
+A clinic can now be configured entirely from Settings — doctors and weekly
+schedules, operating hours and closures, the bilingual knowledge base, and
+staff invitations. No SQL required to onboard a pilot.
 
 ---
 

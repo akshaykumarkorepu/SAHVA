@@ -2,8 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
-import { validate } from "../middleware/validate.js";
-import { unwrap } from "../lib/errors.js";
+import { isoDate, uuid, validate } from "../middleware/validate.js";
+import { badRequest, unwrap } from "../lib/errors.js";
 
 export const clinic = Router();
 
@@ -94,5 +94,89 @@ clinic.patch(
     );
     req.log.info({ fields: Object.keys(req.body) }, "clinic settings updated");
     res.json(row);
+  }),
+);
+
+// --- Operating hours -------------------------------------------------------
+//
+// Per-block CRUD rather than a bulk replace. A clinic usually adds or removes
+// one session, and each operation being atomic on its own means a failure can
+// never leave the clinic with no hours at all — which would make the AI tell
+// every caller it is closed.
+
+const hoursBody = z.object({
+  day_of_week: z.number().int().min(0).max(6),
+  opens_at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "must be HH:MM"),
+  closes_at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "must be HH:MM"),
+  label: z.string().trim().max(40).optional(),
+});
+
+clinic.post(
+  "/hours",
+  requireRole("owner", "manager"),
+  validate({ body: hoursBody }),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const b = req.body as z.infer<typeof hoursBody>;
+    if (b.closes_at <= b.opens_at) {
+      throw badRequest("INVALID_RANGE", "Closing time must be after opening time.");
+    }
+    const row = unwrap(
+      await db.from("clinic_hours").insert({ ...b, clinic_id: clinicId }).select().single(),
+      "clinic hours",
+    );
+    res.status(201).json(row);
+  }),
+);
+
+clinic.delete(
+  "/hours/:id",
+  requireRole("owner", "manager"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const { error } = await db.from("clinic_hours").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.status(204).end();
+  }),
+);
+
+// --- Closures (festivals, holidays) ----------------------------------------
+
+const closureBody = z
+  .object({
+    starts_on: isoDate,
+    ends_on: isoDate,
+    reason: z.string().trim().min(2).max(120),
+  })
+  .refine((c) => c.ends_on >= c.starts_on, "the closure must end on or after it starts");
+
+clinic.post(
+  "/closures",
+  requireRole("owner", "manager"),
+  validate({ body: closureBody }),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const row = unwrap(
+      await db
+        .from("clinic_closures")
+        .insert({ ...(req.body as z.infer<typeof closureBody>), clinic_id: clinicId })
+        .select()
+        .single(),
+      "closure",
+    );
+    res.status(201).json(row);
+  }),
+);
+
+clinic.delete(
+  "/closures/:id",
+  requireRole("owner", "manager"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const { error } = await db.from("clinic_closures").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.status(204).end();
   }),
 );

@@ -157,7 +157,7 @@ all 16 migrations plus the seed to a throwaway cluster and runs 46 assertions.
 | STT / TTS | No Sarvam or Deepgram. Turns are text in, text out. |
 | WhatsApp | Messages render and queue; nothing sends them. No Meta account. |
 | Workers | Nothing scheduled. Reminders and batch dispatch are not running. |
-| Doctor / session / FAQ editing | No screens yet — use the Supabase table editor. |
+| Onboarding wizard | No guided setup yet — configure a clinic through Settings. |
 
 ### The browser voice demo is gone
 

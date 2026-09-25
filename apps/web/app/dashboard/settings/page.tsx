@@ -3,92 +3,19 @@
 import * as React from "react";
 import { useApi, useMutation } from "@/lib/hooks";
 import { patch } from "@/lib/api";
-import { useCanAdminister } from "@/lib/session";
-import type { Doctor } from "@/lib/types";
 import type { Tables } from "@sahva/types";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  Field,
-  Input,
-  PageHeader,
-  Spinner,
-} from "@/components/ui";
-import { rupees } from "@/lib/format";
+import { Button, Card, ErrorState, Field, Input, Spinner } from "@/components/ui";
 
-type ClinicWithSettings = Tables<"clinics"> & {
-  settings: Tables<"clinic_settings"> | null;
-};
+type ClinicWithSettings = Tables<"clinics"> & { settings: Tables<"clinic_settings"> | null };
 
-export default function SettingsPage() {
-  const canAdmin = useCanAdminister();
+export default function AiPermissionsPage() {
   const clinic = useApi<ClinicWithSettings>("/clinic");
-  const doctors = useApi<Doctor[]>("/doctors");
-
-  if (!canAdmin) {
-    return (
-      <EmptyState
-        icon="⚙"
-        title="Settings are owner and manager only"
-        body="Ask your clinic owner if something here needs changing."
-      />
-    );
-  }
 
   if (clinic.loading) return <Spinner />;
   if (clinic.error) return <ErrorState error={clinic.error} onRetry={clinic.reload} />;
+  if (!clinic.data) return null;
 
-  return (
-    <>
-      <PageHeader title="Settings" subtitle="What the AI receptionist is allowed to do." />
-
-      <div className="space-y-6">
-        <AiPermissions clinic={clinic.data!} onSaved={clinic.reload} />
-
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-ink-900">Doctors</h3>
-          <p className="mb-4 text-xs text-ink-500">
-            Fees and consultation length are read straight from here when the AI answers.
-          </p>
-          {doctors.loading ? (
-            <Spinner />
-          ) : (
-            <div className="divide-y divide-ink-100">
-              {(doctors.data ?? []).map((d) => (
-                <div key={d.id} className="flex flex-wrap items-center gap-3 py-3">
-                  <span
-                    aria-hidden
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ background: d.colour_hex }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink-900">{d.spoken_name}</p>
-                    <p className="truncate text-xs text-ink-500">
-                      {d.specialty} · {d.consult_duration_min} min ·{" "}
-                      {rupees(d.consult_fee_paise)}
-                    </p>
-                  </div>
-                  <div className="flex gap-1">
-                    {d.languages.map((l) => (
-                      <Badge key={l}>{l}</Badge>
-                    ))}
-                  </div>
-                  {!d.is_active && <Badge tone="neutral">Inactive</Badge>}
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="mt-4 text-xs text-ink-500">
-            Editing doctors, weekly sessions and the knowledge base is not built yet — use the
-            Supabase table editor for now.
-          </p>
-        </Card>
-      </div>
-    </>
-  );
+  return <AiPermissions clinic={clinic.data} onSaved={clinic.reload} />;
 }
 
 function AiPermissions({
@@ -107,19 +34,25 @@ function AiPermissions({
     ai_may_cancel: s?.ai_may_cancel ?? false,
     min_notice_minutes: s?.min_notice_minutes ?? 30,
     booking_horizon_days: s?.booking_horizon_days ?? 30,
+    reminder_hours_before: s?.reminder_hours_before ?? 18,
+    escalation_phone_e164: s?.escalation_phone_e164 ?? "",
   });
-  const save = useMutation(() => patch("/clinic/settings", draft));
+  const [saved, setSaved] = React.useState(false);
 
-  const set = <K extends keyof typeof draft>(k: K, v: (typeof draft)[K]) =>
+  const save = useMutation(() =>
+    patch("/clinic/settings", {
+      ...draft,
+      escalation_phone_e164: draft.escalation_phone_e164.trim() || null,
+    }),
+  );
+
+  const set = <K extends keyof typeof draft>(k: K, v: (typeof draft)[K]) => {
     setDraft((d) => ({ ...d, [k]: v }));
+    setSaved(false);
+  };
 
   return (
     <Card className="p-5">
-      <h3 className="text-sm font-semibold text-ink-900">AI permissions</h3>
-      <p className="mb-4 text-xs text-ink-500">
-        What the receptionist may do on a call, without asking anyone.
-      </p>
-
       <div className="space-y-1">
         <Toggle
           label="AI answers calls"
@@ -171,6 +104,25 @@ function AiPermissions({
             onChange={(e) => set("booking_horizon_days", Number(e.target.value))}
           />
         </Field>
+        <Field label="Reminder (hours before)" hint="When the reminder message goes out.">
+          <Input
+            type="number"
+            min={1}
+            max={72}
+            value={draft.reminder_hours_before}
+            onChange={(e) => set("reminder_hours_before", Number(e.target.value))}
+          />
+        </Field>
+        <Field
+          label="Escalation number"
+          hint="Where the AI hands off on an emergency keyword."
+        >
+          <Input
+            value={draft.escalation_phone_e164}
+            onChange={(e) => set("escalation_phone_e164", e.target.value)}
+            placeholder="+919849012345"
+          />
+        </Field>
       </div>
 
       {save.error && (
@@ -179,12 +131,16 @@ function AiPermissions({
         </div>
       )}
 
-      <div className="mt-5 flex justify-end">
+      <div className="mt-5 flex items-center justify-end gap-3">
+        {saved && <span className="text-sm text-primary-700">Saved</span>}
         <Button
           disabled={save.pending}
           onClick={async () => {
             const ok = await save.run();
-            if (ok) onSaved();
+            if (ok) {
+              setSaved(true);
+              onSaved();
+            }
           }}
         >
           {save.pending ? "Saving…" : "Save changes"}

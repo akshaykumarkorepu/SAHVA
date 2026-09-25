@@ -170,11 +170,19 @@ export function Field({
 }
 
 const INPUT =
-  "w-full rounded-lg border border-ink-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-primary-600 focus:ring-1 focus:ring-primary-600 disabled:bg-ink-100";
+  "rounded-lg border border-ink-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-primary-600 focus:ring-1 focus:ring-primary-600 disabled:bg-ink-100";
+
+/**
+ * Tailwind decides between `w-full` and `w-auto` by stylesheet order, not by
+ * the order they appear in a className string — so baking `w-full` into the
+ * base class silently defeated every width override at the call site. Apply
+ * the default only when the caller has not asked for a width.
+ */
+const withWidth = (cn?: string) => `${INPUT} ${/\bw-/.test(cn ?? "") ? "" : "w-full"} ${cn ?? ""}`;
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input(props, ref) {
-    return <input ref={ref} {...props} className={`${INPUT} ${props.className ?? ""}`} />;
+    return <input ref={ref} {...props} className={withWidth(props.className)} />;
   },
 );
 
@@ -182,14 +190,14 @@ export const Select = React.forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement>
 >(function Select(props, ref) {
-  return <select ref={ref} {...props} className={`${INPUT} ${props.className ?? ""}`} />;
+  return <select ref={ref} {...props} className={withWidth(props.className)} />;
 });
 
 export const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(function Textarea(props, ref) {
-  return <textarea ref={ref} {...props} className={`${INPUT} ${props.className ?? ""}`} />;
+  return <textarea ref={ref} {...props} className={withWidth(props.className)} />;
 });
 
 /** Simple accessible modal. Used for booking, time off and batch dispatch. */
