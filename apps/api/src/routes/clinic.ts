@@ -20,6 +20,18 @@ clinic.get(
   }),
 );
 
+/**
+ * Who the caller is, and what they may do. The UI uses this to hide actions a
+ * receptionist cannot perform — RLS still enforces it server-side.
+ */
+clinic.get(
+  "/me",
+  asyncRoute(async (req, res) => {
+    const { userId, email, clinicId, role } = req.auth!;
+    res.json({ user_id: userId, email, clinic_id: clinicId, role });
+  }),
+);
+
 clinic.get(
   "/hours",
   asyncRoute(async (req, res) => {

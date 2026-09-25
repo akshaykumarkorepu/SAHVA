@@ -1,116 +1,83 @@
+"use client";
+
+import { supabase } from "./supabase";
+
+const BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+
 /**
- * Typed fetch wrappers. On the client, calls go through the Next.js rewrite
- * to the Express API. On the server (RSC), we need an absolute URL because
- * Next.js rewrites only proxy client-side fetches, so we read from
- * NEXT_PUBLIC_API_BASE (set automatically by the dev script and in prod).
+ * A typed failure from the API. The server always returns
+ *   { error: { code, message, detail?, hint? }, requestId }
+ * so the UI switches on `code`, never on message text.
  */
-const ABS_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  (typeof window === "undefined" ? "http://localhost:4000" : "");
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly detail?: string,
+    readonly hint?: string,
+    readonly requestId?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
 
-function url(path: string): string {
-  if (path.startsWith("http")) return path;
-  if (typeof window === "undefined") return `${ABS_BASE}${path}`;
-  return path; // client → Next.js rewrite handles the proxy
-}
-export type Clinic = {
-  id: number;
-  name: string;
-  city: string | null;
-  phone: string | null;
-  created_at: string;
-};
-
-export type Doctor = {
-  id: number;
-  name: string;
-  specialty: string | null;
-  languages: string;
-};
-
-export type Patient = {
-  id: number;
-  clinic_id: number;
-  name: string;
-  phone: string;
-  preferred_language: string | null;
-  created_at: string;
-};
-
-export type Appointment = {
-  id: number;
-  patient_id: number;
-  doctor_id: number;
-  patient_name: string;
-  patient_phone: string;
-  doctor_name: string;
-  starts_at: string;
-  duration_min: number;
-  status: string;
-  reason: string | null;
-};
-
-export type CallTurn = { role: "user" | "assistant" | "system"; content: string; ts?: string };
-
-export type Call = {
-  id: number;
-  clinic_id: number;
-  patient_id: number | null;
-  patient_name: string | null;
-  patient_phone: string | null;
-  started_at: string;
-  ended_at: string | null;
-  outcome: string | null;
-  language: string | null;
-  transcript: CallTurn[];
-  summary: string | null;
-  was_missed_before_ai: number;
-};
-
-export type AnalyticsSummary = {
-  callsToday: number;
-  callsAnswered: number;
-  bookingsMade: number;
-  cancellations: number;
-  missedCallRecoveryRate: number;
-  flagged: number;
-  recovered: number;
-  weekCalls: { day: string; calls: number; bookings: number }[];
-  languageSplit: { en: number; te: number; mixed: number; unknown: number };
-};
-
-export type WhatsAppPreview = {
-  appointment_id: number;
-  to: string;
-  patient_name: string;
-  doctor_name: string;
-  starts_at: string;
-  message: string;
-  sent_at: string;
-  status: "delivered";
-};
-
-async function get<T>(path: string): Promise<T> {
-  const r = await fetch(url(path), { cache: "no-store" });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${path}`);
-  return r.json();
+  /** The no-double-booking constraint fired — the slot genuinely went. */
+  get isSlotTaken() {
+    return this.code === "SLOT_TAKEN";
+  }
+  get isAuthError() {
+    return this.status === 401;
+  }
+  get isForbidden() {
+    return this.status === 403;
+  }
 }
 
-export const api = {
-  clinic: () => get<Clinic>("/api/clinic"),
-  doctors: () => get<Doctor[]>("/api/doctors"),
-  patients: (q?: string) => get<Patient[]>(`/api/patients${q ? `?q=${encodeURIComponent(q)}` : ""}`),
-  appointments: (params: { from?: string; to?: string; status?: string } = {}) => {
-    const q = new URLSearchParams();
-    if (params.from) q.set("from", params.from);
-    if (params.to) q.set("to", params.to);
-    if (params.status) q.set("status", params.status);
-    return get<Appointment[]>(`/api/appointments${q.toString() ? `?${q}` : ""}`);
-  },
-  appointmentsCalendar: (from: string, to: string) =>
-    get<Record<string, Appointment[]>>(`/api/appointments/calendar?from=${from}&to=${to}`),
-  calls: (limit = 50, outcome?: string) =>
-    get<Call[]>(`/api/calls?limit=${limit}${outcome ? `&outcome=${outcome}` : ""}`),
-  call: (id: number) => get<Call>(`/api/calls/${id}`),
-  analytics: () => get<AnalyticsSummary>("/api/analytics/summary"),
-};
+async function authHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${BASE}/api${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(await authHeader()),
+      ...(init.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  if (res.status === 204) return undefined as T;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Fall through to the generic error below.
+  }
+
+  if (!res.ok) {
+    const e = (body as { error?: { code?: string; message?: string; detail?: string; hint?: string }; requestId?: string })?.error;
+    throw new ApiError(
+      res.status,
+      e?.code ?? "UNKNOWN",
+      e?.message ?? `Request failed (${res.status})`,
+      e?.detail,
+      e?.hint,
+      (body as { requestId?: string })?.requestId,
+    );
+  }
+
+  return body as T;
+}
+
+export const get = <T,>(path: string) => api<T>(path);
+export const post = <T,>(path: string, payload?: unknown) =>
+  api<T>(path, { method: "POST", body: JSON.stringify(payload ?? {}) });
+export const patch = <T,>(path: string, payload: unknown) =>
+  api<T>(path, { method: "PATCH", body: JSON.stringify(payload) });
+export const del = <T,>(path: string) => api<T>(path, { method: "DELETE" });

@@ -1,23 +1,25 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { SessionProvider } from "@/lib/session";
 
 export const metadata: Metadata = {
-  title: "ClinicVoice AI",
-  description: "AI voice receptionist for clinics — answers, books, and confirms in English & Telugu.",
+  title: "SAHVA — AI receptionist for clinics",
+  description:
+    "Telugu-and-English AI receptionist for solo and small clinics. Answers every call, books off live availability, and never lets a schedule change silently cancel a patient.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#059669",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }
