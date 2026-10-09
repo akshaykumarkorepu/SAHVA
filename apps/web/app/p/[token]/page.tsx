@@ -17,7 +17,8 @@ import {
   type Strings,
 } from "@/lib/portal/i18n";
 import { Icon } from "@/components/icons";
-import { Button, Modal, Spinner, Skeleton, cn } from "@/components/ui";
+import { Button, Field, Input, Modal, Spinner, Skeleton, cn } from "@/components/ui";
+import Link from "next/link";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
@@ -147,6 +148,8 @@ export default function PatientPortalPage({ params }: { params: { token: string 
             </div>
           </section>
         )}
+
+        <UpgradeCard token={token} lang={lang} t={t} />
 
         <ClinicCard clinic={data.clinic} t={t} />
       </div>
@@ -503,5 +506,136 @@ function ExpiredLink({
         <p className="mt-2 text-sm text-ink-muted">{expired ? t.linkExpiredBody : ""}</p>
       </div>
     </main>
+  );
+}
+
+
+/**
+ * The bridge between the two tiers.
+ *
+ * The link alone shows appointment logistics, which is safe to forward. The
+ * medical record needs a password, and the link is what authorises setting
+ * one — holding it already proves possession of the phone the clinic has on
+ * file, so no SMS code is invented on top.
+ */
+function UpgradeCard({ token, lang, t }: { token: string; lang: Lang; t: Strings }) {
+  const [open, setOpen] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [show, setShow] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPending(true);
+    setErr(null);
+    try {
+      await portalFetch(token, "/account", {
+        method: "POST",
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      setDone(true);
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : String(e2));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <>
+      <section className="mt-8 overflow-hidden rounded-2xl border border-brand-500/25 bg-brand-500/[0.06] p-5">
+        <div className="flex items-start gap-3.5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-600 text-white">
+            <Icon name="shield" className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-display text-base font-semibold tracking-tight text-ink">
+              {t.seeFullRecord}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-muted">{t.seeFullRecordBody}</p>
+          </div>
+        </div>
+        <Button size="lg" className="mt-4 w-full" onClick={() => setOpen(true)}>
+          {t.createAccount}
+        </Button>
+        <p className="mt-3 text-center text-xs text-ink-subtle">
+          {t.alreadyHaveAccount}{" "}
+          <Link href="/patient/login" className="font-medium text-brand-600">
+            {t.signIn}
+          </Link>
+        </p>
+      </section>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={done ? t.accountCreated : t.createAccount}
+        footer={
+          done ? (
+            <Link href="/patient/login">
+              <Button>{t.signIn}</Button>
+            </Link>
+          ) : undefined
+        }
+      >
+        {done ? (
+          <p className="text-sm text-ink-muted">{t.accountCreatedBody}</p>
+        ) : (
+          <form onSubmit={submit} className="space-y-4">
+            <Field label={t.emailLabel} required>
+              <Input
+                type="email"
+                required
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="text-base"
+              />
+            </Field>
+
+            <Field label={t.passwordLabel} required hint={t.passwordHint}>
+              <div className="relative">
+                <Input
+                  type={show ? "text" : "password"}
+                  required
+                  minLength={10}
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-12 text-base"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((v) => !v)}
+                  aria-label={show ? "Hide password" : "Show password"}
+                  className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-ink-subtle transition hover:bg-surface-sunken hover:text-ink"
+                >
+                  <Icon name={show ? "eyeOff" : "eye"} className="h-4 w-4" />
+                </button>
+              </div>
+            </Field>
+
+            {err && (
+              <p role="alert" className="rounded-xl bg-accent-rose/10 px-3.5 py-3 text-sm text-ink">
+                {err}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              loading={pending}
+              disabled={password.length < 10 || !email.includes("@")}
+            >
+              {pending ? t.creating : t.createAccount}
+            </Button>
+          </form>
+        )}
+      </Modal>
+    </>
   );
 }

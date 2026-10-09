@@ -50,6 +50,17 @@ export type Strings = {
   needsRescheduleNote: string;
   fee: string;
   language: string;
+  seeFullRecord: string;
+  seeFullRecordBody: string;
+  createAccount: string;
+  creating: string;
+  alreadyHaveAccount: string;
+  signIn: string;
+  emailLabel: string;
+  passwordLabel: string;
+  passwordHint: string;
+  accountCreated: string;
+  accountCreatedBody: string;
 };
 
 export const STRINGS: Record<Lang, Strings> = {
@@ -94,6 +105,18 @@ export const STRINGS: Record<Lang, Strings> = {
       "The doctor is unavailable at this time. The clinic will contact you, or you can pick a new time now.",
     fee: "Consultation fee",
     language: "తెలుగు",
+    seeFullRecord: "See your full health record",
+    seeFullRecordBody:
+      "Set a password to see your diagnoses, medicines and vaccinations — not just this appointment.",
+    createAccount: "Create account",
+    creating: "Creating…",
+    alreadyHaveAccount: "Already have an account?",
+    signIn: "Sign in",
+    emailLabel: "Email",
+    passwordLabel: "Choose a password",
+    passwordHint: "At least 10 characters. A short phrase is easier to remember than a jumble.",
+    accountCreated: "Account created",
+    accountCreatedBody: "You can now sign in any time to see your full health record.",
   },
   te: {
     yourAppointment: "మీ అపాయింట్‌మెంట్",
@@ -136,6 +159,18 @@ export const STRINGS: Record<Lang, Strings> = {
       "ఈ సమయంలో డాక్టర్ అందుబాటులో లేరు. క్లినిక్ మిమ్మల్ని సంప్రదిస్తుంది, లేదా ఇప్పుడే కొత్త సమయం ఎంచుకోండి.",
     fee: "సంప్రదింపు ఫీజు",
     language: "English",
+    seeFullRecord: "మీ పూర్తి ఆరోగ్య రికార్డు చూడండి",
+    seeFullRecordBody:
+      "పాస్‌వర్డ్ సెట్ చేస్తే మీ నిర్ధారణలు, మందులు మరియు టీకాలు కూడా చూడవచ్చు — ఈ అపాయింట్‌మెంట్ మాత్రమే కాదు.",
+    createAccount: "ఖాతా సృష్టించండి",
+    creating: "సృష్టిస్తోంది…",
+    alreadyHaveAccount: "ఇప్పటికే ఖాతా ఉందా?",
+    signIn: "సైన్ ఇన్",
+    emailLabel: "ఈమెయిల్",
+    passwordLabel: "పాస్‌వర్డ్ ఎంచుకోండి",
+    passwordHint: "కనీసం 10 అక్షరాలు. గుర్తుంచుకోవడానికి ఒక చిన్న వాక్యం సులభం.",
+    accountCreated: "ఖాతా సృష్టించబడింది",
+    accountCreatedBody: "ఇప్పుడు మీరు ఎప్పుడైనా సైన్ ఇన్ చేసి మీ పూర్తి ఆరోగ్య రికార్డు చూడవచ్చు.",
   },
 };
 
