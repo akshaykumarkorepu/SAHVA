@@ -27,6 +27,7 @@ start_cluster() {
 }
 
 start_cluster
+mkdir -p "$WORK"
 "${PSQL[@]}" -d postgres -c "drop database if exists sahva_test;" -c "create database sahva_test;" >/dev/null
 "${PSQL[@]}" -d sahva_test -f "$HERE/00_supabase_shim.sql" >/dev/null
 printf '%-42s OK\n' "supabase shim"

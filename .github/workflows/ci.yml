@@ -7,7 +7,7 @@ on:
 
 jobs:
   database:
-    name: Database — migrations, seed, 46 assertions
+    name: Database — migrations, seed and assertions
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -48,7 +48,7 @@ jobs:
           fi
 
   api:
-    name: API — 51 unit and HTTP tests
+    name: API — unit and HTTP tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
