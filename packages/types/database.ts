@@ -970,6 +970,10 @@ export type Database = {
           reminder_hours_before: number;
           created_at: string;
           updated_at: string;
+          portal_enabled: boolean;
+          patient_may_reschedule: boolean;
+          patient_may_cancel: boolean;
+          portal_link_ttl_days: number;
         };
         Insert: {
           clinic_id: string;
@@ -992,6 +996,10 @@ export type Database = {
           reminder_hours_before?: number;
           created_at?: string;
           updated_at?: string;
+          portal_enabled?: boolean;
+          patient_may_reschedule?: boolean;
+          patient_may_cancel?: boolean;
+          portal_link_ttl_days?: number;
         };
         Update: {
           clinic_id?: string;
@@ -1014,6 +1022,10 @@ export type Database = {
           reminder_hours_before?: number;
           created_at?: string;
           updated_at?: string;
+          portal_enabled?: boolean;
+          patient_may_reschedule?: boolean;
+          patient_may_cancel?: boolean;
+          portal_link_ttl_days?: number;
         };
         Relationships: [
           {
@@ -1550,6 +1562,66 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "patients";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      patient_access_tokens: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          patient_id: string;
+          token_hash: string;
+          label: string | null;
+          issued_by: string | null;
+          issued_via: Database["public"]["Enums"]["message_channel"] | null;
+          expires_at: string;
+          last_used_at: string | null;
+          use_count: number;
+          revoked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          patient_id: string;
+          token_hash: string;
+          label?: string | null;
+          issued_by?: string | null;
+          issued_via?: Database["public"]["Enums"]["message_channel"] | null;
+          expires_at: string;
+          last_used_at?: string | null;
+          use_count?: number;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          patient_id?: string;
+          token_hash?: string;
+          label?: string | null;
+          issued_by?: string | null;
+          issued_via?: Database["public"]["Enums"]["message_channel"] | null;
+          expires_at?: string;
+          last_used_at?: string | null;
+          use_count?: number;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "patient_access_tokens_issued_by_fkey";
+            columns: ["issued_by"];
+            isOneToOne: false;
+            referencedRelation: "staff_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "patient_access_tokens_patient_id_clinic_id_fkey";
+            columns: ["patient_id", "clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id", "clinic_id"];
           },
         ];
       };
@@ -2580,6 +2652,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      v_patient_appointments: {
+        Row: {
+          id: string | null;
+          clinic_id: string | null;
+          patient_id: string | null;
+          starts_at: string | null;
+          ends_at: string | null;
+          duration_min: number | null;
+          status: Database["public"]["Enums"]["appointment_status"] | null;
+          reason: string | null;
+          token_number: number | null;
+          cancelled_at: string | null;
+          confirmed_at: string | null;
+          doctor_name: string | null;
+          doctor_specialty: string | null;
+          doctor_colour: string | null;
+          consult_fee_paise: number | null;
+          clinic_name: string | null;
+          clinic_phone: string | null;
+          address_line: string | null;
+          landmark: string | null;
+          city: string | null;
+          map_url: string | null;
+          timezone: string | null;
+        };
+        Relationships: [];
+      };
       v_todays_appointments: {
         Row: {
           id: string | null;
@@ -2642,6 +2741,12 @@ export type Database = {
           p_call_id?: string;
         };
         Returns: Database["public"]["Tables"]["appointments"]["Row"];
+      };
+      resolve_patient_token: {
+        Args: {
+          p_token_hash: string;
+        };
+        Returns: { patient_id: string; clinic_id: string; token_id: string }[];
       };
     };
     Enums: {

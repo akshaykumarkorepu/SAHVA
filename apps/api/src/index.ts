@@ -20,6 +20,7 @@ import { messages } from "./routes/messages.js";
 import { knowledge } from "./routes/knowledge.js";
 import { staff } from "./routes/staff.js";
 import { voice } from "./routes/voice.js";
+import { portal } from "./routes/portal.js";
 
 const app = express();
 
@@ -58,6 +59,17 @@ const machineLimiter = rateLimit({
 });
 
 app.use("/api/voice", machineLimiter, requireServiceKey("voice"), voice);
+
+// Patient portal. Mounted before the staff auth gate because a patient holds a
+// capability link, not a session. Rate limited harder than the staff API: these
+// URLs are the one part of the surface a stranger can reach.
+const portalLimiter = rateLimit({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/portal", portalLimiter, portal);
 app.use("/api/webhooks/messages", machineLimiter, requireServiceKey("telephony"), messages);
 
 // --- Staff routes ----------------------------------------------------------

@@ -34,7 +34,8 @@ lets a schedule change silently cancel a patient without staff knowing.
 | **Staff login** | **none — dashboard wide open** | **Supabase Auth + role-aware nav** |
 | **Action Required UI** | **did not exist** | **queue, live badge, batch review, dispatch** |
 | **Write actions** | **read-only dashboard** | **book / reschedule / cancel / check-in** |
-| **Mobile** | **nav unreachable below 768px** | **drawer; one nav definition for both** |
+| **Mobile** | **nav unreachable below 768px** | **bottom tab bar; one nav definition for both** |
+| **Patient-facing** | **none** | **portal reached by a WhatsApp link, Telugu + English** |
 | Tests / CI | none | **46 DB assertions + typecheck + build, in CI** |
 
 **37 tables · 6 views · 128 indexes · 120 RLS policies · 0 tables without RLS.**
@@ -63,6 +64,7 @@ apps/
     │                             patients · analytics
     ├── app/dashboard/settings    AI permissions · doctors & schedule
     │                             hours & closures · knowledge base · staff
+    ├── app/p/[token]             patient portal — no login, bilingual
     ├── components/shell          sidebar + mobile drawer, one nav definition
     └── lib/                      api client, session, hooks, formatting
 

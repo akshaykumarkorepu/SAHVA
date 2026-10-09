@@ -101,6 +101,38 @@ client. A CHECK constraint rejects the transition without it.
 | `GET /analytics/utilisation` | per doctor per day |
 | `GET /messages` · `GET /messages/preview/:appointmentId` · `POST /messages/queue` | |
 
+## Patient portal
+
+Patients in this segment do not install apps or remember passwords, so the
+portal is reached by a capability link sent over WhatsApp. Tapping it proves
+possession of the phone the clinic already has on file.
+
+| | |
+|---|---|
+| `GET /portal/:token` | patient, clinic, permissions, upcoming and past appointments |
+| `GET /portal/:token/hours` | opening hours and closures |
+| `POST /portal/:token/appointments/:id/confirm` | patient confirms they will attend |
+| `GET /portal/:token/appointments/:id/slots?date=` | free slots for that appointment's doctor |
+| `POST /portal/:token/appointments/:id/reschedule` | subject to `patient_may_reschedule` |
+| `POST /portal/:token/appointments/:id/cancel` | subject to `patient_may_cancel` (off by default) |
+
+Staff issue and revoke links from the patients screen:
+
+| | |
+|---|---|
+| `POST /patients/:id/portal-link` | returns the raw URL **once**; only its hash is stored |
+| `GET /patients/:id/portal-link` | live links, so staff can see and revoke what is out there |
+| `DELETE /patients/portal-link/:tokenId` | revoke |
+
+**Security.** The token is a bearer credential and is treated as one: 32 bytes
+of CSPRNG entropy, stored as a SHA-256 hash, scoped to one patient at one
+clinic, expiring, revocable. Unknown, expired and revoked all resolve to the
+same response, so a bad link cannot be used to probe whether it ever existed.
+Every query is scoped to the patient the token resolves to — a `patient_id` in
+a request body is never read. The portal reads through
+`v_patient_appointments`, which exposes logistics only: no notes, no diagnosis,
+no clinical history, because a forwarded link must not leak one.
+
 ## Machine routes
 
 | | |

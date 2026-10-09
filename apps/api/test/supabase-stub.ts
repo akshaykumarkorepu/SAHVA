@@ -14,6 +14,8 @@ export type StubState = {
   users: Map<string, { id: string; email: string }>;
   /** staff_id -> membership row, or absent for "not a member of any clinic". */
   members: Map<string, { clinic_id: string; role: string }>;
+  /** token hash -> patient, or absent for unknown/expired/revoked. */
+  portalTokens: Map<string, { patient_id: string; clinic_id: string; token_id: string }>;
   requests: { method: string; url: string }[];
 };
 
@@ -22,7 +24,12 @@ export async function startSupabaseStub(): Promise<{
   state: StubState;
   close: () => Promise<void>;
 }> {
-  const state: StubState = { users: new Map(), members: new Map(), requests: [] };
+  const state: StubState = {
+    users: new Map(),
+    members: new Map(),
+    portalTokens: new Map(),
+    requests: [],
+  };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://stub");
@@ -38,6 +45,22 @@ export async function startSupabaseStub(): Promise<{
       const user = state.users.get(token);
       if (!user) return send(401, { message: "invalid token" });
       return send(200, { ...user, aud: "authenticated", role: "authenticated" });
+    }
+
+    if (url.pathname === "/rest/v1/rpc/resolve_patient_token") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        let hash = "";
+        try {
+          hash = (JSON.parse(body || "{}") as { p_token_hash?: string }).p_token_hash ?? "";
+        } catch {
+          /* fall through to the empty result below */
+        }
+        const row = state.portalTokens.get(hash);
+        send(200, row ? [row] : []);
+      });
+      return;
     }
 
     if (url.pathname === "/rest/v1/clinic_members") {
