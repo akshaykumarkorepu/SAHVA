@@ -1,16 +1,22 @@
-export function Logo({ clinicName }: { clinicName?: string }) {
+export function Logo({ subtitle, compact }: { subtitle?: string; compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2.5">
       <span
         aria-hidden
-        className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-lg font-bold text-white"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-gradient-to-br from-brand-400 to-brand-700 font-display text-base font-extrabold text-white shadow-glow"
       >
         S
       </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold tracking-tight text-ink-900">SAHVA</p>
-        <p className="truncate text-xs text-ink-500">{clinicName ?? "AI receptionist"}</p>
-      </div>
+      {!compact && (
+        <span className="min-w-0">
+          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-ink">
+            SAHVA
+          </span>
+          <span className="block truncate text-[11px] text-ink-subtle">
+            {subtitle ?? "AI receptionist"}
+          </span>
+        </span>
+      )}
     </div>
   );
 }

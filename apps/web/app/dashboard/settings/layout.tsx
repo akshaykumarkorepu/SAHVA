@@ -20,7 +20,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   if (!canAdmin) {
     return (
       <EmptyState
-        icon="⚙"
+        icon="settings"
         title="Settings are owner and manager only"
         body="Ask your clinic owner if something here needs changing."
       />
@@ -35,8 +35,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       />
 
       {/* Scrolls horizontally on a phone rather than wrapping into a stack. */}
-      <div className="-mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <div className="flex w-max gap-1 border-b border-ink-100 md:w-full">
+      <div className="no-scrollbar -mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
+        <div className="inline-flex w-max gap-1 rounded-xl border border-line bg-surface-sunken p-1">
           {TABS.map((t) => {
             const active = pathname === t.href;
             return (
@@ -44,10 +44,10 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 key={t.href}
                 href={t.href}
                 aria-current={active ? "page" : undefined}
-                className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+                className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-medium transition duration-200 ease-spring ${
                   active
-                    ? "border-primary-600 text-primary-700"
-                    : "border-transparent text-ink-500 hover:text-ink-900"
+                    ? "bg-surface-raised text-ink shadow-xs"
+                    : "text-ink-muted hover:text-ink"
                 }`}
               >
                 {t.label}

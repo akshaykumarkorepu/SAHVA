@@ -66,7 +66,7 @@ export default function KnowledgePage() {
           <ErrorState error={faqs.error} onRetry={faqs.reload} />
         ) : (faqs.data ?? []).length === 0 ? (
           <EmptyState
-            icon="?"
+            icon="message"
             title="No answers configured"
             body="Until you add these, the AI can only handle scheduling."
           />
@@ -104,7 +104,7 @@ export default function KnowledgePage() {
         {services.loading ? (
           <Spinner />
         ) : (services.data ?? []).length === 0 ? (
-          <EmptyState icon="₹" title="No services listed" />
+          <EmptyState icon="rupee" title="No services listed" />
         ) : (
           <div className="divide-y divide-ink-100">
             {(services.data ?? []).map((s) => (
@@ -217,7 +217,7 @@ function FaqModal({
               Delete
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -326,7 +326,7 @@ function ServiceModal({
               Delete
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button

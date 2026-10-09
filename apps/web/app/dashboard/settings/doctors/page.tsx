@@ -45,7 +45,7 @@ export default function DoctorsSettingsPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          icon="✚"
+          icon="doctor"
           title="No doctors yet"
           body="The AI cannot book anything until at least one doctor has a weekly schedule."
           action={<Button onClick={() => setCreating(true)}>Add the first doctor</Button>}
@@ -54,10 +54,11 @@ export default function DoctorsSettingsPage() {
         <div className="space-y-3">
           {rows.map((d) => (
             <Card key={d.id} className="p-4">
-              <div className="flex flex-wrap items-start gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <div className="flex min-w-0 flex-1 gap-3">
                 <span
                   aria-hidden
-                  className="mt-1 h-3 w-3 shrink-0 rounded-full"
+                  className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
                   style={{ background: d.colour_hex }}
                 />
                 <div className="min-w-0 flex-1">
@@ -79,11 +80,12 @@ export default function DoctorsSettingsPage() {
                     ))}
                   </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => setScheduleFor(d)}>
+                </div>
+                <div className="flex shrink-0 gap-2 border-t border-line pt-3 sm:border-0 sm:pt-0">
+                  <Button variant="secondary" size="sm" icon="appointments" className="flex-1 sm:flex-none" onClick={() => setScheduleFor(d)}>
                     Schedule
                   </Button>
-                  <Button variant="ghost" onClick={() => setEditing(d)}>
+                  <Button variant="ghost" size="sm" icon="edit" className="flex-1 sm:flex-none" onClick={() => setEditing(d)}>
                     Edit
                   </Button>
                 </div>
@@ -175,7 +177,7 @@ function DoctorModal({
               Deactivate
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -318,7 +320,7 @@ function ScheduleModal({ doctor, onClose }: { doctor: Doctor; onClose: () => voi
       onClose={onClose}
       title={`${doctor.spoken_name} — weekly schedule`}
       footer={
-        <Button variant="outline" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           Done
         </Button>
       }

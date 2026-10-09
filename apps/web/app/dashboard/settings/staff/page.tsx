@@ -199,7 +199,7 @@ function InviteModal({
       title="Invite staff"
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button

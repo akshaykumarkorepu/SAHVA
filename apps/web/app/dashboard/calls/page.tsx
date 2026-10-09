@@ -67,7 +67,7 @@ function CallsView() {
         <ErrorState error={list.error} onRetry={list.reload} />
       ) : (list.data?.data ?? []).length === 0 ? (
         <EmptyState
-          icon="☎"
+          icon="calls"
           title="No calls yet"
           body="Once a clinic number is connected, every inbound call appears here with its full transcript."
         />

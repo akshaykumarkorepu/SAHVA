@@ -4,155 +4,205 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRequireSession } from "@/lib/session";
-import { visibleNav } from "./nav";
 import { useActionCount } from "@/lib/hooks";
+import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./nav";
 import { Logo } from "./Logo";
+import { Icon } from "@/components/icons";
+import { Button, Spinner, cn } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
-function NavLinks({
-  onNavigate,
-  count,
-}: {
-  onNavigate?: () => void;
-  count: number;
-}) {
-  const pathname = usePathname();
-  const { role } = useRequireSession();
-
-  return (
-    <nav className="flex flex-1 flex-col gap-1">
-      {visibleNav(role).map((item) => {
-        // Exact match for the index route, prefix match for the rest, so
-        // /dashboard does not stay highlighted on every child page.
-        const active =
-          item.href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname.startsWith(item.href);
-
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-              active
-                ? "bg-primary-50 text-primary-700"
-                : "text-ink-700 hover:bg-ink-100"
-            }`}
-          >
-            <span aria-hidden className="w-4 text-center text-base leading-none">
-              {item.icon}
-            </span>
-            <span className="flex-1">{item.label}</span>
-            {item.badge === "actions" && count > 0 && (
-              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-semibold text-white">
-                {count > 99 ? "99+" : count}
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
+/**
+ * Application shell.
+ *
+ * Two distinct navigation shapes rather than one squeezed into both:
+ *  - desktop gets a persistent rail
+ *  - mobile gets a bottom tab bar, which is where a thumb actually reaches
+ *
+ * Both read the same definition in nav.ts, so they cannot drift.
+ */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { status, clinic, email, role, signOut } = useRequireSession();
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const pathname = usePathname();
   const count = useActionCount();
+  const [moreOpen, setMoreOpen] = React.useState(false);
 
-  // Close the drawer on navigation, or it stays open over the new page.
-  React.useEffect(() => setDrawerOpen(false), [pathname]);
-
-  // Escape closes the drawer — expected of any modal surface.
-  React.useEffect(() => {
-    if (!drawerOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen]);
+  React.useEffect(() => setMoreOpen(false), [pathname]);
 
   if (status === "unconfigured") return <SetupNeeded />;
-  if (status === "loading" || status === "signed-out") return <FullPageSpinner />;
+  if (status === "loading" || status === "signed-out") return <BootScreen />;
   if (status === "no-clinic") return <NoClinic email={email} onSignOut={signOut} />;
 
   return (
-    <div className="flex min-h-screen bg-ink-100/40">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-ink-100 bg-white px-4 py-6 md:flex">
-        <Logo clinicName={clinic?.name} />
-        <div className="mt-6 flex flex-1 flex-col">
-          <NavLinks count={count} />
-          <AccountBlock email={email} role={role} onSignOut={signOut} />
+    <div className="flex min-h-[100dvh] bg-surface">
+      {/* ---------------- Desktop rail ---------------- */}
+      <aside className="sticky top-0 hidden h-[100dvh] w-[248px] shrink-0 flex-col border-r border-line bg-surface-raised px-3 py-5 lg:flex">
+        <div className="px-2">
+          <Logo subtitle={clinic?.name} />
         </div>
+
+        <nav className="mt-7 flex flex-1 flex-col gap-0.5">
+          {visibleNav(role).map((item) => (
+            <RailLink key={item.href} item={item} active={isActive(pathname, item.href)} count={count} />
+          ))}
+        </nav>
+
+        <AccountCard email={email} role={role} onSignOut={signOut} />
       </aside>
 
-      {/* Mobile drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button
-            aria-label="Close menu"
-            className="absolute inset-0 bg-ink-900/40"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white px-4 py-6 shadow-soft">
-            <Logo clinicName={clinic?.name} />
-            <div className="mt-6 flex flex-1 flex-col">
-              <NavLinks count={count} onNavigate={() => setDrawerOpen(false)} />
-              <AccountBlock email={email} role={role} onSignOut={signOut} />
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-ink-100 bg-white px-4 py-3 md:px-8">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open menu"
-            aria-expanded={drawerOpen}
-            className="-ml-1 rounded-lg p-2 text-ink-700 hover:bg-ink-100 md:hidden"
-          >
-            <span aria-hidden className="block text-lg leading-none">☰</span>
-          </button>
+        {/* ---------------- Top bar ---------------- */}
+        <header className="sticky top-0 z-30 border-b border-line glass">
+          <div className="flex items-center gap-3 px-4 py-3 md:px-7">
+            <div className="lg:hidden">
+              <Logo compact />
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold text-ink-900 md:text-lg">
-              {clinic?.name ?? "—"}
-            </h1>
-            <p className="truncate text-xs text-ink-500">
-              {clinic?.city}
-              {clinic?.timezone ? ` · ${clinic.timezone}` : ""}
-            </p>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-display text-[15px] font-semibold tracking-tight text-ink md:text-base">
+                {clinic?.name ?? "—"}
+              </h1>
+              <p className="truncate text-[11px] text-ink-subtle md:text-xs">
+                {clinic?.city}
+                {clinic?.timezone ? ` · ${clinic.timezone}` : ""}
+              </p>
+            </div>
+
+            <AiStatus enabled={clinic?.settings?.ai_enabled !== false} />
+            <ThemeToggle />
           </div>
-
-          <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-              clinic?.settings?.ai_enabled === false
-                ? "bg-amber-50 text-amber-700"
-                : "bg-primary-50 text-primary-700"
-            }`}
-          >
-            <span
-              aria-hidden
-              className={`h-1.5 w-1.5 rounded-full ${
-                clinic?.settings?.ai_enabled === false ? "bg-amber-500" : "bg-primary-600"
-              }`}
-            />
-            <span className="hidden sm:inline">
-              {clinic?.settings?.ai_enabled === false ? "AI paused" : "AI online"}
-            </span>
-          </span>
         </header>
 
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+        {/* pb-28 keeps content clear of the mobile tab bar */}
+        <main className="min-w-0 flex-1 px-4 pb-28 pt-6 md:px-7 lg:pb-10">
+          <div className="mx-auto w-full max-w-[1180px]">{children}</div>
+        </main>
       </div>
+
+      {/* ---------------- Mobile tab bar ---------------- */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line glass pb-safe lg:hidden"
+      >
+        <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 pt-1.5">
+          {primaryNav(role).map((item) => (
+            <TabLink key={item.href} item={item} active={isActive(pathname, item.href)} count={count} />
+          ))}
+          <button
+            onClick={() => setMoreOpen(true)}
+            aria-label="More"
+            aria-expanded={moreOpen}
+            className={cn(
+              "flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition",
+              moreOpen ? "text-brand-600" : "text-ink-subtle",
+            )}
+          >
+            <Icon name="menu" className="h-[22px] w-[22px]" />
+            <span className="text-[10px] font-medium leading-none">More</span>
+          </button>
+        </div>
+      </nav>
+
+      {moreOpen && (
+        <MoreSheet
+          items={secondaryNav(role)}
+          email={email}
+          role={role}
+          pathname={pathname}
+          onClose={() => setMoreOpen(false)}
+          onSignOut={signOut}
+        />
+      )}
     </div>
   );
 }
 
-function AccountBlock({
+/* -------------------------------------------------------------------------- */
+
+function RailLink({ item, active, count }: { item: NavItem; active: boolean; count: number }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition duration-200 ease-spring",
+        active ? "bg-brand-500/10 text-brand-700" : "text-ink-muted hover:bg-surface-sunken hover:text-ink",
+      )}
+    >
+      {/* Active indicator reads faster than colour alone. */}
+      <span
+        className={cn(
+          "absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-600 transition-all duration-200",
+          active ? "opacity-100" : "opacity-0",
+        )}
+        aria-hidden
+      />
+      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.1 : 1.75} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badge === "actions" && count > 0 && <CountPill count={count} />}
+    </Link>
+  );
+}
+
+function TabLink({ item, active, count }: { item: NavItem; active: boolean; count: number }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-1.5 transition duration-200",
+        active ? "text-brand-600" : "text-ink-subtle",
+      )}
+    >
+      <span className="relative">
+        <Icon name={item.icon} className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.75} />
+        {item.badge === "actions" && count > 0 && (
+          <span className="absolute -right-2 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-accent-rose px-1 text-[10px] font-bold text-white ring-2 ring-surface-raised">
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
+      </span>
+      <span className="w-full truncate text-center text-[10px] font-medium leading-none">
+        {item.short ?? item.label}
+      </span>
+    </Link>
+  );
+}
+
+function CountPill({ count }: { count: number }) {
+  return (
+    <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-accent-rose px-1.5 text-[11px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function AiStatus({ enabled }: { enabled: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1.5 text-xs font-medium ring-1 ring-inset",
+        enabled
+          ? "bg-brand-500/10 text-brand-700 ring-brand-500/20"
+          : "bg-accent-amber/10 text-accent-amber ring-accent-amber/20",
+      )}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        {enabled && (
+          <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-500" />
+        )}
+        <span
+          className={cn(
+            "relative inline-flex h-1.5 w-1.5 rounded-full",
+            enabled ? "bg-brand-600" : "bg-accent-amber",
+          )}
+        />
+      </span>
+      <span className="hidden sm:inline">{enabled ? "AI online" : "AI paused"}</span>
+    </span>
+  );
+}
+
+function AccountCard({
   email,
   role,
   onSignOut,
@@ -162,48 +212,124 @@ function AccountBlock({
   onSignOut: () => void;
 }) {
   return (
-    <div className="mt-auto border-t border-ink-100 pt-4">
-      <p className="truncate text-sm font-medium text-ink-900">{email ?? "—"}</p>
-      <p className="text-xs capitalize text-ink-500">{role ?? "—"}</p>
+    <div className="mt-auto rounded-2xl border border-line bg-surface-sunken/60 p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-white">
+          {(email ?? "?").slice(0, 2)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium text-ink">{email ?? "—"}</span>
+          <span className="block truncate text-[11px] capitalize text-ink-subtle">{role ?? "—"}</span>
+        </span>
+      </div>
       <button
         onClick={onSignOut}
-        className="mt-3 w-full rounded-lg border border-ink-300 px-3 py-2 text-sm font-medium text-ink-700 transition hover:bg-ink-100"
+        className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium text-ink-muted transition hover:bg-surface-raised hover:text-ink"
       >
+        <Icon name="signOut" className="h-4 w-4" />
         Sign out
       </button>
     </div>
   );
 }
 
-function FullPageSpinner() {
+function MoreSheet({
+  items,
+  email,
+  role,
+  pathname,
+  onClose,
+  onSignOut,
+}: {
+  items: NavItem[];
+  email: string | null;
+  role: string | null;
+  pathname: string;
+  onClose: () => void;
+  onSignOut: () => void;
+}) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-100/40">
+    <div className="fixed inset-0 z-50 lg:hidden">
       <div
-        role="status"
-        aria-label="Loading"
-        className="h-8 w-8 animate-spin rounded-full border-2 border-ink-300 border-t-primary-600"
+        className="absolute inset-0 bg-surface-inverse/50 backdrop-blur-sm animate-fade-in"
+        onClick={onClose}
+        aria-hidden
       />
+      <div className="absolute inset-x-0 bottom-0 rounded-t-3xl border-t border-line bg-surface-raised p-5 pb-safe shadow-lift animate-slide-up">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong" aria-hidden />
+        <nav className="grid gap-1">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onClose}
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition",
+                isActive(pathname, item.href)
+                  ? "bg-brand-500/10 text-brand-700"
+                  : "text-ink hover:bg-surface-sunken",
+              )}
+            >
+              <Icon name={item.icon} className="h-[18px] w-[18px]" />
+              {item.label}
+              <Icon name="chevronRight" className="ml-auto h-4 w-4 text-ink-subtle" />
+            </Link>
+          ))}
+        </nav>
+
+        <div className="mt-4 flex items-center gap-3 border-t border-line pt-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-white">
+            {(email ?? "?").slice(0, 2)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-ink">{email ?? "—"}</span>
+            <span className="block text-xs capitalize text-ink-subtle">{role ?? "—"}</span>
+          </span>
+          <Button variant="secondary" size="sm" icon="signOut" onClick={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function BootScreen() {
+  return (
+    <div className="grid min-h-[100dvh] place-items-center bg-surface">
+      <Spinner />
     </div>
   );
 }
 
 function NoClinic({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-100/40 px-4">
-      <div className="max-w-md rounded-xl border border-ink-100 bg-white p-8 text-center shadow-card">
-        <p className="text-3xl" aria-hidden>🔑</p>
-        <h1 className="mt-4 text-lg font-semibold text-ink-900">No clinic yet</h1>
-        <p className="mt-2 text-sm text-ink-500">
-          <span className="font-medium text-ink-700">{email}</span> is signed in, but is not an
-          active member of any clinic. An owner needs to invite this account before it can see
-          any data.
-        </p>
-        <button
-          onClick={onSignOut}
-          className="mt-6 rounded-lg border border-ink-300 px-4 py-2 text-sm font-medium text-ink-700 hover:bg-ink-100"
-        >
-          Sign out
-        </button>
+    <div className="grid min-h-[100dvh] place-items-center bg-surface px-4">
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-line bg-surface-raised p-8 text-center shadow-card animate-scale-in">
+        <div className="pointer-events-none absolute inset-0 aurora" aria-hidden />
+        <div className="relative">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-amber/12 text-accent-amber ring-1 ring-inset ring-accent-amber/20">
+            <Icon name="shield" className="h-5 w-5" />
+          </span>
+          <h1 className="mt-4 font-display text-lg font-semibold tracking-tight text-ink">
+            No clinic yet
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            <span className="font-medium text-ink">{email}</span> is signed in, but is not an active
+            member of any clinic. An owner needs to invite this account before it can see any data.
+          </p>
+          <Button variant="secondary" onClick={onSignOut} className="mt-6" icon="signOut">
+            Sign out
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -211,19 +337,29 @@ function NoClinic({ email, onSignOut }: { email: string | null; onSignOut: () =>
 
 function SetupNeeded() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-100/40 px-4">
-      <div className="max-w-lg rounded-xl border border-amber-200 bg-amber-50 p-8 shadow-card">
-        <h1 className="text-lg font-semibold text-amber-900">Supabase is not configured</h1>
-        <p className="mt-2 text-sm text-amber-800">
-          Set <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="rounded bg-amber-100 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in{" "}
-          <code className="rounded bg-amber-100 px-1">.env</code>, then restart.
+    <div className="grid min-h-[100dvh] place-items-center bg-surface px-4">
+      <div className="w-full max-w-lg rounded-3xl border border-accent-amber/25 bg-accent-amber/[0.07] p-8 animate-scale-in">
+        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-accent-amber/12 text-accent-amber ring-1 ring-inset ring-accent-amber/20">
+          <Icon name="warning" className="h-5 w-5" />
+        </span>
+        <h1 className="mt-4 font-display text-lg font-semibold tracking-tight text-ink">
+          Supabase is not configured
+        </h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          Set <Code>NEXT_PUBLIC_SUPABASE_URL</Code> and <Code>NEXT_PUBLIC_SUPABASE_ANON_KEY</Code> in{" "}
+          <Code>.env</Code>, then restart.
         </p>
-        <p className="mt-3 text-sm text-amber-800">
-          See <code className="rounded bg-amber-100 px-1">docs/setup.md</code> — the project
-          should be in <strong>ap-south-1 (Mumbai)</strong>.
+        <p className="mt-3 text-sm text-ink-muted">
+          See <Code>docs/setup.md</Code> — the project should be in{" "}
+          <strong className="text-ink">ap-south-1 (Mumbai)</strong>.
         </p>
       </div>
     </div>
   );
 }
+
+const Code = ({ children }: { children: React.ReactNode }) => (
+  <code className="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] text-ink">
+    {children}
+  </code>
+);

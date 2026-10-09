@@ -157,7 +157,7 @@ export default function BatchPage({ params }: { params: { id: string } }) {
         title="Send to these patients?"
         footer={
           <>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button

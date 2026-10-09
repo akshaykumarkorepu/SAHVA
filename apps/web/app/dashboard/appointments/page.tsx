@@ -49,7 +49,7 @@ export default function AppointmentsPage() {
         subtitle="Book, reschedule and run the day."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setTimeOffOpen(true)}>
+            <Button variant="secondary" onClick={() => setTimeOffOpen(true)}>
               Mark doctor unavailable
             </Button>
             <Button onClick={() => setBookOpen(true)}>Book appointment</Button>
@@ -58,7 +58,7 @@ export default function AppointmentsPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={() => setDate((d) => addDaysIso(d, -1))}>
+        <Button variant="secondary" onClick={() => setDate((d) => addDaysIso(d, -1))}>
           ←
         </Button>
         <Input
@@ -67,7 +67,7 @@ export default function AppointmentsPage() {
           onChange={(e) => setDate(e.target.value)}
           className="w-auto"
         />
-        <Button variant="outline" onClick={() => setDate((d) => addDaysIso(d, 1))}>
+        <Button variant="secondary" onClick={() => setDate((d) => addDaysIso(d, 1))}>
           →
         </Button>
         <Button variant="ghost" onClick={() => setDate(todayIso(tz))}>
@@ -81,7 +81,7 @@ export default function AppointmentsPage() {
         <ErrorState error={list.error} onRetry={list.reload} />
       ) : (list.data?.data ?? []).length === 0 ? (
         <EmptyState
-          icon="▦"
+          icon="appointments"
           title={`Nothing booked for ${formatDate(`${date}T09:00:00+05:30`, tz)}`}
           body="Appointments booked by the AI receptionist appear here automatically."
           action={<Button onClick={() => setBookOpen(true)}>Book appointment</Button>}
@@ -136,32 +136,36 @@ function AppointmentRow({
   const live = a.status === "booked" || a.status === "confirmed" || a.status === "checked_in";
 
   return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <span className="w-20 shrink-0 text-sm font-semibold text-ink-900">
-        {formatTime(a.starts_at, tz)}
-      </span>
-      <span
-        aria-hidden
-        className="h-2 w-2 shrink-0 rounded-full"
-        style={{ background: a.doctors?.colour_hex ?? "#059669" }}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink-900">
-          {a.patients?.full_name ?? "—"}
-        </p>
-        <p className="truncate text-xs text-ink-500">
-          {a.doctors?.spoken_name} · {formatPhone(a.patients?.phone_e164 ?? null)}
-          {a.reason ? ` · ${a.reason}` : ""}
-        </p>
+    <div className="px-4 py-3 transition hover:bg-surface-sunken/50">
+      <div className="flex items-center gap-3">
+        <span className="w-[68px] shrink-0 font-display text-sm font-semibold tabular-nums text-ink">
+          {formatTime(a.starts_at, tz)}
+        </span>
+        <span
+          aria-hidden
+          className="h-8 w-1 shrink-0 rounded-full"
+          style={{ background: a.doctors?.colour_hex ?? "rgb(5 150 105)" }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-ink">
+            {a.patients?.full_name ?? "—"}
+          </p>
+          <p className="truncate text-xs text-ink-subtle">
+            {a.doctors?.spoken_name} · {formatPhone(a.patients?.phone_e164 ?? null)}
+            {a.reason ? ` · ${a.reason}` : ""}
+          </p>
+        </div>
+
+        <Badge tone={st.tone}>{st.label}</Badge>
       </div>
 
-      <Badge tone={st.tone}>{st.label}</Badge>
-
       {live && (
-        <div className="flex gap-1">
+        <div className="mt-2.5 flex gap-1.5 border-t border-line pt-2.5 sm:mt-0 sm:justify-end sm:border-0 sm:pt-0">
           {a.status !== "checked_in" && (
             <Button
-              variant="ghost"
+              variant="secondary"
+              size="sm"
+              className="flex-1 sm:flex-none"
               disabled={setStatus.pending}
               onClick={async () => {
                 await setStatus.run("checked_in");
@@ -172,7 +176,9 @@ function AppointmentRow({
             </Button>
           )}
           <Button
-            variant="ghost"
+            variant="secondary"
+            size="sm"
+            className="flex-1 sm:flex-none"
             disabled={setStatus.pending}
             onClick={async () => {
               await setStatus.run("completed");
@@ -183,6 +189,8 @@ function AppointmentRow({
           </Button>
           <Button
             variant="ghost"
+            size="sm"
+            className="flex-1 sm:flex-none"
             disabled={cancel.pending}
             onClick={async () => {
               await cancel.run();
@@ -245,7 +253,7 @@ function BookModal({
       title="Book appointment"
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -379,7 +387,7 @@ function TimeOffModal({
         footer={
           <>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => {
                 setResult(null);
                 onDone();
@@ -419,7 +427,7 @@ function TimeOffModal({
       title="Mark doctor unavailable"
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button

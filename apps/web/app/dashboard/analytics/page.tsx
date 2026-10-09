@@ -56,14 +56,16 @@ export default function AnalyticsPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Calls" value={t?.calls ?? 0} />
-        <KpiCard label="Bookings" value={t?.bookings ?? 0} tone="good" />
-        <KpiCard label="Conversion" value={`${t?.conversion_rate ?? 0}%`} sub="Bookings / calls" />
+        <KpiCard label="Calls" value={t?.calls ?? 0} icon="calls" />
+        <KpiCard label="Bookings" value={t?.bookings ?? 0} icon="appointments" tone="brand" delay={60} />
+        <KpiCard label="Conversion" value={`${t?.conversion_rate ?? 0}%`} sub="Bookings / calls" icon="activity" delay={120} />
         <KpiCard
           label="Recovered"
           value={t?.recovered_missed ?? 0}
           sub="Calls that would have been missed"
-          tone="good"
+          icon="sparkles"
+          tone="brand"
+          delay={180}
         />
       </div>
 

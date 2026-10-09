@@ -59,7 +59,7 @@ export default function PatientsPage() {
         <ErrorState error={list.error} onRetry={list.reload} />
       ) : groups.length === 0 ? (
         <EmptyState
-          icon="◉"
+          icon="patients"
           title={debounced ? "No patients match that" : "No patients yet"}
           body="Patients are created automatically the first time they call."
         />
