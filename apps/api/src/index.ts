@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 
 import { env, isProd } from "./config/env.js";
 import { logger } from "./lib/logger.js";
@@ -21,6 +20,13 @@ import { knowledge } from "./routes/knowledge.js";
 import { staff } from "./routes/staff.js";
 import { voice } from "./routes/voice.js";
 import { portal } from "./routes/portal.js";
+import { patientAccount } from "./routes/patientAccount.js";
+import {
+  apiLimiter,
+  initRateLimitStore,
+  machineLimiter,
+  portalLimiter,
+} from "./middleware/rateLimit.js";
 
 const app = express();
 
@@ -51,43 +57,27 @@ app.get("/api/health", (_req, res) =>
 // Telephony and the voice orchestrator carry no user JWT, so they authenticate
 // with a shared secret and resolve tenancy from the dialed number. These get a
 // higher limit: one call is many turns.
-const machineLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.RATE_LIMIT_MAX * 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+app.use("/api/voice", machineLimiter(), requireServiceKey("voice"), voice);
 
-app.use("/api/voice", machineLimiter, requireServiceKey("voice"), voice);
-
-// Patient portal. Mounted before the staff auth gate because a patient holds a
-// capability link, not a session. Rate limited harder than the staff API: these
-// URLs are the one part of the surface a stranger can reach.
-const portalLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use("/api/portal", portalLimiter, portal);
-app.use("/api/webhooks/messages", machineLimiter, requireServiceKey("telephony"), messages);
+// Patient surfaces. Mounted before the staff auth gate: a patient holds either
+// a capability link or their own session, never a staff one.
+//
+// Account creation is mounted FIRST so its stricter limiter applies before the
+// general portal limiter — credential endpoints get 8 attempts per 15 minutes,
+// keyed by IP and the account under attack.
+app.use("/api", patientAccount);
+app.use("/api/portal", portalLimiter(), portal);
+app.use("/api/webhooks/messages", machineLimiter(), requireServiceKey("telephony"), messages);
 
 // --- Staff routes ----------------------------------------------------------
 // Everything below requires a signed-in staff user. `requireAuth` resolves the
 // clinic from clinic_members — never from the request — and attaches an
 // RLS-scoped Supabase client. On `main` this middleware existed but was never
 // mounted; every dashboard route was open.
-const apiLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Note: this also means an unauthenticated request to a non-existent /api
 // route gets 401 rather than 404. That is deliberate — route existence is not
 // something an anonymous caller should be able to enumerate.
-app.use("/api", apiLimiter, requireAuth);
+app.use("/api", apiLimiter(), requireAuth);
 app.use("/api/clinic", clinic);
 app.use("/api/doctors", doctors);
 app.use("/api/patients", patients);
@@ -102,9 +92,18 @@ app.use("/api/staff", staff);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Resolve the rate-limit store before listening, so the first request is
+// already counted against the shared store rather than a local one.
+const rateLimitBackend = await initRateLimitStore();
+
 const server = app.listen(env.PORT, () => {
   logger.info(
-    { port: env.PORT, env: env.NODE_ENV, supabase: new URL(env.SUPABASE_URL).host },
+    {
+      port: env.PORT,
+      env: env.NODE_ENV,
+      supabase: new URL(env.SUPABASE_URL).host,
+      rateLimit: rateLimitBackend,
+    },
     "api listening",
   );
   if (!isProd) logger.info(`http://localhost:${env.PORT}/api/health`);

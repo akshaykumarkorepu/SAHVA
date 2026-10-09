@@ -21,7 +21,9 @@
     "helmet": "^8.0.0",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "rate-limit-redis": "^4.2.0",
+    "redis": "^4.7.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

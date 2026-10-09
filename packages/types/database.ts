@@ -1926,6 +1926,8 @@ export type Database = {
           first_seen_via: Database["public"]["Enums"]["booking_source"];
           created_at: string;
           updated_at: string;
+          auth_user_id: string | null;
+          account_created_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1944,6 +1946,8 @@ export type Database = {
           first_seen_via?: Database["public"]["Enums"]["booking_source"];
           created_at?: string;
           updated_at?: string;
+          auth_user_id?: string | null;
+          account_created_at?: string | null;
         };
         Update: {
           id?: string;
@@ -1962,8 +1966,17 @@ export type Database = {
           first_seen_via?: Database["public"]["Enums"]["booking_source"];
           created_at?: string;
           updated_at?: string;
+          auth_user_id?: string | null;
+          account_created_at?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "patients_auth_user_id_fkey";
+            columns: ["auth_user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "patients_clinic_id_fkey";
             columns: ["clinic_id"];
@@ -2679,6 +2692,37 @@ export type Database = {
         };
         Relationships: [];
       };
+      v_patient_medical_history: {
+        Row: {
+          id: string | null;
+          clinic_id: string | null;
+          patient_id: string | null;
+          appointment_id: string | null;
+          chief_complaint: string | null;
+          diagnosis_text: string | null;
+          advice: string | null;
+          follow_up_days: number | null;
+          finalised_at: string | null;
+          visited_at: string | null;
+          doctor_name: string | null;
+          doctor_specialty: string | null;
+          doctor_colour: string | null;
+        };
+        Relationships: [];
+      };
+      v_patient_prescriptions: {
+        Row: {
+          id: string | null;
+          clinic_id: string | null;
+          patient_id: string | null;
+          consultation_id: string | null;
+          issued_at: string | null;
+          notes: string | null;
+          doctor_name: string | null;
+          items: Json | null;
+        };
+        Relationships: [];
+      };
       v_todays_appointments: {
         Row: {
           id: string | null;
@@ -2724,6 +2768,13 @@ export type Database = {
           p_call_id?: string;
         };
         Returns: Database["public"]["Tables"]["appointments"]["Row"];
+      };
+      claim_patient_account: {
+        Args: {
+          p_patient_id: string;
+          p_auth_user_id: string;
+        };
+        Returns: Database["public"]["Tables"]["patients"]["Row"];
       };
       get_available_slots: {
         Args: {

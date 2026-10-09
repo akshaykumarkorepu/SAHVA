@@ -39,12 +39,30 @@ done
 printf '%-42s OK\n' "seed.sql"
 echo
 
-"${PSQL[@]}" -d sahva_test -f "$HERE/10_scheduling_and_integrity.sql" 2>&1 \
-  | sed 's/^psql:.*NOTICE:  //' | grep -E "PASS|FAIL|---"
-"${PSQL[@]}" -d sahva_test -f "$HERE/20_rls_setup.sql" 2>&1 \
-  | sed 's/^psql:.*NOTICE:  //' | grep -E "PASS|FAIL" || true
-"${PSQL[@]}" -d sahva_test -f "$HERE/21_rls_isolation.sql" 2>&1 \
-  | sed 's/^psql:.*NOTICE:  //' | grep -E "PASS|FAIL"
+# Run one assertion file.
+#
+# Deliberately NOT `psql | grep`: a pipeline returns the exit status of its
+# LAST command, so piping psql into grep throws away the failure and the suite
+# reports success while assertions are failing. Capture, check, then print.
+run_suite() {
+  local file="$1"
+  local out="$WORK/$(basename "$file").out"
+  if "${PSQL[@]}" -d sahva_test -f "$file" > "$out" 2>&1; then
+    sed 's/^psql:.*NOTICE:  //' "$out" | grep -E "^(PASS|---)" || true
+  else
+    sed 's/^psql:.*NOTICE:  //' "$out" | grep -E "^(PASS|FAIL)" || true
+    echo
+    echo "SUITE FAILED: $(basename "$file")"
+    sed 's/^psql:.*NOTICE:  //' "$out" | grep -E "ERROR" | head -5
+    exit 1
+  fi
+}
+
+run_suite "$HERE/10_scheduling_and_integrity.sql"
+run_suite "$HERE/20_rls_setup.sql"
+run_suite "$HERE/21_rls_isolation.sql"
+run_suite "$HERE/22_patient_rls.sql"
+
 echo
 echo "All suites passed. Stop the cluster with:"
 echo "  $PGBIN/pg_ctl -D $WORK/data stop"

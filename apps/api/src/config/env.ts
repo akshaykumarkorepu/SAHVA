@@ -35,6 +35,13 @@ const schema = z.object({
     .default("http://localhost:3000")
     .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
 
+  /**
+   * Optional. Without it, rate-limit counters live in memory: they reset on
+   * restart and are per-instance, so running more than one instance multiplies
+   * every limit. Set this before scaling past one box.
+   */
+  REDIS_URL: z.string().url().optional(),
+
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
 });

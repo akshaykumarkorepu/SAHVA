@@ -16,11 +16,11 @@ begin
   on conflict (slug) do update set name = excluded.name returning id into v_k;
 
   insert into auth.users (email, raw_user_meta_data)
-  values ('ravi@srisai.in',   '{"full_name":"Ravi Kumar"}'::jsonb)   returning id into v_ravi;
+  values ('ravi@srisai.in',   '{"full_name":"Ravi Kumar","account_type":"staff"}'::jsonb)   returning id into v_ravi;
   insert into auth.users (email, raw_user_meta_data)
-  values ('suresh@krishna.in','{"full_name":"Suresh Babu"}'::jsonb)  returning id into v_suresh;
+  values ('suresh@krishna.in','{"full_name":"Suresh Babu","account_type":"staff"}'::jsonb)  returning id into v_suresh;
   insert into auth.users (email, raw_user_meta_data)
-  values ('geeta@srisai.in',  '{"full_name":"Geeta"}'::jsonb)        returning id into v_recep;
+  values ('geeta@srisai.in',  '{"full_name":"Geeta","account_type":"staff"}'::jsonb)        returning id into v_recep;
 
   insert into public.clinic_members (clinic_id, staff_id, role, status, joined_at)
   values (v_w, v_ravi,  'owner',       'active', now()),
