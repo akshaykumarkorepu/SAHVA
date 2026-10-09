@@ -1,18 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider, THEME_SCRIPT } from "@/components/theme/ThemeProvider";
 
-const display = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+/**
+ * Fonts are vendored, not fetched.
+ *
+ * next/font/google downloads from Google at BUILD time, which makes every
+ * build — and every deploy — depend on a third party being reachable and
+ * returning CSS in the shape the loader expects. It is not hypothetical: CI
+ * failed on exactly that, with a null regex match rather than a clean network
+ * error. Self-hosted variable fonts make the build deterministic and offline.
+ *
+ * One variable file per family covers the whole weight range in ~30-50KB.
+ */
+const display = localFont({
+  src: "./fonts/PlusJakartaSans-Variable.woff2",
   variable: "--font-display",
-  weight: ["500", "600", "700", "800"],
+  weight: "200 800",
   display: "swap",
 });
 
-const sans = Inter({
-  subsets: ["latin"],
+const sans = localFont({
+  src: "./fonts/Inter-Variable.woff2",
   variable: "--font-sans",
+  weight: "100 900",
   display: "swap",
 });
 
