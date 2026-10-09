@@ -108,7 +108,7 @@ function LoginForm() {
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-ink-subtle transition hover:bg-surface-sunken hover:text-ink"
                   >
-                    <Icon name={showPassword ? "close" : "search"} className="h-4 w-4" />
+                    <Icon name={showPassword ? "eyeOff" : "eye"} className="h-4 w-4" />
                   </button>
                 </div>
               </Field>

@@ -33,6 +33,8 @@ import {
   Activity,
   BellRing,
   Inbox,
+  Eye,
+  EyeOff,
   type LucideIcon,
 } from "lucide-react";
 
@@ -77,6 +79,8 @@ export const ICONS = {
   activity: Activity,
   bell: BellRing,
   inbox: Inbox,
+  eye: Eye,
+  eyeOff: EyeOff,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
