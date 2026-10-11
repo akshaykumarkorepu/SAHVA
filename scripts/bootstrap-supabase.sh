@@ -201,11 +201,16 @@ if [[ -n "${SAHVA_OWNER_EMAIL:-}" ]]; then
         | jq -r --arg e "$SAHVA_OWNER_EMAIL" '.users[]? | select(.email==$e) | .id' | head -1)"
   if [[ -z "$uid" ]]; then
     OWNER_PASSWORD="$(node -e "console.log(require('crypto').randomBytes(12).toString('base64url'))")"
+    # account_type MUST be "staff". sahva.handle_new_auth_user() returns early
+    # for anything else — patients are not staff — so without it no
+    # staff_profiles row is created, and the clinic_members insert below then
+    # fails its foreign key with no visible error.
     uid="$(curl -sS -X POST "$URL/auth/v1/admin/users" \
             -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" \
             -H 'Content-Type: application/json' \
             -d "$(jq -nc --arg e "$SAHVA_OWNER_EMAIL" --arg p "$OWNER_PASSWORD" \
-                  '{email:$e, password:$p, email_confirm:true}')" | jq -r '.id // empty')"
+                  '{email:$e, password:$p, email_confirm:true,
+                    user_metadata:{account_type:"staff"}}')" | jq -r '.id // empty')"
     [[ -n "$uid" ]] || die "could not create the auth user"
     printf 'email: %s\npassword: %s\n' "$SAHVA_OWNER_EMAIL" "$OWNER_PASSWORD" > .supabase-owner-login
     chmod 600 .supabase-owner-login
@@ -213,11 +218,21 @@ if [[ -n "${SAHVA_OWNER_EMAIL:-}" ]]; then
   else
     ok "auth user already exists"
   fi
-  sql "insert into public.clinic_members (clinic_id, staff_id, role, status, joined_at)
+  # The trigger is the only thing that creates this row; if it did not fire the
+  # foreign key below fails, so check first and say why rather than reporting a
+  # bare "row not created".
+  profile="$(sql "select count(*)::int from public.staff_profiles where id='$uid'" | jq -r '.[0].count // 0')"
+  [[ "$profile" != "0" ]] \
+    || die "no staff_profiles row for $uid — the auth user needs user_metadata.account_type = 'staff'"
+
+  members_resp="$(sql "insert into public.clinic_members (clinic_id, staff_id, role, status, joined_at)
        select c.id, '$uid', 'owner', 'active', now() from public.clinics c
         where c.slug = 'sri-sai-warangal'
           and not exists (select 1 from public.clinic_members m
-                           where m.clinic_id = c.id and m.staff_id = '$uid')" >/dev/null
+                           where m.clinic_id = c.id and m.staff_id = '$uid')")"
+  if echo "$members_resp" | jq -e 'type=="object" and has("message")' >/dev/null 2>&1; then
+    die "clinic_members insert failed: $(echo "$members_resp" | jq -r '.message')"
+  fi
   members="$(sql "select count(*)::int from public.clinic_members where staff_id='$uid'" | jq -r '.[0].count')"
   [[ "$members" != "0" ]] || die "clinic_members row not created - the API would return 403 FORBIDDEN"
   ok "owner is an active member of $members clinic(s)"

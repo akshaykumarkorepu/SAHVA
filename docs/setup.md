@@ -125,7 +125,28 @@ values (
 );
 ```
 
-`staff_profiles` is created automatically by the `on_auth_user_created` trigger.
+> **The user needs `account_type: "staff"` in its metadata**, or none of this
+> works. `sahva.handle_new_auth_user()` returns early for anything that is not
+> explicitly staff — patients are not staff — so without it no `staff_profiles`
+> row is created and the `clinic_members` insert above fails its foreign key.
+>
+> In the dashboard that is the **User Metadata** box on *Add user*:
+>
+> ```json
+> { "account_type": "staff" }
+> ```
+>
+> For a user that already exists without it, set the metadata and insert the
+> profile by hand:
+>
+> ```sql
+> insert into public.staff_profiles (id, full_name)
+> values ('<the-auth-user-uuid>', 'Your Name')
+> on conflict (id) do nothing;
+> ```
+
+With that metadata set, `staff_profiles` is created automatically by the
+`on_auth_user_created` trigger.
 
 Without a `clinic_members` row, the API returns
 `403 FORBIDDEN — This account is not an active member of any clinic`. That is
