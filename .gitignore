@@ -25,5 +25,9 @@ npm-debug.log*
 supabase/.temp/
 supabase/.branches/
 
+# secrets written by scripts/bootstrap-supabase.sh — never commit these
+.supabase-db-password
+.supabase-owner-login
+
 # local editor/agent tooling
 .claude/

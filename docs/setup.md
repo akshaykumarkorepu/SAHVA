@@ -5,6 +5,68 @@ cannot be scripted from here.
 
 ---
 
+## Just want to look at it? Mock mode
+
+No Supabase, no API process, no keys — the whole dashboard and patient portal
+served from fixtures:
+
+```bash
+npm install
+NEXT_PUBLIC_MOCK=1 npm run dev -w apps/web
+```
+
+Open <http://localhost:3000>. Sign-in is bypassed; every screen shows the same
+Sri Sai Clinic the seed creates, including the Action Required queue and its
+reschedule-review flow. Writes mutate the fixtures in memory, so resolving an
+item or dispatching a batch behaves correctly until you reload.
+
+The fixtures live in `apps/web/lib/mock/`. They are a review and demo aid, not
+a test double — the tests run against real Postgres. `NEXT_PUBLIC_MOCK` must
+never be set in a deployed environment; with it unset the bundler drops the
+fixtures entirely.
+
+Use this to show someone the product. Use the rest of this document to run it
+for real.
+
+---
+
+## The short path
+
+Steps 1–6 below are automated. Create a Personal Access Token at
+<https://supabase.com/dashboard/account/tokens> and run:
+
+```bash
+brew install supabase/tap/supabase jq
+
+SUPABASE_ACCESS_TOKEN=sbp_... \
+SAHVA_OWNER_EMAIL=you@example.com \
+  ./scripts/bootstrap-supabase.sh
+```
+
+`SUPABASE_ACCESS_TOKEN` is the only credential the database needs. No Anthropic
+key is involved in any of it — the schema, seed, RLS checks and owner row are
+pure Postgres.
+
+Pass `ANTHROPIC_API_KEY=sk-ant-...` too if you have one. It is used in exactly
+one place — the voice route in `apps/api/src/routes/voice.ts` — and nothing
+else reads it. **But the API refuses to boot without it** (`config/env.ts`
+requires it), so until you have a key, `npm run dev` will not start even though
+the database is fully set up. See "The Anthropic key blocks boot" below.
+
+That creates the project in `ap-south-1`, pushes every migration, seeds, asserts
+RLS is on for every table, mints your owner login, writes `.env`, and
+regenerates `packages/types/database.ts`. It is idempotent — re-run it freely.
+
+The token is account-wide: revoke it when you are done. The generated database
+password lands in `.supabase-db-password` and the owner login in
+`.supabase-owner-login` — both gitignored. Move them to a password manager and
+delete the files.
+
+Read the rest if you would rather do it by hand, or if the script stops on
+something.
+
+---
+
 ## 1. Create the Supabase project — in Mumbai (**you**)
 
 The existing project is in **Tokyo**. Move before there is any real patient
@@ -27,7 +89,8 @@ Two reasons, both real:
 ## 2. Push the schema (**you**)
 
 ```bash
-npm i -g supabase
+brew install supabase/tap/supabase     # `npm i -g supabase` needs sudo
+supabase login
 supabase link --project-ref <your-ref>
 supabase db push
 ```
@@ -145,9 +208,33 @@ drift from the tables.
 ```
 
 Needs a local PostgreSQL 16 (`brew install postgresql@16`). No Docker. Applies
-all 16 migrations plus the seed to a throwaway cluster and runs 46 assertions.
+all 18 migrations plus the seed to a throwaway cluster and runs 65 assertions.
 
 ---
+
+## The Anthropic key blocks boot
+
+`ANTHROPIC_API_KEY` is read in one file, `apps/api/src/claude/client.ts`, and
+used by one route, `routes/voice.ts` — the AI receptionist's conversation turns
+and the end-of-call summary. The dashboard, the patient surfaces and the whole
+database never touch it.
+
+It is nonetheless **required at boot**: `config/env.ts` validates it and calls
+`process.exit(1)`, and `index.ts` imports the voice route unconditionally, which
+constructs the Anthropic client eagerly at module load. So a missing key takes
+down the entire API — including every screen that has nothing to do with AI.
+
+That is backwards for a feature that cannot run anyway: there is no carrier, no
+STT and no TTS (see below), so the voice route has no live path today.
+
+To run the dashboard without a key, make the key optional and the client lazy:
+
+- `config/env.ts` — `ANTHROPIC_API_KEY: z.string().min(10).optional()`
+- `claude/client.ts` — build the client inside a function, and throw a clear
+  `AI_NOT_CONFIGURED` error when the key is absent rather than at import time
+
+The voice route then fails loudly when called without a key, and every other
+route works. Not yet done.
 
 ## Not wired yet
 
