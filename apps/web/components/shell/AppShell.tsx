@@ -39,6 +39,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="px-2">
           <Logo subtitle={clinic?.name} />
         </div>
+        <div className="mt-2 px-2">
+          <span className="block text-[10px] font-medium uppercase tracking-wider text-ink-subtle">
+            {clinic?.city ?? "Clinic"}
+          </span>
+        </div>
 
         <nav className="mt-7 flex flex-1 flex-col gap-0.5">
           {visibleNav(role).map((item) => (
@@ -51,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* ---------------- Top bar ---------------- */}
-        <header className="sticky top-0 z-30 border-b border-line glass">
+        <header className="sticky top-0 z-30 border-b border-line bg-surface-raised/60 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-4 py-3 md:px-7">
             <div className="lg:hidden">
               <Logo compact />
@@ -81,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ---------------- Mobile tab bar ---------------- */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-line glass pb-safe lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-raised/60 backdrop-blur-xl pb-safe lg:hidden"
       >
         <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 pt-1.5">
           {primaryNav(role).map((item) => (
@@ -125,7 +130,7 @@ function RailLink({ item, active, count }: { item: NavItem; active: boolean; cou
       aria-current={active ? "page" : undefined}
       className={cn(
         "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition duration-200 ease-spring",
-        active ? "bg-brand-500/10 text-brand-700" : "text-ink-muted hover:bg-surface-sunken hover:text-ink",
+        active ? "bg-brand-500/10 text-brand-700 shadow-sm" : "text-ink-muted hover:bg-surface-sunken hover:text-ink",
       )}
     >
       {/* Active indicator reads faster than colour alone. */}
@@ -136,8 +141,8 @@ function RailLink({ item, active, count }: { item: NavItem; active: boolean; cou
         )}
         aria-hidden
       />
-      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.1 : 1.75} />
-      <span className="flex-1 truncate">{item.label}</span>
+      <Icon name={item.icon} className={cn("h-[18px] w-[18px] shrink-0", active && "text-brand-600")} strokeWidth={active ? 2.1 : 1.75} />
+      <span className={cn("flex-1 truncate", active && "font-semibold")}>{item.label}</span>
       {item.badge === "actions" && count > 0 && <CountPill count={count} />}
     </Link>
   );
@@ -153,7 +158,7 @@ function TabLink({ item, active, count }: { item: NavItem; active: boolean; coun
         active ? "text-brand-600" : "text-ink-subtle",
       )}
     >
-      <span className="relative">
+      <span className={cn("relative", active && "drop-shadow-glow")}>
         <Icon name={item.icon} className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.75} />
         {item.badge === "actions" && count > 0 && (
           <span className="absolute -right-2 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-accent-rose px-1 text-[10px] font-bold text-white ring-2 ring-surface-raised">
@@ -161,7 +166,7 @@ function TabLink({ item, active, count }: { item: NavItem; active: boolean; coun
           </span>
         )}
       </span>
-      <span className="w-full truncate text-center text-[10px] font-medium leading-none">
+      <span className={cn("w-full truncate text-center text-[10px] font-medium leading-none", active && "font-bold")}>
         {item.short ?? item.label}
       </span>
     </Link>

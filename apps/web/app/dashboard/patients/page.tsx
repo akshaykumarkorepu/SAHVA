@@ -49,7 +49,7 @@ export default function PatientsPage() {
     <>
       <PageHeader title="Patients" subtitle="Search by name or phone number." />
 
-      <div className="mb-4 max-w-sm">
+      <div className="mb-6 max-w-sm">
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -69,29 +69,40 @@ export default function PatientsPage() {
           body="Patients are created automatically the first time they call."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {groups.map(([phone, people]) => (
-            <Card key={phone} className="p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-ink-900">{formatPhone(phone)}</p>
+            <Card key={phone} variant="default" className="relative overflow-hidden p-0">
+              <div className="bg-surface-sunken/50 px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+                <p className="text-sm font-bold text-ink">{formatPhone(phone)}</p>
                 {people.length > 1 && (
-                  <Badge tone="info">{people.length} patients on this number</Badge>
+                  <Badge tone="info">{people.length} family members</Badge>
                 )}
               </div>
-              <div className="mt-3 divide-y divide-ink-100">
-                {people.map((p) => (
-                  <div key={p.id} className="flex flex-wrap items-center gap-3 py-2.5">
+              <div className="p-4 space-y-4">
+                {people.map((p, i) => (
+                  <div key={p.id} className={cn(
+                    "flex items-start gap-3 transition-colors rounded-xl p-2 -m-2 hover:bg-surface-sunken/50",
+                    i !== 0 && "pl-6 relative before:absolute before:left-2 before:top-0 before:bottom-0 before:w-px before:bg-line"
+                  )}>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">{p.full_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-ink">{p.full_name}</p>
+                        {p.is_blocked && <Badge tone="bad" className="text-[10px] py-0 px-1.5">Blocked</Badge>}
+                      </div>
                       <p className="truncate text-xs text-ink-subtle">
                         {p.approx_age_years ? `${p.approx_age_years} yrs · ` : ""}
                         {LANGUAGE_LABEL[p.preferred_language]} · since{" "}
                         {formatDate(p.created_at)}
                       </p>
                     </div>
-                    {p.is_blocked && <Badge tone="bad">Blocked</Badge>}
-                    <Button variant="ghost" size="sm" icon="message" onClick={() => setLinkFor(p)}>
-                      Send link
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="message"
+                      onClick={() => setLinkFor(p)}
+                      className="shrink-0"
+                    >
+                      Link
                     </Button>
                   </div>
                 ))}
@@ -137,6 +148,7 @@ function PortalLinkModal({ patient, onClose }: { patient: Patient; onClose: () =
       onClose={onClose}
       title="Send appointment link"
       description={`${patient.full_name} · ${formatPhone(patient.phone_e164)}`}
+      variant="slide-over"
       footer={
         issued ? (
           <>
@@ -170,28 +182,31 @@ function PortalLinkModal({ patient, onClose }: { patient: Patient; onClose: () =
       }
     >
       {issued ? (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-line bg-surface-sunken p-3">
-            <p className="break-all font-mono text-xs text-ink">{issued.url}</p>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-line bg-surface-raised p-6 shadow-card ring-1 ring-brand-500/20 text-center">
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-brand-700 mb-3">Secure Access Link</span>
+            <p className="break-all font-mono text-sm text-ink mb-6">{issued.url}</p>
+            <Button
+              variant="secondary"
+              className="w-full"
+              icon={copied ? "check" : "edit"}
+              onClick={async () => {
+                await navigator.clipboard.writeText(issued.url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? "Copied to clipboard" : "Copy link"}
+            </Button>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={copied ? "check" : "edit"}
-            onClick={async () => {
-              await navigator.clipboard.writeText(issued.url);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-          >
-            {copied ? "Copied" : "Copy link"}
-          </Button>
-          <p className="flex items-start gap-2 text-xs text-ink-subtle">
-            <Icon name="warning" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-amber" />
-            Shown once. Anyone with this link can see and change this patient&rsquo;s appointments,
-            so send it only to {formatPhone(patient.phone_e164)}. Expires{" "}
-            {formatDate(issued.expires_at)}.
-          </p>
+          <div className="flex items-start gap-3 rounded-2xl bg-accent-amber/5 p-4 border border-accent-amber/20">
+            <Icon name="warning" className="mt-0.5 h-4 w-4 shrink-0 text-accent-amber" />
+            <p className="text-xs leading-relaxed text-ink-subtle">
+              This link is a secure credential. Anyone with this link can manage this patient&rsquo;s appointments.
+              Send it only to <strong className="text-ink">{formatPhone(patient.phone_e164)}</strong>.
+              Expires {formatDate(issued.expires_at)}.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">

@@ -39,21 +39,21 @@ export function KpiCard({
   return (
     <Card
       interactive
-      className="relative overflow-hidden p-5 animate-fade-up"
+      className="relative overflow-hidden p-6 animate-fade-up"
     >
       <div style={{ animationDelay: `${delay}ms` }}>
         <div className="flex items-start justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-subtle">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
             {label}
           </p>
           {icon && (
-            <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 ring-inset", chip)}>
+            <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 ring-inset transition-colors duration-200 group-hover:ring-brand-500/30", chip)}>
               <Icon name={icon} className="h-4 w-4" />
             </span>
           )}
         </div>
-        <p className={cn("mt-3 font-display text-stat tabular-nums", accent)}>{value}</p>
-        {sub && <p className="mt-1.5 text-xs text-ink-subtle">{sub}</p>}
+        <p className={cn("mt-4 font-display text-stat tabular-nums tracking-tight", accent)}>{value}</p>
+        {sub && <p className="mt-2 text-xs leading-relaxed text-ink-subtle">{sub}</p>}
       </div>
     </Card>
   );

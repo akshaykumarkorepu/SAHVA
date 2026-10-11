@@ -18,6 +18,7 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import {
   addDaysIso,
   appointmentStatus,
@@ -57,20 +58,21 @@ export default function AppointmentsPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={() => setDate((d) => addDaysIso(d, -1))}>
-          ←
+      <div className="mb-6 flex flex-wrap items-center gap-3 bg-surface-raised p-2 rounded-2xl border border-line w-fit shadow-xs">
+        <Button variant="secondary" size="sm" onClick={() => setDate((d) => addDaysIso(d, -1))}>
+          <Icon name="chevronLeft" className="h-4 w-4" />
         </Button>
         <Input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-auto"
+          className="w-auto font-medium text-sm focus:ring-brand-500/20"
         />
-        <Button variant="secondary" onClick={() => setDate((d) => addDaysIso(d, 1))}>
-          →
+        <Button variant="secondary" size="sm" onClick={() => setDate((d) => addDaysIso(d, 1))}>
+          <Icon name="chevronRight" className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" onClick={() => setDate(todayIso(tz))}>
+        <div className="mx-1 h-4 w-px bg-line" />
+        <Button variant="ghost" size="sm" onClick={() => setDate(todayIso(tz))}>
           Today
         </Button>
       </div>
@@ -87,11 +89,11 @@ export default function AppointmentsPage() {
           action={<Button onClick={() => setBookOpen(true)}>Book appointment</Button>}
         />
       ) : (
-        <Card className="divide-y divide-ink-100">
+        <div className="grid gap-3">
           {(list.data?.data ?? []).map((a) => (
             <AppointmentRow key={a.id} appointment={a} tz={tz} onChanged={list.reload} />
           ))}
-        </Card>
+        </div>
       )}
 
       <BookModal

@@ -16,22 +16,33 @@ export function Card({
   children,
   className,
   interactive,
+  variant = "default",
   as: Tag = "div",
 }: {
   children: React.ReactNode;
   className?: string;
   interactive?: boolean;
+  variant?: "default" | "glass" | "inset";
   as?: "div" | "section" | "article";
 }) {
+  const variants = {
+    default: "rounded-3xl border border-line bg-surface-raised shadow-card",
+    glass: "rounded-3xl border border-line/50 bg-surface-raised/60 backdrop-blur-md shadow-card",
+    inset: "rounded-3xl border border-line bg-surface-sunken shadow-inner",
+  };
+
   return (
     <Tag
       className={cn(
-        "rounded-2xl border border-line bg-surface-raised shadow-card",
-        interactive && "card-hover",
+        variants[variant],
+        "transition-all duration-200",
+        interactive && "card-hover hover:shadow-lift",
         className,
       )}
     >
-      {children}
+      <div className="h-full w-full ring-1 ring-inset ring-black/5 rounded-[inherit]">
+        {children}
+      </div>
     </Tag>
   );
 }
@@ -43,10 +54,10 @@ export function Card({
 export type Tone = "good" | "warn" | "neutral" | "bad" | "info" | "brand";
 
 const TONES: Record<Tone, string> = {
-  good: "bg-brand-500/12 text-brand-700 ring-brand-500/25",
-  warn: "bg-accent-amber/12 text-accent-amber ring-accent-amber/25",
-  bad: "bg-accent-rose/12 text-accent-rose ring-accent-rose/25",
-  info: "bg-accent-sky/12 text-accent-sky ring-accent-sky/25",
+  good: "bg-brand-500/12 text-brand-700 ring-brand-500/20",
+  warn: "bg-accent-amber/12 text-accent-amber ring-accent-amber/20",
+  bad: "bg-accent-rose/12 text-accent-rose ring-accent-rose/20",
+  info: "bg-accent-sky/12 text-accent-sky ring-accent-sky/20",
   brand: "bg-brand-600 text-white ring-brand-600",
   neutral: "bg-surface-sunken text-ink-muted ring-line",
 };
@@ -65,7 +76,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset",
         TONES[tone],
         className,
       )}
@@ -90,11 +101,11 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS = {
   primary:
-    "bg-brand-600 text-white shadow-glow hover:bg-brand-700 active:bg-brand-700 disabled:shadow-none",
+    "bg-brand-600 text-white shadow-glow hover:bg-brand-700 active:bg-brand-800 disabled:shadow-none active:scale-[.97]",
   secondary:
-    "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken active:bg-surface-sunken",
-  ghost: "text-ink-muted hover:bg-surface-sunken hover:text-ink",
-  danger: "bg-accent-rose text-white hover:brightness-110 active:brightness-95",
+    "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken active:bg-surface-sunken active:scale-[.97]",
+  ghost: "text-ink-muted hover:bg-surface-sunken hover:text-ink active:scale-[.97]",
+  danger: "bg-accent-rose text-white hover:brightness-110 active:brightness-95 active:scale-[.97]",
 } as const;
 
 const SIZES = {
@@ -113,7 +124,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       disabled={disabled || loading}
       {...rest}
       className={cn(
-        "inline-flex select-none items-center justify-center rounded-xl font-medium transition duration-200 ease-spring",
+        "inline-flex select-none items-center justify-center rounded-2xl font-medium transition duration-200 ease-spring",
         "active:scale-[.97] disabled:pointer-events-none disabled:opacity-50",
         VARIANTS[variant],
         SIZES[size],
@@ -261,7 +272,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div className={cn("relative overflow-hidden rounded-xl bg-surface-sunken", className)}>
       <div
-        className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"
+        className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-brand-500/10 via-brand-600/20 to-brand-500/10"
         aria-hidden
       />
     </div>
@@ -325,7 +336,7 @@ export function Field({
 }
 
 const CONTROL =
-  "rounded-xl border border-line-strong bg-surface-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle outline-none transition duration-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-surface-sunken disabled:text-ink-subtle";
+  "rounded-2xl border border-line-strong bg-surface-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle outline-none transition duration-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 disabled:bg-surface-sunken disabled:text-ink-subtle";
 
 /**
  * Tailwind resolves conflicting width utilities by stylesheet order, not by the
@@ -428,6 +439,7 @@ export function Modal({
   children,
   footer,
   size = "md",
+  variant = "dialog",
 }: {
   open: boolean;
   onClose: () => void;
@@ -436,6 +448,7 @@ export function Modal({
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: "md" | "lg";
+  variant?: "dialog" | "slide-over";
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
 
@@ -488,9 +501,15 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-surface-raised shadow-lift",
-          "animate-slide-up sm:animate-scale-in sm:rounded-3xl",
+          "relative flex max-h-[92vh] w-full flex-col overflow-hidden border border-line bg-surface-raised shadow-lift",
+          variant === "dialog"
+            ? "animate-scale-in sm:rounded-3xl"
+            : "animate-slide-right rounded-l-none rounded-r-3xl",
+          variant === "dialog"
+            ? "rounded-t-3xl"
+            : "h-full rounded-none",
           size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg",
+          variant === "slide-over" && "sm:max-w-md sm:rounded-l-none",
         )}
       >
         {/* Drag affordance for the mobile sheet. */}
