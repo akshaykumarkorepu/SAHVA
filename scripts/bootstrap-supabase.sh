@@ -17,7 +17,11 @@
 #
 # Options (env):
 #   SAHVA_PROJECT_REF   adopt an existing project instead of creating one
-#   SAHVA_DB_PASSWORD   required when adopting; generated when creating
+#   SAHVA_DB_PASSWORD   optional. Given, migrations go over a direct Postgres
+#                       connection via `supabase db push`. Omitted, they go
+#                       through the Management API on the access token alone —
+#                       which is the only option for a project whose password
+#                       you no longer have, since it can be reset but not read.
 #   SAHVA_REGION        default ap-south-1 (Mumbai) — see setup.md on residency
 #   SAHVA_PROJECT_NAME  default sahva
 #   SAHVA_OWNER_EMAIL   staff owner to create; skipped if unset
@@ -71,9 +75,11 @@ ok "token accepted - $(echo "$orgs_json" | jq -r 'length') organization(s)"
 step "Project"
 if [[ -n "${SAHVA_PROJECT_REF:-}" ]]; then
   REF="$SAHVA_PROJECT_REF"
-  [[ -n "${SAHVA_DB_PASSWORD:-}" ]] \
-    || die "adopting $REF needs SAHVA_DB_PASSWORD (dashboard -> Settings -> Database -> reset if unknown)"
-  DB_PASSWORD="$SAHVA_DB_PASSWORD"
+  # The db password is optional when adopting: without it the migrations go
+  # through the Management API instead of a direct Postgres connection, which
+  # needs nothing but the access token. A project's password cannot be read
+  # back from the dashboard, only reset, so not requiring it matters.
+  DB_PASSWORD="${SAHVA_DB_PASSWORD:-}"
   proj="$(api GET "/projects/$REF")"
   echo "$proj" | jq -e '.id' >/dev/null 2>&1 || die "no project $REF on this account"
   ok "adopting $(echo "$proj" | jq -r '.name') ($REF) in $(echo "$proj" | jq -r '.region')"
@@ -83,9 +89,7 @@ else
   existing="$(api GET "/projects" | jq -r --arg n "$PROJECT_NAME" '.[] | select(.name==$n) | .id' | head -1)"
   if [[ -n "$existing" ]]; then
     REF="$existing"
-    [[ -n "${SAHVA_DB_PASSWORD:-}" ]] \
-      || die "project named '$PROJECT_NAME' already exists ($REF). Re-run with SAHVA_PROJECT_REF=$REF and SAHVA_DB_PASSWORD=..."
-    DB_PASSWORD="$SAHVA_DB_PASSWORD"
+    DB_PASSWORD="${SAHVA_DB_PASSWORD:-}"
     ok "reusing existing '$PROJECT_NAME' ($REF)"
   else
     ORG="${SAHVA_ORG_ID:-$(echo "$orgs_json" | jq -r 'if length==1 then .[0].id else "" end')}"
@@ -112,15 +116,53 @@ for i in $(seq 1 60); do
   sleep 10
 done
 
-# --- 2. link + push ----------------------------------------------------------
+# --- 2. push the migrations --------------------------------------------------
 step "Schema"
-supabase link --project-ref "$REF" --password "$DB_PASSWORD" >/dev/null 2>&1 \
-  || die "link failed - wrong db password for $REF?"
-ok "linked"
 
-supabase db push --linked --password "$DB_PASSWORD" --include-all --yes \
-  || die "db push failed - nothing below ran"
-ok "migrations applied"
+# Apply one file and record it, exactly as `supabase db push` would, so the CLI
+# stays in sync and a later `db push` is a no-op rather than a replay.
+push_one_via_api() {
+  local file="$1" version="$2" name="$3" resp
+  resp="$(api POST "/projects/$REF/database/query" "$(jq -nc --rawfile q "$file" '{query:$q}')")"
+  if echo "$resp" | jq -e 'type=="object" and has("message")' >/dev/null 2>&1; then
+    die "$(basename "$file") failed: $(echo "$resp" | jq -r '.message')"
+  fi
+  # version and name come from the filename, which the loop below has already
+  # constrained to digits and [a-z_], so there is nothing to quote-escape.
+  sql "insert into supabase_migrations.schema_migrations (version, name)
+       values ('$version', '$name') on conflict (version) do nothing" >/dev/null
+}
+
+if [[ -n "$DB_PASSWORD" ]]; then
+  supabase link --project-ref "$REF" --password "$DB_PASSWORD" >/dev/null 2>&1 \
+    || die "link failed - wrong db password for $REF?"
+  ok "linked"
+  supabase db push --linked --password "$DB_PASSWORD" --include-all --yes \
+    || die "db push failed - nothing below ran"
+  ok "migrations applied"
+else
+  info "no db password given - applying migrations over the Management API"
+  sql "create schema if not exists supabase_migrations;
+       create table if not exists supabase_migrations.schema_migrations (
+         version text primary key, statements text[], name text )" >/dev/null
+  applied="$(sql "select coalesce(string_agg(version, ' '), '') as v from supabase_migrations.schema_migrations" | jq -r '.[0].v')"
+  count=0
+  for f in supabase/migrations/*.sql; do
+    base="$(basename "$f" .sql)"
+    version="${base%%_*}"
+    name="${base#*_}"
+    [[ "$version" =~ ^[0-9]+$ && "$name" =~ ^[a-z0-9_]+$ ]] \
+      || die "unexpected migration filename: $base"
+    if [[ " $applied " == *" $version "* ]]; then
+      info "  $base - already applied"
+      continue
+    fi
+    info "  $base"
+    push_one_via_api "$f" "$version" "$name"
+    count=$((count + 1))
+  done
+  ok "$count migration(s) applied, $(ls supabase/migrations/*.sql | wc -l | tr -d ' ') on disk"
+fi
 
 # --- 3. seed -----------------------------------------------------------------
 step "Seed"
