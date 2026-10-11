@@ -117,7 +117,7 @@ function Hero() {
             handling everything from simple queries to real appointment bookings against your live schedule.
           </p>
 
-          <div className="mt la la mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
             <a
               href="tel:+918702345678"
               className="inline-flex h-14 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-8 text-lg font-semibold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
@@ -134,7 +134,7 @@ function Hero() {
             </a>
           </div>
 
-          <div className="mt la l la mt-12 grid grid-cols-3 gap-8 border-t border-line pt-8">
+          <div className="mt-12 grid grid-cols-3 gap-8 border-t border-line pt-8">
             {[
               ["24/7", "Always picks up"],
               ["2", "Languages, mid-sentence"],
@@ -334,7 +334,7 @@ function BilingualSection() {
             Not a translation layer bolted onto an English bot. SAHVA follows code-switching
             mid-sentence—the way people actually speak in Telangana.
           </p>
-          <ul className="mt la la mt-10 space-y-6">
+          <ul className="mt-10 space-y-6">
             {[
               ["Code-switching", "“Doctor గారు available ఉన్నారా?” is one sentence, not two languages."],
               ["Local Context", "Telugu names and Indian phone numbers, heard correctly and verified."],
@@ -370,7 +370,7 @@ function BilingualSection() {
                 <p className="mt-2 text-xs italic text-ink-muted">“Tomorrow 11:00 AM is free. How old is the child?”</p>
               </div>
             </div>
-            <p className="mt la l la mt-8 border-t border-line pt-4 text-xs text-ink-subtle italic">
+            <p className="mt-8 border-t border-line pt-4 text-xs text-ink-subtle italic">
               Paediatric age changes the slot length. SAHVA asks rather than assuming.
             </p>
           </div>
@@ -396,7 +396,7 @@ function SafetyPromise() {
           SAHVA never guesses: when a doctor becomes unavailable, every affected
           patient lands in an <strong className="text-white">Action Required</strong> queue.
         </p>
-        <p className="mt la la mt-8 text-sm text-ink-inverse/40 uppercase tracking-widest font-semibold">
+        <p className="mt-8 text-sm text-ink-inverse/40 uppercase tracking-widest font-semibold">
           Enforced by the database, not a checkbox.
         </p>
       </div>
@@ -461,7 +461,7 @@ function Pricing() {
                 {p.price.startsWith("₹") && <span className="text-sm font-medium text-ink-subtle">/month</span>}
               </div>
               <p className="mt-2 text-sm text-ink-muted">{p.note} · {p.doctors}</p>
-              <ul className="mt la l la mt-8 flex-1 space-y-4 border-t border-line pt-8">
+              <ul className="mt-8 flex-1 space-y-4 border-t border-line pt-8">
                 {p.features.map((f) => (
                   <li key={f} className="flex gap-3 text-sm text-ink-muted">
                     <Icon name="check" className="h-4 w-4 shrink-0 text-brand-600" />
@@ -472,7 +472,7 @@ function Pricing() {
               <a
                 href="tel:+918702345678"
                 className={cn(
-                  "mt la l la mt-8 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition active:scale-[.98]",
+                  "mt-8 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition active:scale-[.98]",
                   p.featured
                     ? "bg-brand-600 text-white shadow-glow hover:bg-brand-700"
                     : "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken"
@@ -500,7 +500,7 @@ function FinalCta() {
         </p>
         <a
           href="tel:+918702345678"
-          className="mt-10 inline-flex h-16 items-center justify-center gap-3 rounded-2xl bg-brand-600 px la l la px-10 text-xl font-bold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
+          className="mt-10 inline-flex h-16 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-10 text-xl font-bold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
         >
           <Icon name="calls" className="h-6 w-6" />
           +91 87023 45678

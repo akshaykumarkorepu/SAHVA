@@ -28,7 +28,10 @@
     /* Deep Navy for strong typography and trust. */
     --ink: 16 53 68;
     --ink-muted: 70 92 100;
-    --ink-subtle: 110 130 135;
+    /* 4.6:1 on --surface. Same hue, enough luminance to clear WCAG AA —
+       this is read on mid-range Android screens in daylight, so AA is a
+       product requirement here, not a preference. Was 3.71:1. */
+    --ink-subtle: 97 114 119;
     --ink-inverse: 237 248 244;
 
     --line: 210 225 220;
@@ -60,7 +63,8 @@
 
     --ink: 237 248 244;
     --ink-muted: 140 160 165;
-    --ink-subtle: 110 130 135;
+    /* 4.6:1 on the dark --surface. Was 4.44:1, just under AA. */
+    --ink-subtle: 112 133 138;
     --ink-inverse: 16 53 68;
 
     --line: 30 50 55;
