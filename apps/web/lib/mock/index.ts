@@ -261,13 +261,9 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   // ---- patient portal ----------------------------------------------------
   if (method === "GET" && pathname === "/me") return d.patientMe;
   if (method === "GET" && pathname === "/me/medical") return d.patientMedical;
-  if (method === "GET" && pathname === "/me/tasks") return careTasks;
+  if (method === "GET" && pathname === "/me/tasks")
+    return careTasks.filter((t) => t.status === "pending" || t.status === "sent");
   if (method === "GET" && pathname === "/me/invoices") return d.patientInvoices;
-  if (method === "POST" && seg[0] === "me" && seg[1] === "tasks" && seg[3] === "done") {
-    const t = careTasks.find((x) => x.id === seg[2]);
-    if (t) t.status = "done";
-    return t ?? { ok: true };
-  }
 
   throw new MockNotFound(pathname);
 }

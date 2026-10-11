@@ -200,3 +200,42 @@ patientAccount.get(
     );
   }),
 );
+
+/**
+ * Care follow-ups the clinic has scheduled for this patient.
+ *
+ * The task row carries no text of its own — what to do lives on the care plan
+ * it came from, so the plan's name is joined in rather than duplicated per
+ * task. Completed and skipped tasks are left out: this is a to-do list, not an
+ * audit trail, and the record of what happened is the visit history.
+ */
+patientAccount.get(
+  "/me/tasks",
+  asyncRoute(async (req, res) => {
+    const { db, patientId } = req.patient!;
+
+    const tasks = await db
+      .from("care_tasks")
+      .select("id, due_on, status, care_plans(name, template_key)")
+      .eq("patient_id", patientId)
+      .in("status", ["pending", "sent"])
+      .order("due_on")
+      .limit(50);
+
+    if (tasks.error) throw fromPostgrest(tasks.error, "care task");
+
+    res.json(
+      (tasks.data ?? []).map((t) => {
+        // PostgREST types an embedded one-to-one as an array in some versions.
+        const plan = Array.isArray(t.care_plans) ? t.care_plans[0] : t.care_plans;
+        return {
+          id: t.id,
+          due_on: t.due_on,
+          status: t.status,
+          title: plan?.name ?? "Follow-up",
+          template_key: plan?.template_key ?? null,
+        };
+      }),
+    );
+  }),
+);

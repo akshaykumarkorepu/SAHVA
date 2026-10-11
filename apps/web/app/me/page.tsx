@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { useRequirePatient } from "@/lib/portal/session";
-import { useApi, useMutation } from "@/lib/hooks";
-import { post } from "@/lib/api";
+import { useApi } from "@/lib/hooks";
 import { STRINGS, patientDate, patientDateTime, type Lang } from "@/lib/portal/i18n";
 import {
   Badge,
@@ -85,12 +84,19 @@ type Medical = {
   vaccinations: Vaccination[];
 };
 
+/**
+ * A scheduled follow-up, as GET /me/tasks returns it.
+ *
+ * The text comes from the care plan the task was generated from — care_tasks
+ * itself carries none. Read-only on purpose: care_task_status tracks the
+ * clinic's dispatch (`pending → sent`), not something a patient ticks off.
+ */
 type CareTask = {
   id: string;
-  title_en: string;
-  title_te: string;
+  title: string;
+  template_key: string | null;
   due_on: string;
-  status: "pending" | "done" | "skipped";
+  status: "pending" | "sent";
 };
 
 type InvoiceStatus = "draft" | "issued" | "paid" | "void";
@@ -210,7 +216,7 @@ export default function PatientHomePage() {
   const vaccinesDue = (medical.data?.vaccinations ?? []).filter(
     (v) => v.status === "due" || v.status === "overdue",
   );
-  const openTasks = (tasks.data ?? []).filter((x) => x.status === "pending");
+  const openTasks = tasks.data ?? [];
   const unpaid = (invoices.data ?? []).filter((i) => i.status === "issued");
   const owed = unpaid.reduce((s, i) => s + i.total_paise, 0);
 
@@ -269,7 +275,7 @@ export default function PatientHomePage() {
             />
 
             {openTasks.length > 0 && (
-              <CareTasks tasks={openTasks} L={L} lang={lang} onDone={tasks.reload} />
+              <CareTasks tasks={openTasks} L={L} lang={lang} />
             )}
 
             <div className="no-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
@@ -576,21 +582,17 @@ function CareTasks({
   tasks,
   L,
   lang,
-  onDone,
 }: {
   tasks: CareTask[];
   L: boolean;
   lang: Lang;
-  onDone: () => void;
 }) {
-  const mark = useMutation((id: string) => post(`/me/tasks/${id}/done`));
-
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
         <Icon name="inbox" className="h-4 w-4 text-brand-700" />
         <h2 className="font-display text-[15px] font-semibold tracking-tight text-ink">
-          {L ? "మీరు చేయవలసినవి" : "Things to do"}
+          {L ? "రాబోయే ఫాలో-అప్‌లు" : "Upcoming follow-ups"}
         </h2>
       </div>
 
@@ -606,10 +608,12 @@ function CareTasks({
                 overdue ? "border-accent-rose/30 bg-accent-rose/[0.05]" : "border-line",
               )}
             >
+              <Icon
+                name={overdue ? "warning" : "clock"}
+                className={cn("h-4 w-4 shrink-0", overdue ? "text-accent-rose" : "text-ink-subtle")}
+              />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-ink">
-                  {L ? task.title_te : task.title_en}
-                </span>
+                <span className="block text-sm font-medium text-ink">{task.title}</span>
                 <span
                   className={cn(
                     "mt-0.5 block text-xs",
@@ -623,22 +627,16 @@ function CareTasks({
                     : `${L ? "గడువు" : "Due"} ${patientDate(`${task.due_on}T09:00:00`, "Asia/Kolkata", lang)}`}
                 </span>
               </span>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon="check"
-                loading={mark.pending}
-                onClick={async () => {
-                  await mark.run(task.id);
-                  onDone();
-                }}
-              >
-                {L ? "అయింది" : "Done"}
-              </Button>
             </li>
           );
         })}
       </ul>
+
+      <p className="mt-4 border-t border-line pt-3 text-[12px] leading-relaxed text-ink-subtle">
+        {L
+          ? "వీటి కోసం క్లినిక్ మీకు గుర్తు చేస్తుంది. ముందుగా రావాలంటే కాల్ చేయండి."
+          : "The clinic will remind you about these. Call if you would like to come in sooner."}
+      </p>
     </Card>
   );
 }
