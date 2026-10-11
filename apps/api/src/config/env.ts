@@ -24,7 +24,12 @@ const schema = z.object({
    */
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
 
-  ANTHROPIC_API_KEY: z.string().min(10),
+  /**
+   * Optional. Only the voice route uses it; see claude/client.ts. Requiring it
+   * here took the whole API down over a feature that is not wired to a carrier
+   * yet, so a voice call now fails with AI_NOT_CONFIGURED instead.
+   */
+  ANTHROPIC_API_KEY: z.string().min(10).optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-6"),
 
   /** Shared secret for machine callers (telephony webhook, voice orchestrator). */

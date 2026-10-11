@@ -5,7 +5,7 @@ import { asyncRoute } from "../middleware/errorHandler.js";
 import { phoneE164, uuid, validate } from "../middleware/validate.js";
 import { badRequest, notFound, unwrap } from "../lib/errors.js";
 import { dbAdmin } from "../lib/supabase.js";
-import { anthropic, MODEL } from "../claude/client.js";
+import { getAnthropic, MODEL } from "../claude/client.js";
 import { TOOL_DEFINITIONS } from "../claude/tools.js";
 import { buildSystemPrompt, type ClinicBrief } from "../claude/systemPrompt.js";
 import { executeTool } from "../tools/appointments.js";
@@ -277,7 +277,7 @@ voice.post(
     let replyText = "";
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await anthropic.messages.create({
+      const response = await getAnthropic().messages.create({
         model: MODEL,
         max_tokens: 1024,
         system: brief.prompt,
@@ -454,7 +454,7 @@ voice.post(
       .join("\n");
 
     try {
-      const summary = await anthropic.messages.create({
+      const summary = await getAnthropic().messages.create({
         model: MODEL,
         max_tokens: 300,
         system:
