@@ -109,7 +109,7 @@ function AuthCard({
 
   return (
     <div className="relative z-10 w-full max-w-[960px]">
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-surface-raised shadow-lift lg:h-[600px]">
+      <div className="relative overflow-hidden rounded-3xl border border-line bg-surface-raised shadow-lift lg:h-[640px]">
         {/*
           Desktop: two half-width layers that slide past each other. Mobile:
           the overlay is hidden entirely and one form shows at a time, because
@@ -124,16 +124,24 @@ function AuthCard({
           <Panel active={!signup}>
             <SignInForm role={role} setRole={setRole} next={next} onSwitch={() => setMode("signup")} />
           </Panel>
-          <Panel active={signup} absoluteOnLg>
+          <Panel active={signup}>
             <SignUpForm role={role} setRole={setRole} next={next} onSwitch={() => setMode("signin")} />
           </Panel>
         </div>
 
+        {/*
+          Mutually exclusive, not "base + override".
+          `cn` is a plain join with no tailwind-merge, so emitting both
+          `left-1/2` and `left-0` leaves the winner to stylesheet order — and
+          Tailwind writes `.left-0` before `.left-1/2`, so the override lost
+          and the overlay never moved. The form then slid underneath it and the
+          sign-up panel looked blank.
+        */}
         <div
           aria-hidden
           className={cn(
-            "absolute inset-y-0 left-1/2 z-20 hidden w-1/2 overflow-hidden transition-[left] duration-700 ease-spring lg:block",
-            signup && "left-0",
+            "absolute inset-y-0 z-20 hidden w-1/2 overflow-hidden transition-[left] duration-700 ease-spring lg:block",
+            signup ? "left-0" : "left-1/2",
           )}
         >
           <div className="relative h-full bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700">
@@ -166,23 +174,14 @@ function AuthCard({
   );
 }
 
-function Panel({
-  active,
-  absoluteOnLg,
-  children,
-}: {
-  active: boolean;
-  absoluteOnLg?: boolean;
-  children: React.ReactNode;
-}) {
+function Panel({ active, children }: { active: boolean; children: React.ReactNode }) {
   return (
     <div
       className={cn(
-        "flex w-full flex-col justify-center px-6 py-10 transition-all duration-500 sm:px-12",
-        absoluteOnLg ? "lg:absolute lg:inset-0" : "lg:absolute lg:inset-0",
-        active
-          ? "opacity-100 lg:pointer-events-auto"
-          : "hidden opacity-0 lg:flex lg:pointer-events-none",
+        "w-full flex-col px-6 py-10 transition-opacity duration-500 sm:px-12 lg:absolute lg:inset-0 lg:flex lg:overflow-y-auto",
+        // Below lg only one panel exists at a time, so display is the switch.
+        // At lg both are mounted and stacked, so opacity is.
+        active ? "flex opacity-100" : "hidden opacity-0 lg:pointer-events-none",
       )}
       aria-hidden={!active}
     >
@@ -375,7 +374,7 @@ function SignInForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm">
+    <div className="mx-auto my-auto w-full max-w-sm">
       <Brand title="Welcome back" subtitle="Sign in to continue." />
       <RoleToggle role={role} setRole={setRole} />
 
@@ -506,7 +505,7 @@ function SignUpForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm">
+    <div className="mx-auto my-auto w-full max-w-sm">
       <Brand
         title={staff ? "Staff accounts are invited" : "Create your account"}
         subtitle={staff ? "Not self-service, by design." : "See your records in Telugu or English."}
