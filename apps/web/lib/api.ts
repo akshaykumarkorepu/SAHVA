@@ -41,6 +41,18 @@ async function authHeader(): Promise<Record<string, string>> {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Review/demo mode.
+  //
+  // The env var is compared inline rather than through the imported
+  // `isMockMode`: Next substitutes `process.env.NEXT_PUBLIC_MOCK` with a
+  // literal at build time, so an unset var makes this `"" === "1"` and the
+  // whole branch — including the dynamic import — is eliminated. Reading the
+  // flag through an imported binding defeats that and ships the fixtures.
+  if (process.env.NEXT_PUBLIC_MOCK === "1") {
+    const { mockApi } = await import("./mock");
+    return mockApi<T>(path, init);
+  }
+
   const res = await fetch(`${BASE}/api${path}`, {
     ...init,
     headers: {

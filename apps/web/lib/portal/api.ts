@@ -17,6 +17,12 @@ export async function portalFetch<T>(
   path = "",
   init: RequestInit = {},
 ): Promise<T> {
+  // Inline literal, not the imported flag — see the note in lib/api.ts.
+  if (process.env.NEXT_PUBLIC_MOCK === "1") {
+    const { mockPortal } = await import("@/lib/mock");
+    return mockPortal<T>(token, path, init);
+  }
+
   const res = await fetch(`${BASE}/api/portal/${encodeURIComponent(token)}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },

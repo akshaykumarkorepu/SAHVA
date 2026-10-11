@@ -563,7 +563,7 @@ function UpgradeCard({ token, lang, t }: { token: string; lang: Lang; t: Strings
         </Button>
         <p className="mt-3 text-center text-xs text-ink-subtle">
           {t.alreadyHaveAccount}{" "}
-          <Link href="/patient/login" className="font-medium text-brand-600">
+          <Link href="/signin?role=patient" className="font-medium text-brand-600">
             {t.signIn}
           </Link>
         </p>
@@ -575,7 +575,7 @@ function UpgradeCard({ token, lang, t }: { token: string; lang: Lang; t: Strings
         title={done ? t.accountCreated : t.createAccount}
         footer={
           done ? (
-            <Link href="/patient/login">
+            <Link href="/signin?role=patient">
               <Button>{t.signIn}</Button>
             </Link>
           ) : undefined

@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import type { Enums } from "@sahva/types";
 import { supabase, isSupabaseConfigured } from "./supabase";
+import { isMockMode } from "./mock/flag";
 import { get, ApiError } from "./api";
 
 export type ClinicContext = {
@@ -33,12 +34,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [clinic, setClinic] = React.useState<ClinicContext | null>(null);
   const [role, setRole] = React.useState<Enums<"staff_role"> | null>(null);
   const [status, setStatus] = React.useState<SessionState["status"]>(
-    isSupabaseConfigured ? "loading" : "unconfigured",
+    isMockMode || isSupabaseConfigured ? "loading" : "unconfigured",
   );
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    // Mock mode has no auth provider — the clinic still comes from the API
+    // below, which the mock serves, so the rest of this file is unchanged.
+    if (isMockMode || !isSupabaseConfigured) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       if (!data.session) setStatus("signed-out");
@@ -55,7 +58,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    if (!session) return;
+    if (!session && !isMockMode) return;
     let cancelled = false;
 
     (async () => {
@@ -91,6 +94,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   const signOut = React.useCallback(async () => {
+    if (isMockMode) return;
     await supabase.auth.signOut();
   }, []);
 
@@ -99,7 +103,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     session,
     clinic,
     role,
-    email: session?.user.email ?? null,
+    email: isMockMode ? "owner@srisaiclinic.in" : session?.user.email ?? null,
     error,
     signOut,
   };
@@ -127,7 +131,7 @@ export function useRequireSession() {
 
   React.useEffect(() => {
     if (s.status === "signed-out") {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      router.replace(`/signin?role=staff&next=${encodeURIComponent(pathname)}`);
     }
   }, [s.status, router, pathname]);
 

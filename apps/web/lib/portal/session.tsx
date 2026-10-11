@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isMockMode } from "@/lib/mock/flag";
 import { get, ApiError } from "@/lib/api";
 import type { Lang } from "./i18n";
 
@@ -66,13 +67,14 @@ export function PatientSessionProvider({ children }: { children: React.ReactNode
   const [session, setSession] = React.useState<Session | null>(null);
   const [me, setMe] = React.useState<PatientMe | null>(null);
   const [status, setStatus] = React.useState<State["status"]>(
-    isSupabaseConfigured ? "loading" : "unconfigured",
+    isMockMode || isSupabaseConfigured ? "loading" : "unconfigured",
   );
   const [error, setError] = React.useState<string | null>(null);
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    // Mock mode has no auth provider; /me below is served by the mock.
+    if (isMockMode || !isSupabaseConfigured) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       if (!data.session) setStatus("signed-out");
@@ -88,7 +90,7 @@ export function PatientSessionProvider({ children }: { children: React.ReactNode
   }, []);
 
   React.useEffect(() => {
-    if (!session) return;
+    if (!session && !isMockMode) return;
     let cancelled = false;
 
     get<PatientMe>("/me")
@@ -120,6 +122,7 @@ export function PatientSessionProvider({ children }: { children: React.ReactNode
     error,
     reload: () => setNonce((n) => n + 1),
     signOut: async () => {
+      if (isMockMode) return;
       await supabase.auth.signOut();
     },
   };
@@ -141,7 +144,7 @@ export function useRequirePatient() {
 
   React.useEffect(() => {
     if (s.status === "signed-out") {
-      router.replace(`/patient/login?next=${encodeURIComponent(pathname)}`);
+      router.replace(`/signin?role=patient&next=${encodeURIComponent(pathname)}`);
     }
   }, [s.status, router, pathname]);
 

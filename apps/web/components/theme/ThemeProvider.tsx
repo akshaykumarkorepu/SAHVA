@@ -13,12 +13,23 @@ const Ctx = React.createContext<{
 const STORAGE_KEY = "sahva.theme";
 
 /**
+ * Light, not "system".
+ *
+ * The audience is clinic owners and patients on mid-range Android handsets,
+ * often outdoors. Light is the legible default for them, and the marketing
+ * page is designed light. Staff who sit with the dashboard all evening can
+ * still choose dark, and "system" remains a choice — it is just not the
+ * default, because inheriting a phone's night mode is not a design decision.
+ */
+const DEFAULT_THEME: Theme = "light";
+
+/**
  * Theme state. The first paint is handled by the inline script in the root
  * layout, so this provider only has to keep React in sync after hydration —
  * which is what avoids a flash and a hydration mismatch.
  */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = React.useState<Theme>("system");
+  const [theme, setThemeState] = React.useState<Theme>("light");
   const [resolved, setResolved] = React.useState<"light" | "dark">("light");
 
   const apply = React.useCallback((next: Theme) => {
@@ -29,13 +40,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
+    const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? DEFAULT_THEME;
     setThemeState(stored);
     apply(stored);
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      if ((localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system" === "system") {
+      if (((localStorage.getItem(STORAGE_KEY) as Theme | null) ?? DEFAULT_THEME) === "system") {
         apply("system");
       }
     };
@@ -62,4 +73,4 @@ export function useTheme() {
 }
 
 /** Runs before paint to set the class, so there is never a light flash. */
-export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("${STORAGE_KEY}")||"system";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
+export const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("${STORAGE_KEY}")||"light";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();`;
