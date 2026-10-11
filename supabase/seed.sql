@@ -398,6 +398,26 @@ begin
       (v_invoice, 'Dressing',              1,  5000, 3);
   end if;
 
+  -- ---- The review that visit asked for -----------------------------------
+  -- Without this the patient record opens on an empty hero card, which is the
+  -- largest thing on the page. The consultation above asked for a review in
+  -- four weeks; this is it, so the record tells one continuous story.
+  if not exists (
+    select 1 from public.appointments
+     where patient_id = v_lakshmi and starts_at > now()
+  ) then
+    declare v_day date := today + 1;
+    begin
+      while extract(dow from v_day) = 0 loop v_day := v_day + 1; end loop;
+      insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at,
+                                       duration_min, status, source, reason)
+      values (v_clinic, v_anitha, v_lakshmi,
+              (v_day + time '09:30') at time zone tz,
+              ((v_day + time '09:30') at time zone tz) + interval '15 min',
+              15, 'confirmed', 'ai_call', 'BP follow-up');
+    end;
+  end if;
+
   -- ---- Care plan and its follow-ups --------------------------------------
   select id into v_plan from public.care_plans
    where clinic_id = v_clinic and name = 'Hypertension review';
