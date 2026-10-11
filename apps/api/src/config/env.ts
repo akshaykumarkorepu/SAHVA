@@ -1,6 +1,35 @@
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
+/**
+ * Find `.env` by walking up from this file.
+ *
+ * dotenv resolves relative to the *process* working directory, which for
+ * `tsx watch src/index.ts` is apps/api — not the repo root, where README and
+ * docs/setup.md both tell you to put the file. The result was an API that
+ * refused to boot on a correctly-followed setup, listing every variable as
+ * missing while .env sat two directories up.
+ *
+ * Walking up also survives the build, where this module lives at
+ * dist/apps/api/src/config/ instead.
+ */
+function findEnvFile(): string | undefined {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const candidate = join(dir, ".env");
+    if (existsSync(candidate)) return candidate;
+    const parent = resolve(dir, "..");
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+// Real environment variables always win: dotenv does not overwrite them.
+const envFile = findEnvFile();
+if (envFile) loadDotenv({ path: envFile });
 loadDotenv();
 
 /**

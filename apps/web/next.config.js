@@ -1,4 +1,31 @@
 /** @type {import('next').NextConfig} */
+
+/**
+ * Load the monorepo's root `.env`.
+ *
+ * Next only reads `.env` from the app directory (apps/web), but README and
+ * docs/setup.md both tell you to put one file at the repo root — so a
+ * correctly-followed setup produced a web app that reported "Supabase is not
+ * configured" while .env sat two directories up. apps/api had the same bug;
+ * see the note in src/config/env.ts.
+ *
+ * A local apps/web/.env still wins, and so does a real environment variable:
+ * dotenv never overwrites what is already set.
+ */
+const { existsSync } = require("node:fs");
+const { join, resolve } = require("node:path");
+
+for (let dir = __dirname; ; ) {
+  const candidate = join(dir, ".env");
+  if (existsSync(candidate) && dir !== __dirname) {
+    require("dotenv").config({ path: candidate });
+    break;
+  }
+  const parent = resolve(dir, "..");
+  if (parent === dir) break;
+  dir = parent;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
 const nextConfig = {
