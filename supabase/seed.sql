@@ -272,3 +272,159 @@ begin
   raise notice 'Seeded clinic % (Sri Sai Clinic, Warangal)', v_clinic;
 end
 $seed$;
+
+-- ===========================================================================
+-- Clinical history
+--
+-- Without this the patient record is a working screen with nothing on it:
+-- visits, medicines, vaccinations and bills all read zero, because the seed
+-- above stops at appointments and calls. A clinic owner being shown the
+-- patient surface for the first time should see a real record, not an empty
+-- one.
+--
+-- Lakshmi Devi carries the chronic case (hypertension, on two medicines, one
+-- bill outstanding). Aarav carries the paediatric one (a vaccination given and
+-- the next one due) — the two shapes the product actually has to handle.
+-- ===========================================================================
+do $clinical$
+declare
+  v_clinic   uuid;
+  v_anitha   uuid;
+  v_ramesh   uuid;
+  v_lakshmi  uuid;
+  v_aarav    uuid;
+  v_appt     uuid;
+  v_consult  uuid;
+  v_rx       uuid;
+  v_plan     uuid;
+  v_invoice  uuid;
+  tz         text := 'Asia/Kolkata';
+  today      date := (now() at time zone 'Asia/Kolkata')::date;
+begin
+  select id into v_clinic  from public.clinics where slug = 'sri-sai-warangal';
+  if v_clinic is null then return; end if;
+
+  select id into v_anitha  from public.doctors  where clinic_id = v_clinic and spoken_name = 'Dr Anitha';
+  select id into v_ramesh  from public.doctors  where clinic_id = v_clinic and spoken_name = 'Dr Ramesh';
+  select id into v_lakshmi from public.patients where clinic_id = v_clinic and full_name  = 'Lakshmi Devi';
+  select id into v_aarav   from public.patients where clinic_id = v_clinic and full_name  = 'Aarav';
+
+  -- ---- Conditions --------------------------------------------------------
+  insert into public.patient_conditions (clinic_id, patient_id, condition, status, onset_date, noted_by)
+  select v_clinic, v_lakshmi, 'Hypertension', 'chronic', today - 400, v_anitha
+   where not exists (select 1 from public.patient_conditions
+                      where patient_id = v_lakshmi and condition = 'Hypertension');
+
+  insert into public.patient_conditions (clinic_id, patient_id, condition, status, onset_date, resolved_date, noted_by)
+  select v_clinic, v_lakshmi, 'Iron deficiency anaemia', 'resolved', today - 600, today - 300, v_anitha
+   where not exists (select 1 from public.patient_conditions
+                      where patient_id = v_lakshmi and condition = 'Iron deficiency anaemia');
+
+  -- ---- A completed visit, three weeks ago --------------------------------
+  select id into v_appt from public.appointments
+   where patient_id = v_lakshmi and status = 'completed' limit 1;
+
+  if v_appt is null then
+    insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at,
+                                     duration_min, status, source, reason)
+    values (v_clinic, v_anitha, v_lakshmi,
+            ((today - 21) + time '10:00') at time zone tz,
+            (((today - 21) + time '10:00') at time zone tz) + interval '15 min',
+            15, 'completed', 'ai_call', 'Blood pressure check')
+    returning id into v_appt;
+  end if;
+
+  select id into v_consult from public.consultations where appointment_id = v_appt;
+
+  if v_consult is null then
+    insert into public.consultations (clinic_id, appointment_id, patient_id, doctor_id,
+                                      chief_complaint, findings, diagnosis_text, advice,
+                                      follow_up_days, status, finalised_at)
+    values (v_clinic, v_appt, v_lakshmi, v_anitha,
+            'Headache and dizziness for three days',
+            'BP 158/96. No neurological deficit.',
+            'Hypertension, poorly controlled',
+            'Reduce salt. Walk 30 minutes daily. Review in four weeks.',
+            28, 'finalised',
+            (((today - 21) + time '10:25') at time zone tz))
+    returning id into v_consult;
+  end if;
+
+  -- ---- Prescription ------------------------------------------------------
+  select id into v_rx from public.prescriptions where consultation_id = v_consult;
+
+  if v_rx is null then
+    insert into public.prescriptions (clinic_id, consultation_id, patient_id, doctor_id, issued_at, notes)
+    values (v_clinic, v_consult, v_lakshmi, v_anitha,
+            (((today - 21) + time '10:25') at time zone tz),
+            'Take after food. Do not stop without review.')
+    returning id into v_rx;
+
+    insert into public.prescription_items (prescription_id, drug_name, strength, form, dosage,
+                                           frequency, duration_days, instructions_en, instructions_te, sort_order)
+    values
+      (v_rx, 'Amlodipine', '5 mg', 'tablet', '1-0-0', 'Once daily', 30,
+       'Take one tablet every morning after breakfast.',
+       'ప్రతి ఉదయం అల్పాహారం తర్వాత ఒక మాత్ర వేసుకోండి.', 1),
+      (v_rx, 'Metformin', '500 mg', 'tablet', '1-0-1', 'Twice daily', 30,
+       'Take after breakfast and after dinner.',
+       'అల్పాహారం తర్వాత మరియు రాత్రి భోజనం తర్వాత వేసుకోండి.', 2);
+  end if;
+
+  -- ---- Bills: one settled, one outstanding -------------------------------
+  if not exists (select 1 from public.patient_invoices where patient_id = v_lakshmi) then
+    insert into public.patient_invoices (clinic_id, patient_id, appointment_id, consultation_id,
+                                         invoice_number, subtotal_paise, total_paise,
+                                         status, payment_mode, issued_at, paid_at)
+    values (v_clinic, v_lakshmi, v_appt, v_consult, 'SSC-2026-0307', 30000, 30000,
+            'paid', 'upi',
+            (((today - 21) + time '10:30') at time zone tz),
+            (((today - 21) + time '10:34') at time zone tz))
+    returning id into v_invoice;
+
+    insert into public.patient_invoice_items (invoice_id, description, quantity, unit_price_paise, sort_order)
+    values (v_invoice, 'General consultation', 1, 30000, 1);
+
+    insert into public.patient_invoices (clinic_id, patient_id, invoice_number,
+                                         subtotal_paise, total_paise, status, issued_at)
+    values (v_clinic, v_lakshmi, 'SSC-2026-0418', 45000, 45000, 'issued',
+            (((today - 2) + time '11:10') at time zone tz))
+    returning id into v_invoice;
+
+    insert into public.patient_invoice_items (invoice_id, description, quantity, unit_price_paise, sort_order)
+    values
+      (v_invoice, 'General consultation', 1, 30000, 1),
+      (v_invoice, 'Blood pressure check',  1, 10000, 2),
+      (v_invoice, 'Dressing',              1,  5000, 3);
+  end if;
+
+  -- ---- Care plan and its follow-ups --------------------------------------
+  select id into v_plan from public.care_plans
+   where clinic_id = v_clinic and name = 'Hypertension review';
+
+  if v_plan is null then
+    insert into public.care_plans (clinic_id, name, trigger, offset_days, template_key, channel)
+    values (v_clinic, 'Hypertension review', 'chronic_medication', 28, 'bp_review', 'whatsapp')
+    returning id into v_plan;
+  end if;
+
+  insert into public.care_tasks (clinic_id, care_plan_id, patient_id, due_on, status)
+  values (v_clinic, v_plan, v_lakshmi, today + 3,  'pending'),
+         (v_clinic, v_plan, v_lakshmi, today - 2,  'pending')
+  on conflict (care_plan_id, patient_id, due_on) do nothing;
+
+  -- ---- Paediatric vaccinations ------------------------------------------
+  insert into public.patient_vaccinations (clinic_id, patient_id, vaccine_code, dose_number,
+                                           due_date, administered_at, administered_by, status)
+  values (v_clinic, v_aarav, 'PENTA_1', 1, today - 21,
+          (((today - 21) + time '11:20') at time zone tz), v_ramesh, 'administered')
+  on conflict (patient_id, vaccine_code, dose_number) do nothing;
+
+  insert into public.patient_vaccinations (clinic_id, patient_id, vaccine_code, dose_number,
+                                           due_date, status)
+  values (v_clinic, v_aarav, 'PENTA_2', 2, today + 7, 'due')
+  on conflict (patient_id, vaccine_code, dose_number) do nothing;
+
+  raise notice 'Seeded clinical history for Lakshmi Devi and Aarav';
+end
+$clinical$;

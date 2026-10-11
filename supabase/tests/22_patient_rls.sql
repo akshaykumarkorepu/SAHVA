@@ -71,8 +71,18 @@ begin
   select count(*) into v_n from public.patients where full_name = 'Mohan Kumar';
   perform pg_temp.check('a patient cannot see another patient', v_n = 0);
 
-  select count(*) into v_n from public.v_patient_medical_history;
+  -- Assert on the fixture this file created, not on a total. The seed also
+  -- gives Lakshmi a history now, and a count of "1" would only be testing
+  -- that the seed stayed empty.
+  select count(*) into v_n from public.v_patient_medical_history where diagnosis_text = 'Viral fever';
   perform pg_temp.check('sees their own finalised visit', v_n = 1);
+
+  -- The actual property: nothing visible belongs to anyone else. Under RLS
+  -- public.patients is already just this patient, so anything outside it is a
+  -- leak — and this holds however much data the seed adds.
+  select count(*) into v_n from public.v_patient_medical_history
+   where patient_id not in (select id from public.patients);
+  perform pg_temp.check('no visit belongs to another patient', v_n = 0);
 
   select count(*) into v_n from public.v_patient_medical_history where diagnosis_text = 'Lumbar strain';
   perform pg_temp.check('cannot see another patient''s diagnosis', v_n = 0);
@@ -81,11 +91,17 @@ begin
   select count(*) into v_n from public.v_patient_medical_history where diagnosis_text = 'Still deciding';
   perform pg_temp.check('draft notes are not shown to the patient', v_n = 0);
 
-  select count(*) into v_n from public.v_patient_prescriptions;
+  select count(*) into v_n from public.v_patient_prescriptions
+   where items @> '[{"drug_name":"Paracetamol 500mg"}]'::jsonb;
   perform pg_temp.check('sees their own prescription', v_n = 1);
 
-  select count(*) into v_n from public.patient_conditions;
-  perform pg_temp.check('sees only their own conditions', v_n = 1);
+  select count(*) into v_n from public.v_patient_prescriptions
+   where patient_id not in (select id from public.patients);
+  perform pg_temp.check('no prescription belongs to another patient', v_n = 0);
+
+  select count(*) into v_n from public.patient_conditions
+   where patient_id not in (select id from public.patients);
+  perform pg_temp.check('sees only their own conditions', v_n = 0);
 
   select count(*) into v_n from public.patient_conditions where condition = 'Type 2 diabetes';
   perform pg_temp.check('cannot see another patient''s condition', v_n = 0);
