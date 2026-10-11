@@ -142,7 +142,7 @@ tables="$(sql "select count(*)::int from pg_tables where schemaname='public'" | 
 actions="$(sql "select count(*)::int from v_open_action_items" | jq -r '.[0].count')"
 
 info "tables:            $tables"
-info "RLS policies:      $policies   (setup.md expects 120)"
+info "RLS policies:      $policies   (expected 133)"
 info "tables w/o RLS:    $unguarded   (must be 0)"
 info "open action items: $actions   (seed creates 1)"
 [[ "$unguarded" == "0" ]] || die "$unguarded table(s) have RLS disabled - fix before any real data"

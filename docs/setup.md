@@ -100,7 +100,7 @@ Then run `supabase/seed.sql` in the SQL editor (it is idempotent).
 Verify:
 
 ```sql
-select count(*) from pg_policies where schemaname = 'public';   -- 120
+select count(*) from pg_policies where schemaname = 'public';   -- 133
 select count(*) from pg_tables where schemaname='public' and not rowsecurity; -- 0
 select * from v_open_action_items;                              -- the seeded item
 ```

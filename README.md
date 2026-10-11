@@ -9,8 +9,32 @@ lets a schedule change silently cancel a patient without staff knowing.
 > a multi-tenant Supabase schema, and an Express API rewritten on top of it with
 > real authentication.
 >
-> The frontend has been rebuilt against it: login, tenant context, the Action
-> Required queue, write actions and a mobile layout that works.
+> The frontend has been rebuilt against it: one sign-in for everyone, tenant
+> context, the Action Required queue, write actions, a patient record, and a
+> light-first design system that clears WCAG AA.
+
+---
+
+## Try it in thirty seconds
+
+No Supabase project, no API process, no keys:
+
+```bash
+npm install
+NEXT_PUBLIC_MOCK=1 npm run dev -w apps/web
+```
+
+Open <http://localhost:3000>. Sign-in is bypassed and every screen is served
+from fixtures in `apps/web/lib/mock/` — the same Sri Sai Clinic the seed
+creates, including the Action Required queue and its reschedule-review flow.
+Writes mutate the fixtures in memory, so resolving an item or dispatching a
+batch behaves correctly until you reload.
+
+Mock mode is a review and demo aid, not a test double — the tests run against
+real PostgreSQL. `NEXT_PUBLIC_MOCK` must never be set in a deployed
+environment; with it unset the bundler drops the fixtures entirely.
+
+To run it for real, see [`docs/setup.md`](docs/setup.md).
 
 ---
 
@@ -19,7 +43,7 @@ lets a schedule change silently cancel a patient without staff knowing.
 | | `main` | `saikirans-version` |
 |---|---|---|
 | Database | SQLite, one hardcoded clinic | **Supabase / PostgreSQL, multi-tenant** |
-| Tenant isolation | none | **120 RLS policies + composite foreign keys** |
+| Tenant isolation | none | **133 RLS policies + composite foreign keys** |
 | **API authentication** | **middleware existed, never mounted** | **mounted; clinic resolved from `clinic_members`** |
 | Availability | TypeScript, computed in the API | **`sahva.available_slots()`, computed in the DB** |
 | Double-booking | application check only | **impossible — `EXCLUDE USING gist` constraint** |
@@ -31,14 +55,16 @@ lets a schedule change silently cancel a patient without staff knowing.
 | Rate limiting / headers | none | **`express-rate-limit` + `helmet`** |
 | Logging | `console.log` | **structured `pino`, redacted, request-correlated** |
 | Types | hand-written | **generated from the schema; CI fails on drift** |
-| **Staff login** | **none — dashboard wide open** | **Supabase Auth + role-aware nav** |
+| **Sign-in** | **none — dashboard wide open** | **one `/signin` with a role toggle, OAuth, reset** |
 | **Action Required UI** | **did not exist** | **queue, live badge, batch review, dispatch** |
 | **Write actions** | **read-only dashboard** | **book / reschedule / cancel / check-in** |
 | **Mobile** | **nav unreachable below 768px** | **bottom tab bar; one nav definition for both** |
-| **Patient-facing** | **none** | **portal reached by a WhatsApp link, Telugu + English** |
-| Tests / CI | none | **46 DB assertions + typecheck + build, in CI** |
+| **Patient-facing** | **none** | **WhatsApp portal + a full signed-in record** |
+| **Design system** | **—** | **light-first tokens, every ink level ≥ AA** |
+| **Review without Supabase** | **—** | **`NEXT_PUBLIC_MOCK=1` serves the whole UI** |
+| Tests / CI | none | **65 DB assertions + 66 API tests + typecheck + build** |
 
-**37 tables · 6 views · 128 indexes · 120 RLS policies · 0 tables without RLS.**
+**38 tables · 9 views · 133 indexes · 133 RLS policies · 0 tables without RLS.**
 
 `main`'s README lists *"swap to Postgres when going multi-tenant"* under
 *Deploying later*. This branch is that swap, plus the API rewrite it forces.
@@ -54,29 +80,37 @@ apps/
 │       ├── config/env.ts         zod-validated config; refuses to boot if wrong
 │       ├── lib/                  supabase clients, errors, logger, usage, templates
 │       ├── middleware/           auth, validation, request context, error handler
-│       ├── claude/               client, tool definitions, per-clinic system prompt
+│       ├── claude/               lazily-built client, tools, per-clinic prompt
 │       ├── tools/                the 4 tools, backed by guarded RPCs
 │       └── routes/               clinic doctors patients appointments calls
 │                                 analytics actions messages voice
 └── web/                  REBUILT — Next.js on the API, with auth
-    ├── app/login                 Supabase Auth sign-in
+    ├── app/page.tsx              landing page: product, pricing, economics
+    ├── app/signin                one door — patient/staff toggle, OAuth, sign-up
+    ├── app/forgot-password       reset request (never discloses who exists)
+    ├── app/auth/callback         where OAuth and email links land
     ├── app/dashboard             overview · actions · appointments · calls
     │                             patients · analytics
     ├── app/dashboard/settings    AI permissions · doctors & schedule
     │                             hours & closures · knowledge base · staff
-    ├── app/p/[token]             patient portal — no login, bilingual
-    ├── components/shell          sidebar + mobile drawer, one nav definition
-    └── lib/                      api client, session, hooks, formatting
+    ├── app/me                    signed-in patient record — visits, medicines,
+    │                             vaccines, care tasks, bills
+    ├── app/p/[token]             WhatsApp portal — no login, logistics only
+    ├── components/shell          desktop rail + mobile tabs, one nav definition
+    └── lib/
+        ├── mock/                 fixtures for NEXT_PUBLIC_MOCK=1
+        └── …                     api client, session, hooks, formatting
 
 packages/
-└── types/                NEW — Database types generated from the schema
+└── types/                Database types generated from the schema
 
 supabase/                 the data layer
-├── migrations/           16 ordered migrations
+├── migrations/           18 ordered migrations
 ├── seed.sql              one pilot clinic with realistic data
-└── tests/run.sh          applies everything + 46 assertions, no Docker
+└── tests/run.sh          applies everything + 65 assertions, no Docker
 
 scripts/
+├── bootstrap-supabase.sh scripts all of Phase 0 — create, push, seed, verify
 ├── introspect.sql        dumps the live schema as JSON
 └── gen-types.py          renders packages/types/database.ts from it
 
@@ -94,7 +128,7 @@ docs/
 
 | # | File | Contents |
 |---|---|---|
-| 0100 | `foundation` | extensions, private `sahva` schema, 30 enums, `touch_updated_at` |
+| 0100 | `foundation` | extensions, private `sahva` schema, 34 enums, `touch_updated_at` |
 | 0200 | `tenancy_and_staff` | `clinics`, `clinic_settings`, hours, closures, `staff_profiles`, `clinic_members` |
 | 0300 | `doctors_and_schedule` | `doctors`, `doctor_sessions`, `doctor_time_off` |
 | 0400 | `patients` | `patients`, with family-aware identity |
@@ -108,8 +142,10 @@ docs/
 | 1200 | `functions_access` | `current_clinic_ids()`, `is_member()`, `has_role()`, `assert_clinic_access()` |
 | 1300 | `functions_scheduling` | `available_slots()`, `book_appointment()`, `cancel_`, `reschedule_` |
 | 1400 | `trust_flow` | the Action Required triggers |
-| 1450 | `views` | six dashboard views, all `security_invoker` |
-| 1500 | `rls` | 120 policies across 37 tables |
+| 1450 | `views` | dashboard views, all `security_invoker` |
+| 1500 | `rls` | the policy set — every public table, no exceptions |
+| 1700 | `patient_portal` | `patient_access_tokens` — hashed, expiring WhatsApp links |
+| 1800 | `patient_accounts` | links an auth user to a patient record |
 
 ---
 
@@ -175,23 +211,45 @@ Needs a local PostgreSQL 16 (`brew install postgresql@16`). **No Docker
 required.**
 
 ```bash
-./supabase/tests/run.sh
+./supabase/tests/run.sh    # database
+npm run test:api           # API
+npm run typecheck          # both workspaces
 ```
 
-Spins up a throwaway cluster, applies all 16 migrations plus the seed, and runs
-46 assertions covering slot generation, double-booking, the AI cancellation
-gate, the trust flow, the append-only audit log, cross-tenant foreign keys and
-RLS isolation across three users and two clinics.
+`run.sh` spins up a throwaway cluster, applies all 18 migrations plus the seed,
+and runs 65 assertions covering slot generation, double-booking, the AI
+cancellation gate, the trust flow, the append-only audit log, cross-tenant
+foreign keys, and RLS isolation across staff, a second clinic's owner, and a
+signed-in patient.
 
 ```
 migrations applied: 18
-assertions passed:  46
+assertions passed:  65
 assertions failed:  0
 ```
+
+> `run.sh` deliberately does **not** pipe `psql` into `grep`: a pipeline returns
+> the exit status of its *last* command, so that pattern throws the failure away
+> and reports success while assertions are failing.
 
 ---
 
 ## Deploying the database
+
+Everything in [`docs/setup.md`](docs/setup.md) that can be scripted, is:
+
+```bash
+brew install supabase/tap/supabase jq
+
+SUPABASE_ACCESS_TOKEN=sbp_... \
+SAHVA_OWNER_EMAIL=you@example.com \
+  ./scripts/bootstrap-supabase.sh
+```
+
+It creates the project in `ap-south-1`, pushes every migration, seeds, asserts
+that no public table has RLS disabled, mints the first owner and their
+`clinic_members` row, writes `.env`, and regenerates the types. It is
+idempotent. By hand:
 
 ```bash
 supabase link --project-ref <ref>
@@ -211,50 +269,58 @@ The migrations assume hosted Supabase provides `auth.users`, `auth.uid()`,
 | `SUPABASE_URL` | yes | project URL |
 | `SUPABASE_ANON_KEY` | yes | browser / user-JWT requests |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes (server only) | telephony webhook, workers. **Never ship to the browser.** |
-| `ANTHROPIC_API_KEY` | yes | conversation AI |
+| `VOICE_API_KEY` | yes | shared secret for machine callers; ≥ 32 chars |
+| `ANTHROPIC_API_KEY` | no | only the voice route uses it; without it a voice turn returns `AI_NOT_CONFIGURED` and nothing else is affected |
+| `REDIS_URL` | no | rate-limit counters; in-memory and per-instance without it |
+| `NEXT_PUBLIC_MOCK` | no | `1` serves the web app from fixtures. **Never set in a deployed environment.** |
 
 ---
 
-## Running the demo (unchanged from `main`)
+## Running it for real
 
 ```bash
 npm install
-cp .env.example .env     # set ANTHROPIC_API_KEY
+cp .env.example .env     # fill in the Supabase values
 npm run dev
 ```
 
 Web on <http://localhost:3000>, API on <http://localhost:4000/api/health>.
-The demo still uses its own SQLite file; it has not yet been rewired to
-Supabase.
+Sign in at `/signin` with the owner account the bootstrap script created.
+
+Without a `clinic_members` row the API returns
+`403 FORBIDDEN — This account is not an active member of any clinic`. That is
+correct: the clinic is resolved from membership, never from the request.
+
+> Do not run `npm run build` while `npm run dev` is up — they share
+> `apps/web/.next`, and the build will leave the dev server serving 404s for
+> every chunk.
 
 ---
 
 ## Status and next steps
 
-**Done:** the data layer (schema, RLS, scheduling logic, seed, tests) and the
-API layer (Supabase persistence, real auth, validation, error taxonomy,
-structured logging, rate limiting, usage metering, CI).
+**Done:** the data layer (schema, RLS, scheduling logic, seed, tests), the API
+layer (Supabase persistence, real auth, validation, error taxonomy, structured
+logging, rate limiting, usage metering, CI), and the frontend (sign-in, tenant
+context, Action Required with batch review and dispatch, write actions,
+patients, analytics, settings, both patient surfaces, mobile).
 
 **Blocked on accounts, not code:**
 
 | | Needs |
 |---|---|
+| Live Supabase | A project. Everything so far is verified against local PostgreSQL and fixtures — `scripts/bootstrap-supabase.sh` has never been run against a hosted project. |
+| Google OAuth | The provider enabled in the Supabase dashboard with a client ID. The button is wired; the provider is not configured. |
 | Telephony | An Exotel/Twilio account and a number per clinic. `POST /api/voice/calls` is already shaped for the webhook. |
 | STT / TTS | Sarvam or Deepgram. Turns are currently text in, text out. |
 | WhatsApp | A Meta Cloud API account and pre-approved templates. Messages render and queue; nothing sends them. |
 | Workers | Nothing is scheduled yet — reminders and batch dispatch do not run. |
 
-**Frontend (Phase 2) is done:** login, tenant context, the Action Required
-queue with batch review and dispatch, write actions, patients, analytics with
-measured cost, settings, and a working mobile layout.
-
-**Next:** connect a live Supabase project (`docs/setup.md`) and test end to
-end. After that, the vendor integrations above — telephony first, since
-nothing else can be proven with a real clinic until a real phone rings.
-
-A clinic can now be configured entirely from Settings — doctors and weekly
-schedules, operating hours and closures, the bilingual knowledge base, and
-staff invitations. No SQL required to onboard a pilot.
+**Not blocked on accounts:** the landing page still has no real proof on it —
+no clinic name, no testimonial, no founder — and the demo number is the seed's
+fake one. And the blueprint's Weeks 1–2, *talk to 8–10 clinic owners*, has not
+happened. That is the only item that says whether any of this was worth
+building.
 
 ---
 
@@ -284,6 +350,7 @@ the real figure off actual pilot calls — measure before finalising.
 
 ## Further reading
 
+- [`docs/setup.md`](docs/setup.md) — Phase 0, scripted and by hand
 - [`docs/status.md`](docs/status.md) — what `main` has, and the gap to the Phase 1 wedge
 - [`docs/data-model.md`](docs/data-model.md) — table-by-table rationale, and known limitations
 - [`docs/security.md`](docs/security.md) — the RLS model, its trade-offs, and what it does not cover
