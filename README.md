@@ -276,24 +276,81 @@ The migrations assume hosted Supabase provides `auth.users`, `auth.uid()`,
 
 ---
 
-## Running it for real
+## Running it on localhost
+
+### Prerequisites
+
+| | | |
+|---|---|---|
+| Node | **22 or newer** | `engines` enforces it; the API uses `node:` built-ins and native `--test` |
+| npm | 10+ | ships with Node 22 |
+| PostgreSQL 16 | only for `test:db` | `brew install postgresql@16`. **No Docker anywhere.** |
+| Supabase CLI + jq | only for the bootstrap script | `brew install supabase/tap/supabase jq` |
 
 ```bash
-npm install
-cp .env.example .env     # fill in the Supabase values
-npm run dev
+git clone https://github.com/akshaykumarkorepu/SAHVA.git
+cd SAHVA && git checkout saikirans-version
+npm install          # one install for the whole workspace
 ```
 
-Web on <http://localhost:3000>, API on <http://localhost:4000/api/health>.
-Sign in at `/signin` with the owner account the bootstrap script created.
+### Option A — no backend at all
 
-Without a `clinic_members` row the API returns
-`403 FORBIDDEN — This account is not an active member of any clinic`. That is
-correct: the clinic is resolved from membership, never from the request.
+```bash
+NEXT_PUBLIC_MOCK=1 npm run dev -w apps/web
+```
 
-> Do not run `npm run build` while `npm run dev` is up — they share
-> `apps/web/.next`, and the build will leave the dev server serving 404s for
-> every chunk.
+<http://localhost:3000>. Sign-in is bypassed, every screen is served from
+`apps/web/lib/mock/`. Nothing is installed, nothing is configured, no keys.
+Use this to look at the product or demo it.
+
+### Option B — the real stack
+
+Needs a Supabase project. `./scripts/bootstrap-supabase.sh` creates one and
+writes `.env` for you; see [`docs/setup.md`](docs/setup.md). Then:
+
+```bash
+npm run dev          # api on :4000, web on :3000, one terminal
+```
+
+| | |
+|---|---|
+| Web | <http://localhost:3000> |
+| API health | <http://localhost:4000/api/health> |
+| Sign in | <http://localhost:3000/signin> |
+
+Or run them separately — `npm run dev:api`, `npm run dev:web`.
+
+`.env` goes at the **repo root**. Both apps walk up to find it, so one file
+covers both; a real environment variable still wins over it.
+
+### Signing in
+
+One page, `/signin`, with a Patient / Clinic staff toggle that decides where
+you land. Staff cannot self-register — `enable_signup` is false, so a clinic's
+staff list is not something a stranger adds themselves to.
+
+### When it does not work
+
+| Symptom | Cause |
+|---|---|
+| **"Supabase is not configured"** | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` missing. Restart the dev server — Next reads them at startup. |
+| **API exits listing every variable as missing** | No `.env` found. Put it at the repo root, or export the variables. |
+| **`403 FORBIDDEN — not an active member of any clinic`** | The signed-in user has no `clinic_members` row. Correct behaviour: the clinic is resolved from membership, never from the request. |
+| **Signed in, but no `staff_profiles` row** | The auth user needs `account_type: "staff"` in its metadata. `handle_new_auth_user()` returns early for anything else, because patients are not staff. |
+| **Every JS and CSS file 404s in dev** | You ran `npm run build` while `npm run dev` was up. They share `apps/web/.next`. `rm -rf apps/web/.next` and restart. |
+| **Port already in use** | `lsof -ti:3000 \| xargs kill` (or `:4000`). |
+
+### Checks
+
+```bash
+npm run typecheck    # both workspaces
+npm run test:api     # no database needed
+npm run test:db      # throwaway PostgreSQL cluster
+```
+
+See [Running the tests](#running-the-tests) for what each covers. CI runs all
+three plus a production build, and fails if `packages/types/database.ts` has
+drifted from the schema.
 
 ---
 
