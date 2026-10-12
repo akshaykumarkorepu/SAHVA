@@ -64,6 +64,9 @@ export default function AppointmentsPage() {
         subtitle="Book, reschedule and run the day."
         action={
           <div className="flex flex-wrap gap-2">
+            <a href="/display" target="_blank" rel="noopener noreferrer">
+              <Button variant="ghost">Waiting-room screen</Button>
+            </a>
             <Button variant="secondary" onClick={() => setTimeOffOpen(true)}>
               Mark doctor unavailable
             </Button>

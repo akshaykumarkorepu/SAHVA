@@ -326,3 +326,16 @@ test("walk-in: late in the day it says there is no time left, plainly", async ({
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Walk-in" }).getByRole("alert")).toContainText("no free time left today");
 });
+
+test("waiting-room screen shows tokens per doctor and never a patient's name", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/display");
+  await page.getByRole("button", { name: /Tap to start/ }).click({ timeout: 15_000 });
+  const main = page.locator("main");
+  await expect(main).toContainText("Dr Ramesh");
+  // Aarav is checked in with Dr Ramesh as token 2.
+  await expect(main.locator("article", { hasText: "Dr Ramesh" })).toContainText("2");
+  for (const name of ["Lakshmi", "Aarav", "Priya"]) await expect(main).not.toContainText(name);
+  await settle(page);
+  expect(errors).toEqual([]);
+});
