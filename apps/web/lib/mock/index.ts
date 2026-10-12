@@ -56,6 +56,29 @@ function mockRole(): string {
   }
 }
 
+/** True when a live appointment already holds this doctor's slot. */
+function isTaken(doctorId: string, startsAt: string): boolean {
+  const t = new Date(startsAt).getTime();
+  return appointments.some(
+    (a) =>
+      a.doctor_id === doctorId &&
+      a.status !== "cancelled" &&
+      a.status !== "needs_reschedule" &&
+      new Date(String(a.starts_at)).getTime() === t,
+  );
+}
+
+/** One-shot: set localStorage "sahva.mock.slotTaken" to make the next booking lose the race. */
+function takeSwitch(): boolean {
+  try {
+    if (localStorage.getItem("sahva.mock.slotTaken") !== "1") return false;
+    localStorage.removeItem("sahva.mock.slotTaken");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Mirrors sahva.sync_batch_progress: counts come from the items. */
 function syncBatch() {
   const told = batch.items.filter((it) => it.status === "notified" || it.status === "rebooked").length;
@@ -161,6 +184,27 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     return paged(rows, query);
   }
   if (method === "POST" && pathname === "/appointments") {
+    // Mirrors appointments_no_double_booking. The localStorage switch lets a
+    // test lose the race on purpose — the slot "goes" between seeing it and
+    // booking it, which is otherwise impossible to stage in one browser.
+    if (takeSwitch()) {
+      // Someone else books it first — for real, so the refreshed list drops it.
+      const doc = doctors.find((x) => x.id === b.doctor_id) ?? doctors[0];
+      appointments.unshift({
+        ...appointments[0],
+        id: crypto.randomUUID(),
+        doctor_id: doc.id,
+        starts_at: String(b.starts_at),
+        ends_at: String(b.starts_at),
+        status: "booked",
+        source: "ai_call",
+        patients: { ...appointments[0].patients, full_name: "Another caller" },
+      });
+    }
+    if (isTaken(String(b.doctor_id), String(b.starts_at))) {
+      throw new ApiError(409, "SLOT_TAKEN", "That time is no longer available.", undefined,
+        "Fetch fresh availability and offer the next free slot.");
+    }
     const doc = doctors.find((x) => x.id === b.doctor_id) ?? doctors[0];
     const row = {
       id: crypto.randomUUID(),
@@ -259,7 +303,10 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   if (method === "POST" && pathname === "/doctors/time-off") return { id: crypto.randomUUID(), ...b };
   if (method === "GET" && seg[0] === "doctors" && seg[2] === "sessions") return d.doctorSessions;
   if (method === "GET" && seg[0] === "doctors" && seg[2] === "availability") {
-    return d.availability(seg[1], query.get("date") ?? new Date().toISOString().slice(0, 10));
+    // Like get_available_slots: a slot someone already holds is not offered.
+    return d
+      .availability(seg[1], query.get("date") ?? new Date().toISOString().slice(0, 10))
+      .filter((sl) => !isTaken(seg[1], sl.slot_start));
   }
   if (method === "POST" && pathname === "/doctors") {
     const row = { id: crypto.randomUUID(), clinic_id: d.clinic.id, is_active: true, ...b } as (typeof doctors)[number];

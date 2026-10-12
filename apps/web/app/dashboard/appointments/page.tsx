@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useApi, useMutation } from "@/lib/hooks";
-import { post } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ApiError, post } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { AppointmentWithJoins, Doctor, Paged, Slot } from "@/lib/types";
 import {
@@ -101,6 +103,7 @@ export default function AppointmentsPage() {
         onClose={() => setBookOpen(false)}
         doctors={doctors.data ?? []}
         defaultDate={date}
+        tz={tz}
         onBooked={() => {
           setBookOpen(false);
           list.reload();
@@ -134,6 +137,15 @@ function AppointmentRow({
     post(`/appointments/${a.id}/status`, { status }),
   );
   const cancel = useMutation(() => post(`/appointments/${a.id}/cancel`, {}));
+  const [confirmCancel, setConfirmCancel] = React.useState(false);
+
+  // A failed write used to refresh the row as if it had worked.
+  async function change(status: "checked_in" | "completed") {
+    const ok = await setStatus.run(status);
+    if (ok === null) toast.error("That did not save. Try again.");
+    else toast.success(status === "checked_in" ? "Checked in" : "Marked done");
+    onChanged();
+  }
 
   const live = a.status === "booked" || a.status === "confirmed" || a.status === "checked_in";
 
@@ -169,10 +181,7 @@ function AppointmentRow({
               size="sm"
               className="flex-1 sm:flex-none"
               disabled={setStatus.pending}
-              onClick={async () => {
-                await setStatus.run("checked_in");
-                onChanged();
-              }}
+              onClick={() => void change("checked_in")}
             >
               Check in
             </Button>
@@ -182,10 +191,7 @@ function AppointmentRow({
             size="sm"
             className="flex-1 sm:flex-none"
             disabled={setStatus.pending}
-            onClick={async () => {
-              await setStatus.run("completed");
-              onChanged();
-            }}
+            onClick={() => void change("completed")}
           >
             Done
           </Button>
@@ -194,15 +200,45 @@ function AppointmentRow({
             size="sm"
             className="flex-1 sm:flex-none"
             disabled={cancel.pending}
-            onClick={async () => {
-              await cancel.run();
-              onChanged();
-            }}
+            onClick={() => setConfirmCancel(true)}
           >
             Cancel
           </Button>
         </div>
       )}
+
+      {/* The one action here a patient cannot undo by turning up. */}
+      <Modal
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        title={`Cancel ${a.patients?.full_name ?? "this appointment"}?`}
+        description={`${formatTime(a.starts_at, tz)} with ${a.doctors?.spoken_name ?? "the doctor"}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmCancel(false)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              loading={cancel.pending}
+              onClick={async () => {
+                const ok = await cancel.run();
+                setConfirmCancel(false);
+                if (ok === null) toast.error("The cancellation did not save.");
+                else toast.success("Appointment cancelled");
+                onChanged();
+              }}
+            >
+              Cancel appointment
+            </Button>
+          </>
+        }
+      >
+        <p className="pb-4 text-sm leading-relaxed text-ink-muted">
+          The slot becomes free for others. The patient is not told automatically — call them if they need to
+          know.
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -212,12 +248,14 @@ function BookModal({
   onClose,
   doctors,
   defaultDate,
+  tz,
   onBooked,
 }: {
   open: boolean;
   onClose: () => void;
   doctors: Doctor[];
   defaultDate: string;
+  tz?: string;
   onBooked: () => void;
 }) {
   const [doctorId, setDoctorId] = React.useState("");
@@ -238,15 +276,48 @@ function BookModal({
     [doctorId, date, open],
   );
 
-  const book = useMutation(() =>
-    post("/appointments", {
-      doctor_id: doctorId,
-      patient_name: name.trim(),
-      phone: phone.trim(),
-      starts_at: slot,
-      reason: reason.trim() || undefined,
-    }),
-  );
+  const client = useQueryClient();
+  const [pending, setPending] = React.useState(false);
+  const [failure, setFailure] = React.useState<Error | null>(null);
+  const [slotGone, setSlotGone] = React.useState(false);
+  React.useEffect(() => setSlotGone(false), [doctorId, date]);
+
+  // try/catch rather than useMutation: the slot-taken branch needs this
+  // attempt's own error, which a hook only exposes on the next render.
+  async function submit() {
+    setPending(true);
+    setFailure(null);
+    setSlotGone(false);
+    try {
+      await post("/appointments", {
+        doctor_id: doctorId,
+        patient_name: name.trim(),
+        phone: phone.trim(),
+        starts_at: slot,
+        reason: reason.trim() || undefined,
+      });
+      void client.invalidateQueries({ queryKey: ["api"] });
+      toast.success(`${name.trim()} booked for ${formatTime(slot, tz)}`);
+      // The next booking starts clean, not with this patient's details.
+      setName("");
+      setPhone("+91");
+      setReason("");
+      setSlot("");
+      onBooked();
+    } catch (e) {
+      if (e instanceof ApiError && e.isSlotTaken) {
+        // Someone else — another receptionist, or the AI on a call — got
+        // there first. Keep everything typed, drop the dead slot, refresh.
+        setSlotGone(true);
+        setSlot("");
+        slots.reload();
+      } else {
+        setFailure(e instanceof Error ? e : new Error(String(e)));
+      }
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <Modal
@@ -259,13 +330,11 @@ function BookModal({
             Cancel
           </Button>
           <Button
-            disabled={book.pending || !slot || !name.trim() || phone.length < 10}
-            onClick={async () => {
-              const ok = await book.run();
-              if (ok) onBooked();
-            }}
+            loading={pending}
+            disabled={!slot || !name.trim() || phone.length < 10}
+            onClick={() => void submit()}
           >
-            {book.pending ? "Booking…" : "Book"}
+            Book
           </Button>
         </>
       }
@@ -290,6 +359,11 @@ function BookModal({
           required
           hint="Only genuinely free slots are shown, computed live from the doctor's schedule."
         >
+          {slotGone && (
+            <p role="alert" className="mb-2 rounded-lg bg-accent-amber/[0.08] px-3 py-2 text-sm text-ink">
+              That time was just booked by someone else. Pick another — the list below is fresh.
+            </p>
+          )}
           {slots.loading ? (
             <p className="text-sm text-ink-subtle">Checking availability…</p>
           ) : (slots.data ?? []).length === 0 ? (
@@ -309,7 +383,7 @@ function BookModal({
                       : "border-line-strong text-ink-muted hover:bg-surface-sunken"
                   }`}
                 >
-                  {formatTime(s.slot_start)}
+                  {formatTime(s.slot_start, tz)}
                 </button>
               ))}
             </div>
@@ -332,7 +406,7 @@ function BookModal({
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Fever, follow-up…" />
         </Field>
 
-        {book.error && <ErrorState error={book.error} />}
+        {failure && <ErrorState error={failure} />}
       </div>
     </Modal>
   );

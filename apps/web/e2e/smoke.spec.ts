@@ -168,3 +168,52 @@ test("reschedule batch: approve, rebook one, mark one unreachable, and it closes
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("diary: losing a slot to someone else keeps the form and refreshes the times", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/appointments");
+  await page.getByRole("button", { name: "Book appointment" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Book appointment" });
+  const slot = dialog.getByRole("button", { name: /^\d{1,2}:\d{2} (am|pm)$/ }).first();
+  await expect(slot).toBeVisible({ timeout: 15_000 });
+  const chosen = await slot.innerText();
+
+  await slot.click();
+  await dialog.getByPlaceholder("Lakshmi Devi").fill("Ramu");
+  await dialog.getByPlaceholder("+919885512345").fill("+919000000001");
+  // Someone else takes the slot between seeing it and booking it.
+  await page.evaluate(() => localStorage.setItem("sahva.mock.slotTaken", "1"));
+  await dialog.getByRole("button", { name: "Book", exact: true }).click();
+
+  await expect(dialog.getByRole("alert")).toContainText("just booked by someone else");
+  await expect(dialog.getByPlaceholder("Lakshmi Devi")).toHaveValue("Ramu");
+  await expect(dialog.getByRole("button", { name: chosen, exact: true })).toHaveCount(0);
+
+  // Picking another time then books.
+  await dialog.getByRole("button", { name: /^\d{1,2}:\d{2} (am|pm)$/ }).first().click();
+  await dialog.getByRole("button", { name: "Book", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText(/Ramu booked for/)).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("diary: cancelling asks first", async ({ page }) => {
+  await page.goto("/dashboard/appointments");
+  // Book one so there is something live to cancel today.
+  await page.getByRole("button", { name: "Book appointment" }).first().click();
+  const book = page.getByRole("dialog", { name: "Book appointment" });
+  await book.getByRole("button", { name: /^\d{1,2}:\d{2} (am|pm)$/ }).first().click({ timeout: 15_000 });
+  await book.getByPlaceholder("Lakshmi Devi").fill("Sita");
+  await book.getByPlaceholder("+919885512345").fill("+919000000002");
+  await book.getByRole("button", { name: "Book", exact: true }).click();
+  await expect(book).toBeHidden();
+
+  const cancel = page.getByRole("button", { name: "Cancel", exact: true }).first();
+  await expect(cancel).toBeVisible({ timeout: 15_000 });
+  await cancel.click();
+  const confirm = page.getByRole("dialog", { name: /^Cancel / });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Keep it" }).click();
+  await expect(confirm).toBeHidden();
+});
