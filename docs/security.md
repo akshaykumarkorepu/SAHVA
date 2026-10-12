@@ -126,8 +126,10 @@ so they are not in this log; their use is counted on `patient_access_tokens`.
 
 ## Not yet addressed
 
-- **Audit of reads beyond these two routes.** Any new route that returns
-  clinical data must call `recordAccess` first. Nothing enforces that yet.
+- **Audit of patient-profile reads beyond `GET /patients/:id`.** Clinical
+  tables are guarded (`test/clinical-reads-audited.test.ts` fails if a handler
+  reads one without `recordAccess`); contact details read elsewhere — lists,
+  search — are not logged.
 - **Encryption at rest beyond Supabase defaults.** No column-level encryption
   on phone numbers or clinical notes.
 - **Rate limiting.** Nothing here stops a compromised account enumerating its
