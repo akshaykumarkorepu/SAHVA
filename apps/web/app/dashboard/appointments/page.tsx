@@ -17,9 +17,13 @@ import {
   Input,
   Modal,
   PageHeader,
+  Segmented,
   Select,
   Spinner,
 } from "@/components/ui";
+import { DoctorDayView } from "@/components/diary/DoctorDayView";
+import { AppointmentPanel, type PanelAppointment } from "@/components/dashboard/AppointmentPanel";
+import type { DayOff } from "@/lib/dayview";
 import { Icon } from "@/components/icons";
 import {
   addDaysIso,
@@ -44,6 +48,12 @@ export default function AppointmentsPage() {
     [date],
   );
   const doctors = useApi<Doctor[]>("/doctors");
+  const timeOff = useApi<DayOff[]>(
+    `/doctors/time-off?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    [date],
+  );
+  const [view, setView] = React.useState<"doctors" | "list">("doctors");
+  const [selected, setSelected] = React.useState<AppointmentWithJoins | null>(null);
 
   return (
     <>
@@ -77,6 +87,15 @@ export default function AppointmentsPage() {
         <Button variant="ghost" size="sm" onClick={() => setDate(todayIso(tz))}>
           Today
         </Button>
+        <div className="mx-1 h-4 w-px bg-line" />
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "doctors", label: "By doctor" },
+            { value: "list", label: "List" },
+          ]}
+        />
       </div>
 
       {list.loading ? (
@@ -89,6 +108,16 @@ export default function AppointmentsPage() {
           title={`Nothing booked for ${formatDate(`${date}T09:00:00+05:30`, tz)}`}
           body="Appointments booked by the AI receptionist appear here automatically."
           action={<Button onClick={() => setBookOpen(true)}>Book appointment</Button>}
+        />
+      ) : view === "doctors" ? (
+        <DoctorDayView
+          appointments={list.data?.data ?? []}
+          doctors={doctors.data ?? []}
+          timeOff={timeOff.data ?? []}
+          day={date}
+          tz={tz}
+          now={new Date()}
+          onSelect={setSelected}
         />
       ) : (
         <div className="grid gap-3">
@@ -110,6 +139,13 @@ export default function AppointmentsPage() {
         }}
       />
 
+      <AppointmentPanel
+        appointment={selected ? toPanel(selected) : null}
+        tz={tz}
+        onClose={() => setSelected(null)}
+        canCancel
+      />
+
       <TimeOffModal
         open={timeOffOpen}
         onClose={() => setTimeOffOpen(false)}
@@ -121,6 +157,21 @@ export default function AppointmentsPage() {
       />
     </>
   );
+}
+
+function toPanel(a: AppointmentWithJoins): PanelAppointment {
+  return {
+    id: a.id,
+    patient_name: a.patients?.full_name ?? null,
+    doctor_name: a.doctors?.spoken_name ?? null,
+    starts_at: a.starts_at,
+    status: a.status,
+    token_number: a.token_number,
+    source: a.source,
+    reason: a.reason,
+    phone_e164: a.patients?.phone_e164 ?? null,
+    preferred_language: a.patients?.preferred_language ?? null,
+  };
 }
 
 function AppointmentRow({

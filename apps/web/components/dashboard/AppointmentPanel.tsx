@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import type { TodayAppointment } from "@/lib/types";
 import { post } from "@/lib/api";
@@ -9,6 +10,12 @@ import { bookingSource } from "@/lib/today";
 import { Badge, Button, Modal } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { toast } from "sonner";
+
+/** The fields the panel reads — a today-row has them, and so can a diary row. */
+export type PanelAppointment = Pick<
+  TodayAppointment,
+  "id" | "patient_name" | "doctor_name" | "starts_at" | "status" | "token_number" | "source" | "reason" | "phone_e164" | "preferred_language"
+>;
 
 /**
  * One appointment, beside the day it belongs to.
@@ -21,14 +28,23 @@ export function AppointmentPanel({
   appointment: a,
   tz,
   onClose,
+  canCancel = false,
 }: {
-  appointment: TodayAppointment | null;
+  appointment: PanelAppointment | null;
   tz?: string;
   onClose: () => void;
+  /**
+   * Opened from the diary itself: offer a confirmed cancel here rather than a
+   * link back to the page the user is already on.
+   */
+  canCancel?: boolean;
 }) {
   const setStatus = useMutation((id: string, status: "checked_in" | "completed") =>
     post(`/appointments/${id}/status`, { status }),
   );
+  const cancel = useMutation((id: string) => post(`/appointments/${id}/cancel`, {}));
+  const [confirming, setConfirming] = React.useState(false);
+  React.useEffect(() => setConfirming(false), [a?.id]);
 
   if (!a) return null;
 
@@ -45,6 +61,42 @@ export function AppointmentPanel({
     }
     toast.success(status === "checked_in" ? `${a!.patient_name} checked in` : `${a!.patient_name} marked done`);
     onClose();
+  }
+
+  async function doCancel() {
+    const ok = await cancel.run(a!.id!);
+    if (ok === null) {
+      toast.error("The cancellation did not save.");
+      return;
+    }
+    toast.success(`${a!.patient_name}'s appointment cancelled`);
+    onClose();
+  }
+
+  if (confirming) {
+    return (
+      <Modal
+        open
+        onClose={() => setConfirming(false)}
+        variant="slide-over"
+        title={`Cancel ${a.patient_name ?? "this appointment"}?`}
+        description={`${a.starts_at ? formatTime(a.starts_at, tz) : "—"} with ${a.doctor_name}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)}>
+              Keep it
+            </Button>
+            <Button variant="danger" loading={cancel.pending} onClick={() => void doCancel()}>
+              Cancel appointment
+            </Button>
+          </>
+        }
+      >
+        <p className="pb-4 text-sm leading-relaxed text-ink-muted">
+          The slot becomes free for others. The patient is not told automatically — call them if they need to know.
+        </p>
+      </Modal>
+    );
   }
 
   return (
@@ -93,13 +145,25 @@ export function AppointmentPanel({
         </Field>
         <Field label="Language">{a.preferred_language === "te" ? "Telugu" : a.preferred_language === "hi" ? "Hindi" : "English"}</Field>
       </dl>
-      <Link
-        href="/dashboard/appointments"
-        className="mb-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-700 hover:underline"
-      >
-        Reschedule or cancel in the diary
-        <Icon name="chevronRight" className="h-3.5 w-3.5" />
-      </Link>
+      {canCancel ? (
+        open && (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="mb-4 text-[13px] font-medium text-accent-rose hover:underline"
+          >
+            Cancel this appointment…
+          </button>
+        )
+      ) : (
+        <Link
+          href="/dashboard/appointments"
+          className="mb-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-700 hover:underline"
+        >
+          Reschedule or cancel in the diary
+          <Icon name="chevronRight" className="h-3.5 w-3.5" />
+        </Link>
+      )}
     </Modal>
   );
 }

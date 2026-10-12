@@ -30,6 +30,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
 const nextConfig = {
   reactStrictMode: true,
+  // The Playwright suite builds into its own folder. Sharing .next with a
+  // running `next dev` let the test build overwrite the dev server's chunks,
+  // which then 404'd and left the app on its loading spinner.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   env: {
     NEXT_PUBLIC_API_BASE: API_BASE,
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || "",

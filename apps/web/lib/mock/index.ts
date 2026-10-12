@@ -212,7 +212,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       doctor_id: doc.id,
       patient_id: crypto.randomUUID(),
       starts_at: String(b.starts_at),
-      ends_at: String(b.starts_at),
+      ends_at: new Date(new Date(String(b.starts_at)).getTime() + doc.consult_duration_min * 60_000).toISOString(),
       duration_min: doc.consult_duration_min,
       status: "booked",
       source: "staff_manual",

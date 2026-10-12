@@ -225,6 +225,10 @@ const patientBrief = (id: string) => {
   };
 };
 
+/**
+ * Srinivas and Priya fall inside Dr Anitha's leave (doctorTimeOff below), so —
+ * as the sweep_time_off trigger does — they are needs_reschedule, not booked.
+ */
 export const appointments = [
   {
     id: "66666666-6666-4666-8666-666666666601",
@@ -234,7 +238,7 @@ export const appointments = [
     starts_at: at(NEXT_WORKDAY, "10:00"),
     ends_at: at(NEXT_WORKDAY, "10:15"),
     duration_min: 15,
-    status: "confirmed",
+    status: "needs_reschedule",
     source: "ai_call",
     reason: "BP follow-up",
     token_number: 4,
@@ -249,7 +253,7 @@ export const appointments = [
     starts_at: at(NEXT_WORKDAY, "10:30"),
     ends_at: at(NEXT_WORKDAY, "10:45"),
     duration_min: 15,
-    status: "booked",
+    status: "needs_reschedule",
     source: "ai_call",
     reason: "Fever and cold",
     token_number: 5,
@@ -512,7 +516,7 @@ export const rescheduleBatch: RescheduleBatch = {
       appointments: {
         id: "66666666-6666-4666-8666-666666666601",
         starts_at: at(NEXT_WORKDAY, "10:00"),
-        status: "confirmed",
+        status: "needs_reschedule",
       },
     },
     {
@@ -535,7 +539,7 @@ export const rescheduleBatch: RescheduleBatch = {
       appointments: {
         id: "66666666-6666-4666-8666-666666666602",
         starts_at: at(NEXT_WORKDAY, "10:30"),
-        status: "booked",
+        status: "needs_reschedule",
       },
     },
   ],

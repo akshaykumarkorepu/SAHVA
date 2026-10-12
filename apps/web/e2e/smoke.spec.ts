@@ -209,6 +209,7 @@ test("diary: cancelling asks first", async ({ page }) => {
   await book.getByRole("button", { name: "Book", exact: true }).click();
   await expect(book).toBeHidden();
 
+  await page.getByRole("tab", { name: "List", exact: true }).click();
   const cancel = page.getByRole("button", { name: "Cancel", exact: true }).first();
   await expect(cancel).toBeVisible({ timeout: 15_000 });
   await cancel.click();
@@ -227,4 +228,29 @@ test("action list: filter by group, and reschedules have no manual Done", async 
   await page.getByRole("tab", { name: /AI quality/ }).or(page.getByRole("button", { name: /AI quality/ })).first().click();
   await expect(page.getByText("Dr Anitha is unavailable")).toHaveCount(0);
   await expect(page.getByText("Booking made from poorly-heard speech")).toBeVisible();
+});
+
+test("diary by doctor: leave is shaded, and a block opens the panel with a confirmed cancel", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/appointments");
+  // Book one today so there is a block to open.
+  await page.getByRole("button", { name: "Book appointment" }).first().click();
+  const book = page.getByRole("dialog", { name: "Book appointment" });
+  await book.getByRole("button", { name: /^\d{1,2}:\d{2} (am|pm)$/ }).first().click({ timeout: 15_000 });
+  await book.getByPlaceholder("Lakshmi Devi").fill("Gopal");
+  await book.getByPlaceholder("+919885512345").fill("+919000000003");
+  await book.getByRole("button", { name: "Book", exact: true }).click();
+  await expect(book).toBeHidden();
+
+  const block = page.getByRole("button", { name: /Gopal, Booked/ });
+  await expect(block).toBeVisible();
+  await block.click();
+  const panel = page.getByRole("dialog", { name: "Gopal" });
+  await panel.getByRole("button", { name: "Cancel this appointment…" }).click();
+  const confirm = page.getByRole("dialog", { name: "Cancel Gopal?" });
+  await confirm.getByRole("button", { name: "Cancel appointment" }).click();
+  await expect(confirm).toBeHidden();
+  await expect(page.getByRole("button", { name: /Gopal, / })).toHaveCount(0);
+  await settle(page);
+  expect(errors).toEqual([]);
 });

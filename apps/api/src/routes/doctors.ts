@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
-import { isoDate, uuid, validate } from "../middleware/validate.js";
+import { isoDate, isoDateTime, uuid, validate } from "../middleware/validate.js";
 import { badRequest, unwrap } from "../lib/errors.js";
 
 export const doctors = Router();
@@ -19,6 +19,27 @@ doctors.get(
         .order("sort_order")
         .order("spoken_name"),
       "doctors",
+    );
+    res.json(rows);
+  }),
+);
+
+/** Time off overlapping a window — shaded on the diary's doctor view. */
+doctors.get(
+  "/time-off",
+  validate({ query: z.object({ from: isoDateTime, to: isoDateTime }) }),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const { from, to } = req.query as unknown as { from: string; to: string };
+    const rows = unwrap(
+      await db
+        .from("doctor_time_off")
+        .select("id, doctor_id, starts_at, ends_at, kind, reason")
+        .eq("clinic_id", clinicId)
+        .lt("starts_at", to)
+        .gt("ends_at", from)
+        .order("starts_at"),
+      "time off",
     );
     res.json(rows);
   }),

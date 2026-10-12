@@ -26,7 +26,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `next build && next start -p ${PORT}`,
-    env: { NEXT_PUBLIC_MOCK: "1" },
+    env: { NEXT_PUBLIC_MOCK: "1", NEXT_DIST_DIR: ".next-e2e" },
     url: `http://localhost:${PORT}`,
     timeout: 300_000,
     reuseExistingServer: !process.env.CI,
