@@ -5,7 +5,7 @@ import { requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { AppError, badRequest, fromPostgrest, notFound, unwrap } from "../lib/errors.js";
 import { dbAdmin } from "../lib/supabase.js";
-import { createOrder, razorpayConfig, verifyPaymentSignature } from "../lib/razorpay.js";
+import { createOrder, fetchPayment, razorpayConfig, verifyPaymentSignature } from "../lib/razorpay.js";
 
 export const billing = Router();
 
@@ -142,11 +142,41 @@ billing.post(
       .maybeSingle();
     if (!own.data) throw notFound("order");
 
+    // The signature proves Razorpay issued these ids; this asks Razorpay
+    // whether the money actually moved, and how much.
+    const payment = await fetchPayment(cfg, b.razorpay_payment_id);
+    if (payment.order_id !== b.razorpay_order_id) {
+      throw new AppError(400, "PAYMENT_NOT_VERIFIED", "That payment does not belong to this order.");
+    }
+    if (payment.status === "authorized") {
+      // Money is held but not taken (auto-capture off, or Razorpay mid-way).
+      // Not activated; an admin sees it and the nightly check retries.
+      await dbAdmin.rpc("record_payment_exception", {
+        p_kind: "authorized_not_captured",
+        p_payment_id: own.data.id,
+        p_rzp_payment: payment.id,
+        p_rzp_order: payment.order_id,
+        p_amount: payment.amount,
+        p_details: {},
+      });
+      res.status(202).json({ status: "pending", message: "Payment received and being confirmed. Your plan will show as active shortly." });
+      return;
+    }
+    if (payment.status !== "captured") {
+      throw new AppError(402, "PAYMENT_NOT_CAPTURED", "The payment did not complete. No money was taken.");
+    }
+
     const { data, error } = await dbAdmin.rpc("activate_paid_subscription", {
       p_order_id: b.razorpay_order_id,
       p_payment_id: b.razorpay_payment_id,
+      p_captured_paise: payment.amount,
     });
     if (error) throw fromPostgrest(error, "activating the subscription");
+    if (data?.status !== "paid") {
+      // Captured amount differed from the order: recorded for an admin.
+      res.status(202).json({ status: "pending", message: "We received your payment and are checking it. Our team will confirm shortly." });
+      return;
+    }
     req.log.info({ orderId: b.razorpay_order_id, paymentId: b.razorpay_payment_id }, "subscription payment verified");
     res.json(data);
   }),

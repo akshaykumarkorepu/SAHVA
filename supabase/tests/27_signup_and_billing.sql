@@ -81,7 +81,7 @@ begin
   perform pg_temp.check('the new owner sees only their own clinic', v_n = 1);
 
   begin
-    perform public.activate_paid_subscription('order_x', 'pay_x');
+    perform public.activate_paid_subscription('order_x', 'pay_x', 100);
   exception when insufficient_privilege then v_blocked := true;
   end;
   perform pg_temp.check('a clinic cannot mark its own payment paid', v_blocked);
@@ -120,7 +120,7 @@ begin
   insert into public.subscription_payments (clinic_id, subscription_id, billing_cycle, amount_paise, razorpay_order_id)
   values (v_sub.clinic_id, v_sub.id, 'monthly', 199900, 'order_test_1');
 
-  v_pay := public.activate_paid_subscription('order_test_1', 'pay_test_1');
+  v_pay := public.activate_paid_subscription('order_test_1', 'pay_test_1', 199900);
   perform pg_temp.check('a verified payment is marked paid', v_pay.status = 'paid');
   perform pg_temp.check('paying during the trial keeps the remaining trial days',
     v_pay.period_start = v_sub.current_period_end and v_pay.period_end = v_sub.current_period_end + interval '1 month');
@@ -130,13 +130,13 @@ begin
   v_end := v_sub.current_period_end;
 
   -- The browser and the webhook both report the same payment.
-  v_again := public.activate_paid_subscription('order_test_1', 'pay_test_1');
+  v_again := public.activate_paid_subscription('order_test_1', 'pay_test_1', 199900);
   select * into v_sub from public.subscriptions where id = v_sub.id;
   perform pg_temp.check('reporting the same payment twice extends nothing', v_sub.current_period_end = v_end);
 
   insert into public.subscription_payments (clinic_id, subscription_id, billing_cycle, amount_paise, razorpay_order_id)
   values (v_sub.clinic_id, v_sub.id, 'yearly', 999900, 'order_test_2');
-  v_pay := public.activate_paid_subscription('order_test_2', 'pay_test_2');
+  v_pay := public.activate_paid_subscription('order_test_2', 'pay_test_2', 999900);
   perform pg_temp.check('a yearly payment adds a year after the paid month', v_pay.period_end = v_end + interval '1 year');
 end $t$;
 

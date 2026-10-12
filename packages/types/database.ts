@@ -2164,6 +2164,118 @@ export type Database = {
           },
         ];
       };
+      payment_events: {
+        Row: {
+          id: string;
+          provider_event_id: string | null;
+          event_type: string | null;
+          signature_ok: boolean;
+          razorpay_payment_id: string | null;
+          razorpay_order_id: string | null;
+          razorpay_refund_id: string | null;
+          amount_paise: number | null;
+          payload: Json | null;
+          outcome: string | null;
+          received_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider_event_id?: string | null;
+          event_type?: string | null;
+          signature_ok: boolean;
+          razorpay_payment_id?: string | null;
+          razorpay_order_id?: string | null;
+          razorpay_refund_id?: string | null;
+          amount_paise?: number | null;
+          payload?: Json | null;
+          outcome?: string | null;
+          received_at?: string;
+        };
+        Update: {
+          id?: string;
+          provider_event_id?: string | null;
+          event_type?: string | null;
+          signature_ok?: boolean;
+          razorpay_payment_id?: string | null;
+          razorpay_order_id?: string | null;
+          razorpay_refund_id?: string | null;
+          amount_paise?: number | null;
+          payload?: Json | null;
+          outcome?: string | null;
+          received_at?: string;
+        };
+        Relationships: [];
+      };
+      payment_exceptions: {
+        Row: {
+          id: string;
+          kind: string;
+          status: string;
+          clinic_id: string | null;
+          payment_id: string | null;
+          razorpay_payment_id: string | null;
+          razorpay_order_id: string | null;
+          amount_paise: number | null;
+          details: Json;
+          detected_at: string;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          resolution: string | null;
+        };
+        Insert: {
+          id?: string;
+          kind: string;
+          status?: string;
+          clinic_id?: string | null;
+          payment_id?: string | null;
+          razorpay_payment_id?: string | null;
+          razorpay_order_id?: string | null;
+          amount_paise?: number | null;
+          details?: Json;
+          detected_at?: string;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          resolution?: string | null;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          status?: string;
+          clinic_id?: string | null;
+          payment_id?: string | null;
+          razorpay_payment_id?: string | null;
+          razorpay_order_id?: string | null;
+          amount_paise?: number | null;
+          details?: Json;
+          detected_at?: string;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          resolution?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payment_exceptions_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payment_exceptions_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "subscription_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payment_exceptions_resolved_by_fkey";
+            columns: ["resolved_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+        ];
+      };
       plans: {
         Row: {
           code: Database["public"]["Enums"]["plan_code"];
@@ -2402,6 +2514,70 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "patients";
             referencedColumns: ["id", "clinic_id"];
+          },
+        ];
+      };
+      refunds: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          payment_id: string;
+          razorpay_refund_id: string | null;
+          amount_paise: number;
+          reason: string;
+          revoked_period: boolean;
+          status: string;
+          requested_by: string;
+          created_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          payment_id: string;
+          razorpay_refund_id?: string | null;
+          amount_paise: number;
+          reason: string;
+          revoked_period?: boolean;
+          status?: string;
+          requested_by: string;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          payment_id?: string;
+          razorpay_refund_id?: string | null;
+          amount_paise?: number;
+          reason?: string;
+          revoked_period?: boolean;
+          status?: string;
+          requested_by?: string;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "refunds_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refunds_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: false;
+            referencedRelation: "subscription_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refunds_requested_by_fkey";
+            columns: ["requested_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
           },
         ];
       };
@@ -2711,6 +2887,8 @@ export type Database = {
           created_by: string | null;
           created_at: string;
           paid_at: string | null;
+          captured_paise: number | null;
+          refunded_paise: number;
         };
         Insert: {
           id?: string;
@@ -2726,6 +2904,8 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           paid_at?: string | null;
+          captured_paise?: number | null;
+          refunded_paise?: number;
         };
         Update: {
           id?: string;
@@ -2741,6 +2921,8 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           paid_at?: string | null;
+          captured_paise?: number | null;
+          refunded_paise?: number;
         };
         Relationships: [
           {
@@ -3094,6 +3276,7 @@ export type Database = {
         Args: {
           p_order_id: string;
           p_payment_id: string;
+          p_captured_paise: number;
         };
         Returns: Database["public"]["Tables"]["subscription_payments"]["Row"];
       };
@@ -3111,6 +3294,29 @@ export type Database = {
       admin_clinic_summaries: {
         Args: Record<string, never>;
         Returns: { id: string; name: string; city: string; verification_status: Database["public"]["Enums"]["clinic_verification_status"]; created_at: string; subscription_status: Database["public"]["Enums"]["subscription_status"]; billing_cycle: string; current_period_end: string; is_live: boolean; staff: number; patients: number; appointments_30d: number; ai_bookings_30d: number; last_appointment_at: string; paid_total_paise: number }[];
+      };
+      admin_record_refund: {
+        Args: {
+          p_payment_id: string;
+          p_razorpay_refund_id: string;
+          p_amount: number;
+          p_status: string;
+          p_revoke_period: boolean;
+          p_reason: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["refunds"]["Row"];
+      };
+      admin_resolve_payment_exception: {
+        Args: {
+          p_exception_id: string;
+          p_status: string;
+          p_resolution: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["payment_exceptions"]["Row"];
       };
       admin_review_clinic: {
         Args: {
@@ -3174,6 +3380,17 @@ export type Database = {
           p_request_id?: string;
         };
         Returns: undefined;
+      };
+      record_payment_exception: {
+        Args: {
+          p_kind: string;
+          p_payment_id: string;
+          p_rzp_payment: string;
+          p_rzp_order: string;
+          p_amount: number;
+          p_details: Json;
+        };
+        Returns: string;
       };
       reschedule_appointment: {
         Args: {

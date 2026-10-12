@@ -3,7 +3,9 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { uuid, validate } from "../middleware/validate.js";
 import { requireAdminRole } from "../middleware/admin.js";
-import { fromPostgrest, unwrap } from "../lib/errors.js";
+import { AppError, fromPostgrest, unwrap } from "../lib/errors.js";
+import { createRefund, fetchPayment, razorpayConfig } from "../lib/razorpay.js";
+import { reconcile } from "../lib/reconcile.js";
 import { dbAdmin } from "../lib/supabase.js";
 import { logAdminAction } from "../lib/adminAudit.js";
 import { overview } from "../lib/adminMetrics.js";
@@ -345,5 +347,163 @@ admin.post(
     );
     await logAdminAction(req, { action: "clinic.note", targetType: "clinic", targetId: req.params.id });
     res.status(201).json(note);
+  }),
+);
+
+// --- Payments ----------------------------------------------------------------------------
+
+/** Every payment and order, newest first, with the clinic's name. */
+admin.get(
+  "/payments",
+  validate({ query: z.object({ status: z.enum(["all", "paid", "created", "expired", "failed"]).default("all") }) }),
+  asyncRoute(async (req, res) => {
+    const { status } = req.query as unknown as { status: string };
+    let q = dbAdmin
+      .from("subscription_payments")
+      .select("id, clinic_id, billing_cycle, amount_paise, captured_paise, refunded_paise, status, razorpay_order_id, razorpay_payment_id, period_start, period_end, created_at, paid_at, clinics(name, city)")
+      .order("created_at", { ascending: false })
+      .limit(300);
+    if (status !== "all") q = q.eq("status", status);
+    res.json(unwrap(await q, "payments"));
+  }),
+);
+
+admin.get(
+  "/payments/exceptions",
+  validate({ query: z.object({ status: z.enum(["open", "resolved", "dismissed"]).default("open") }) }),
+  asyncRoute(async (req, res) => {
+    const { status } = req.query as unknown as { status: string };
+    const rows = unwrap(
+      await dbAdmin
+        .from("payment_exceptions")
+        .select("*, clinics(name), platform_admins(full_name)")
+        .eq("status", status)
+        .order("detected_at", { ascending: status === "open" })
+        .limit(200),
+      "payment exceptions",
+    );
+    res.json(rows);
+  }),
+);
+
+/**
+ * Close an exception. "activate" first asks Razorpay what was captured and
+ * activates with that amount — the same rule as everywhere else, so an
+ * admin cannot activate money that did not arrive.
+ */
+admin.post(
+  "/payments/exceptions/:id/resolve",
+  requireAdminRole("finance"),
+  validate({
+    params: z.object({ id: uuid }),
+    body: z.object({ action: z.enum(["activate", "resolved", "dismissed"]), note: z.string().trim().min(3).max(1000) }),
+  }),
+  asyncRoute(async (req, res) => {
+    const b = req.body as { action: "activate" | "resolved" | "dismissed"; note: string };
+    const ex = unwrap(await dbAdmin.from("payment_exceptions").select("*").eq("id", req.params.id).single(), "exception");
+
+    if (b.action === "activate") {
+      if (!ex.razorpay_payment_id || !ex.razorpay_order_id) {
+        throw new AppError(400, "NOTHING_TO_ACTIVATE", "This exception has no payment to activate.");
+      }
+      const payment = await fetchPayment(razorpayConfig(), ex.razorpay_payment_id);
+      if (payment.status !== "captured") {
+        throw new AppError(409, "NOT_CAPTURED", `Razorpay says this payment is ${payment.status}, not captured.`);
+      }
+      // A mismatch the admin has accepted: activate against what was paid.
+      await dbAdmin.from("subscription_payments").update({ amount_paise: payment.amount }).eq("razorpay_order_id", ex.razorpay_order_id).eq("status", "created");
+      const { data, error } = await dbAdmin.rpc("activate_paid_subscription", {
+        p_order_id: ex.razorpay_order_id,
+        p_payment_id: payment.id,
+        p_captured_paise: payment.amount,
+      });
+      if (error) throw fromPostgrest(error, "activating");
+      if (data?.status !== "paid") throw new AppError(409, "NOT_ACTIVATED", "The payment could not be activated.");
+    }
+
+    const { data, error } = await dbAdmin.rpc("admin_resolve_payment_exception", {
+      p_exception_id: req.params.id,
+      p_status: b.action === "dismissed" ? "dismissed" : "resolved",
+      p_resolution: b.action === "activate" ? `Activated after checking Razorpay. ${b.note}` : b.note,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+    });
+    if (error) throw fromPostgrest(error, "resolving the exception");
+    res.json(data);
+  }),
+);
+
+/**
+ * Refund through Razorpay, then record it. Razorpay first: if it refuses,
+ * nothing is recorded. Optionally take back the unused part of the period.
+ */
+admin.post(
+  "/payments/:id/refund",
+  requireAdminRole("finance"),
+  validate({
+    params: z.object({ id: uuid }),
+    body: z.object({
+      amount_paise: z.number().int().positive(),
+      revoke_period: z.boolean(),
+      reason: z.string().trim().min(3).max(1000),
+    }),
+  }),
+  asyncRoute(async (req, res) => {
+    const b = req.body as { amount_paise: number; revoke_period: boolean; reason: string };
+    const pay = unwrap(
+      await dbAdmin.from("subscription_payments").select("id, status, razorpay_payment_id, amount_paise, captured_paise, refunded_paise").eq("id", req.params.id).single(),
+      "payment",
+    );
+    if (pay.status !== "paid" || !pay.razorpay_payment_id) throw new AppError(409, "NOT_PAID", "Only a paid payment can be refunded.");
+    const left = (pay.captured_paise ?? pay.amount_paise) - pay.refunded_paise;
+    if (b.amount_paise > left) throw new AppError(409, "TOO_MUCH", `At most ${left / 100} rupees is left to refund.`);
+
+    const refund = await createRefund(razorpayConfig(), pay.razorpay_payment_id, b.amount_paise, {
+      reason: b.reason.slice(0, 250),
+      by: req.admin!.email ?? req.admin!.userId,
+    });
+
+    const { data, error } = await dbAdmin.rpc("admin_record_refund", {
+      p_payment_id: pay.id,
+      p_razorpay_refund_id: refund.id,
+      p_amount: refund.amount,
+      p_status: refund.status === "processed" ? "processed" : "processing",
+      p_revoke_period: b.revoke_period,
+      p_reason: b.reason,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+    });
+    if (error) {
+      // Razorpay has the refund; our record failed. Say so loudly — it must
+      // be recorded by hand, not retried (that would refund twice).
+      req.log.error({ err: error, refundId: refund.id }, "refund issued at Razorpay but not recorded");
+      throw new AppError(500, "REFUND_NOT_RECORDED", `Razorpay issued refund ${refund.id}, but SAHVA could not record it. Do not retry — record it by hand.`);
+    }
+    res.status(201).json(data);
+  }),
+);
+
+admin.get(
+  "/payments/events",
+  asyncRoute(async (_req, res) => {
+    const rows = unwrap(
+      await dbAdmin
+        .from("payment_events")
+        .select("id, event_type, signature_ok, razorpay_payment_id, razorpay_order_id, razorpay_refund_id, amount_paise, outcome, received_at")
+        .order("received_at", { ascending: false })
+        .limit(200),
+      "payment events",
+    );
+    res.json(rows);
+  }),
+);
+
+admin.post(
+  "/payments/reconcile",
+  requireAdminRole("finance"),
+  asyncRoute(async (req, res) => {
+    const summary = await reconcile();
+    await logAdminAction(req, { action: "payment.reconcile", after: summary });
+    res.json(summary);
   }),
 );

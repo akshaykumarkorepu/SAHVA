@@ -64,3 +64,44 @@ export async function createOrder(
   }
   return body;
 }
+
+export type RazorpayPayment = { id: string; order_id: string; status: string; amount: number; captured: boolean };
+export type RazorpayRefund = { id: string; amount: number; status: string };
+
+async function rzp<T>(cfg: RazorpayConfig, path: string, init: RequestInit, fetchImpl: typeof fetch): Promise<T> {
+  const res = await fetchImpl(`https://api.razorpay.com/v1${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${Buffer.from(`${cfg.keyId}:${cfg.keySecret}`).toString("base64")}`,
+    },
+  });
+  const body = (await res.json().catch(() => null)) as (T & { error?: { description?: string } }) | null;
+  if (!res.ok || !body) {
+    throw new AppError(502, "PAYMENT_PROVIDER_ERROR", "Razorpay did not answer as expected.", body?.error?.description);
+  }
+  return body;
+}
+
+/** A payment as Razorpay holds it — the truth about whether money moved. */
+export const fetchPayment = (cfg: RazorpayConfig, paymentId: string, fetchImpl: typeof fetch = fetch) =>
+  rzp<RazorpayPayment>(cfg, `/payments/${encodeURIComponent(paymentId)}`, { method: "GET" }, fetchImpl);
+
+/** Every attempt to pay an order, failed ones included. */
+export const fetchOrderPayments = async (cfg: RazorpayConfig, orderId: string, fetchImpl: typeof fetch = fetch) =>
+  (await rzp<{ items: RazorpayPayment[] }>(cfg, `/orders/${encodeURIComponent(orderId)}/payments`, { method: "GET" }, fetchImpl)).items ?? [];
+
+/** Refund part or all of a captured payment. */
+export const createRefund = (
+  cfg: RazorpayConfig,
+  paymentId: string,
+  amountPaise: number,
+  notes: Record<string, string>,
+  fetchImpl: typeof fetch = fetch,
+) =>
+  rzp<RazorpayRefund>(
+    cfg,
+    `/payments/${encodeURIComponent(paymentId)}/refund`,
+    { method: "POST", body: JSON.stringify({ amount: amountPaise, speed: "normal", notes }) },
+    fetchImpl,
+  );

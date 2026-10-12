@@ -42,3 +42,24 @@ test("createOrder sends paise in INR with basic auth, and surfaces provider erro
   const bad = (async () => new Response(JSON.stringify({ error: { description: "bad key" } }), { status: 401 })) as unknown as typeof fetch;
   await assert.rejects(createOrder({ keyId: "rzp_test_x", keySecret: "s" }, { amountPaise: 1, receipt: "r", notes: {} }, bad), /Could not start the payment/);
 });
+
+test("payment lookup, order payments and refunds hit the right Razorpay endpoints", async () => {
+  const { fetchPayment, fetchOrderPayments, createRefund } = await import("../src/lib/razorpay.js");
+  const calls: { url: string; method?: string; body?: string }[] = [];
+  const f = (async (url: string, init: RequestInit) => {
+    calls.push({ url, method: init.method, body: init.body as string | undefined });
+    if (url.endsWith("/payments/pay_1")) return new Response(JSON.stringify({ id: "pay_1", order_id: "order_1", status: "captured", amount: 199900, captured: true }));
+    if (url.endsWith("/orders/order_1/payments")) return new Response(JSON.stringify({ items: [{ id: "pay_1", status: "failed" }, { id: "pay_2", status: "captured" }] }));
+    if (url.endsWith("/payments/pay_1/refund")) return new Response(JSON.stringify({ id: "rfnd_1", amount: 1000, status: "processed" }));
+    return new Response("{}", { status: 404 });
+  }) as unknown as typeof fetch;
+  const cfg = { keyId: "rzp_test_x", keySecret: "s" };
+
+  assert.equal((await fetchPayment(cfg, "pay_1", f)).status, "captured");
+  assert.equal((await fetchOrderPayments(cfg, "order_1", f)).length, 2);
+  const r = await createRefund(cfg, "pay_1", 1000, { reason: "duplicate" }, f);
+  assert.equal(r.id, "rfnd_1");
+  assert.deepEqual(JSON.parse(calls[2].body!), { amount: 1000, speed: "normal", notes: { reason: "duplicate" } });
+  assert.equal(calls[2].method, "POST");
+  await assert.rejects(fetchPayment(cfg, "missing", f), /did not answer/);
+});

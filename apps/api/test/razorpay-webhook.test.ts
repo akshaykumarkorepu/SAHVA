@@ -57,7 +57,8 @@ test("a correctly signed event we do not handle is acknowledged, not acted on", 
       headers: { "content-type": "application/json", "x-razorpay-signature": sign(body) },
     });
     assert.equal(r.status, 200);
-    assert.deepEqual(await r.json(), { ok: true, ignored: true });
+    // Stored for the record, not acted on.
+    assert.deepEqual(await r.json(), { ok: true, outcome: "stored" });
   } finally {
     await srv.close();
   }

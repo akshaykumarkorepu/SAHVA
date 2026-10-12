@@ -25,6 +25,7 @@ import { admin } from "./routes/admin.js";
 import { requirePlatformAdmin } from "./middleware/admin.js";
 import { billing } from "./routes/billing.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
+import { reconcile } from "./lib/reconcile.js";
 import { patientAccount } from "./routes/patientAccount.js";
 import {
   apiLimiter,
@@ -75,6 +76,16 @@ app.use("/api/voice", machineLimiter(), requireServiceKey("voice"), voice);
 app.use("/api", patientAccount);
 app.use("/api/portal", portalLimiter(), portal);
 app.use("/api/webhooks/messages", machineLimiter(), requireServiceKey("telephony"), messages);
+// Scheduled jobs (Render cron, GitHub Actions): nightly payment reconciliation.
+app.post("/api/internal/reconcile-payments", machineLimiter(), requireServiceKey("worker"), async (req, res, next) => {
+  try {
+    const summary = await reconcile();
+    req.log.info({ summary }, "payment reconciliation");
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // --- Staff routes ----------------------------------------------------------
 // Everything below requires a signed-in staff user. `requireAuth` resolves the
