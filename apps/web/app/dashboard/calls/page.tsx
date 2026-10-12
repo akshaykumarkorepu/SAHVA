@@ -74,7 +74,7 @@ function CallsView() {
       ) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-ink-100 bg-ink-100/40 text-xs uppercase tracking-wide text-ink-500">
+            <thead className="border-b border-line bg-surface-sunken/40 text-xs uppercase tracking-wide text-ink-subtle">
               <tr>
                 <th className="px-4 py-3 font-medium">Caller</th>
                 <th className="px-4 py-3 font-medium">Outcome</th>
@@ -83,16 +83,16 @@ function CallsView() {
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ink-100">
+            <tbody className="divide-y divide-line">
               {(list.data?.data ?? []).map((c) => {
                 const o = callOutcome(c.outcome);
                 return (
-                  <tr key={c.id} className="hover:bg-ink-100/40">
+                  <tr key={c.id} className="hover:bg-surface-sunken/40">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-ink-900">
+                      <p className="font-medium text-ink">
                         {c.patients?.full_name ?? "Unknown caller"}
                       </p>
-                      <p className="text-xs text-ink-500">{formatPhone(c.from_e164)}</p>
+                      <p className="text-xs text-ink-subtle">{formatPhone(c.from_e164)}</p>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
@@ -105,10 +105,10 @@ function CallsView() {
                         )}
                       </div>
                     </td>
-                    <td className="hidden px-4 py-3 text-ink-700 md:table-cell">
+                    <td className="hidden px-4 py-3 text-ink-muted md:table-cell">
                       {c.primary_language ? LANGUAGE_LABEL[c.primary_language] : "—"}
                     </td>
-                    <td className="hidden px-4 py-3 text-ink-700 lg:table-cell">
+                    <td className="hidden px-4 py-3 text-ink-muted lg:table-cell">
                       {formatDateTime(c.started_at, tz)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -148,13 +148,13 @@ function CallDetailModal({
         <ErrorState error={error} />
       ) : data ? (
         <div className="space-y-5">
-          <div className="text-sm text-ink-500">
+          <div className="text-sm text-ink-subtle">
             {formatPhone(data.from_e164)} · {formatDateTime(data.started_at, tz)}
             {data.duration_sec ? ` · ${data.duration_sec}s` : ""}
           </div>
 
           {data.summary?.summary_en && (
-            <div className="rounded-lg bg-ink-100/60 px-3 py-2.5 text-sm text-ink-700">
+            <div className="rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-sm text-ink-muted">
               {data.summary.summary_en}
             </div>
           )}
@@ -165,8 +165,8 @@ function CallDetailModal({
                 key={t.id}
                 className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
                   t.role === "caller"
-                    ? "ml-auto bg-primary-600 text-white"
-                    : "bg-ink-100 text-ink-900"
+                    ? "ml-auto bg-brand-600 text-white"
+                    : "bg-surface-sunken text-ink"
                 }`}
               >
                 {t.content}
@@ -183,22 +183,22 @@ function CallDetailModal({
               here is the guard rail working, and it should be visible. */}
           {data.tool_invocations.length > 0 && (
             <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
                 Actions attempted
               </h4>
               <div className="space-y-1.5">
                 {data.tool_invocations.map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-start gap-2 rounded-lg border border-ink-100 px-3 py-2 text-xs"
+                    className="flex items-start gap-2 rounded-lg border border-line px-3 py-2 text-xs"
                   >
                     <Badge tone={t.allowed ? "good" : "bad"}>
                       {t.allowed ? "allowed" : "refused"}
                     </Badge>
                     <div className="min-w-0">
-                      <p className="font-medium text-ink-900">{t.tool_name}</p>
+                      <p className="font-medium text-ink">{t.tool_name}</p>
                       {!t.allowed && t.denial_reason && (
-                        <p className="text-ink-500">{t.denial_reason}</p>
+                        <p className="text-ink-subtle">{t.denial_reason}</p>
                       )}
                     </div>
                   </div>

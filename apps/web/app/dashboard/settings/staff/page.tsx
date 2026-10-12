@@ -56,7 +56,7 @@ export default function StaffPage() {
       ) : members.error ? (
         <ErrorState error={members.error} onRetry={members.reload} />
       ) : (
-        <Card className="divide-y divide-ink-100">
+        <Card className="divide-y divide-line">
           {(members.data ?? []).map((m) => (
             <MemberRow
               key={m.staff_id}
@@ -69,17 +69,17 @@ export default function StaffPage() {
         </Card>
       )}
 
-      <div className="mt-6 rounded-xl border border-ink-100 bg-white p-5">
-        <h3 className="text-sm font-semibold text-ink-900">What each role can do</h3>
+      <div className="mt-6 rounded-xl border border-line bg-white p-5">
+        <h3 className="text-sm font-semibold text-ink">What each role can do</h3>
         <dl className="mt-3 space-y-2 text-sm">
           {(Object.keys(ROLE_HELP) as Enums<"staff_role">[]).map((r) => (
             <div key={r} className="flex flex-wrap gap-2">
-              <dt className="w-28 shrink-0 font-medium capitalize text-ink-900">{r}</dt>
-              <dd className="flex-1 text-ink-500">{ROLE_HELP[r]}</dd>
+              <dt className="w-28 shrink-0 font-medium capitalize text-ink">{r}</dt>
+              <dd className="flex-1 text-ink-subtle">{ROLE_HELP[r]}</dd>
             </div>
           ))}
         </dl>
-        <p className="mt-3 text-xs text-ink-500">
+        <p className="mt-3 text-xs text-ink-subtle">
           These are enforced by the database, not just hidden in this app.
         </p>
       </div>
@@ -124,14 +124,14 @@ function MemberRow({
     <div className="flex flex-wrap items-center gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-ink-900">
+          <p className="text-sm font-medium text-ink">
             {member.staff_profiles?.full_name ?? "—"}
           </p>
           {isSelf && <Badge tone="info">You</Badge>}
           {member.status === "invited" && <Badge tone="warn">Invite pending</Badge>}
           {member.status === "suspended" && <Badge tone="bad">Suspended</Badge>}
         </div>
-        <p className="text-xs text-ink-500">
+        <p className="text-xs text-ink-subtle">
           {formatPhone(member.staff_profiles?.phone_e164 ?? null)}
         </p>
       </div>
@@ -215,7 +215,7 @@ function InviteModal({
       }
     >
       <div className="space-y-4">
-        <p className="rounded-lg bg-ink-100/60 px-3 py-2.5 text-xs text-ink-700">
+        <p className="rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-xs text-ink-muted">
           Self-signup is disabled, so this is the only way an account is created. They will get an
           email with a link to set their password.
         </p>

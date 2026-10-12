@@ -132,7 +132,7 @@ function AiPermissions({
       )}
 
       <div className="mt-5 flex items-center justify-end gap-3">
-        {saved && <span className="text-sm text-primary-700">Saved</span>}
+        {saved && <span className="text-sm text-brand-700">Saved</span>}
         <Button
           disabled={save.pending}
           onClick={async () => {
@@ -164,18 +164,18 @@ function Toggle({
   danger?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-lg px-1 py-2.5 hover:bg-ink-100/50">
+    <label className="flex cursor-pointer items-start gap-3 rounded-lg px-1 py-2.5 hover:bg-surface-sunken/50">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-300 text-primary-600 focus:ring-primary-600"
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong text-brand-700 focus:ring-brand-600"
       />
       <span className="min-w-0">
-        <span className="block text-sm font-medium text-ink-900">{label}</span>
+        <span className="block text-sm font-medium text-ink">{label}</span>
         {hint && (
           <span
-            className={`mt-0.5 block text-xs ${danger && checked ? "text-amber-700" : "text-ink-500"}`}
+            className={`mt-0.5 block text-xs ${danger && checked ? "text-accent-amber" : "text-ink-subtle"}`}
           >
             {hint}
           </span>

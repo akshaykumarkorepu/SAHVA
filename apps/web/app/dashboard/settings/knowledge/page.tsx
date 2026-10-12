@@ -43,9 +43,9 @@ export default function KnowledgePage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-900">
+      <div className="rounded-xl border border-accent-sky/30 bg-accent-sky/[0.06] px-5 py-4 text-sm text-ink">
         <p className="font-medium">This is the only thing the AI may say beyond the schedule.</p>
-        <p className="mt-1 text-sky-800">
+        <p className="mt-1 text-ink-muted">
           Anything a caller asks that is not answered here gets escalated rather than improvised.
           Nothing is shared between clinics.
         </p>
@@ -54,8 +54,8 @@ export default function KnowledgePage() {
       <Card className="p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-ink-900">Questions &amp; answers</h3>
-            <p className="text-xs text-ink-500">Write the Telugu answer too — most callers use it.</p>
+            <h3 className="text-sm font-semibold text-ink">Questions &amp; answers</h3>
+            <p className="text-xs text-ink-subtle">Write the Telugu answer too — most callers use it.</p>
           </div>
           <Button onClick={() => setNewFaq(true)}>Add question</Button>
         </div>
@@ -71,17 +71,17 @@ export default function KnowledgePage() {
             body="Until you add these, the AI can only handle scheduling."
           />
         ) : (
-          <div className="divide-y divide-ink-100">
+          <div className="divide-y divide-line">
             {(faqs.data ?? []).map((f) => (
               <div key={f.id} className="flex flex-wrap items-start gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-ink-900">{f.question_en}</p>
+                    <p className="text-sm font-medium text-ink">{f.question_en}</p>
                     <Badge>{f.category}</Badge>
                     {!f.is_active && <Badge tone="neutral">Off</Badge>}
                     {!f.answer_te && <Badge tone="warn">No Telugu</Badge>}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-ink-500">{f.answer_en}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-ink-subtle">{f.answer_en}</p>
                 </div>
                 <Button variant="ghost" onClick={() => setEditingFaq(f)}>
                   Edit
@@ -95,8 +95,8 @@ export default function KnowledgePage() {
       <Card className="p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-ink-900">Services and prices</h3>
-            <p className="text-xs text-ink-500">What the AI quotes when asked what you offer.</p>
+            <h3 className="text-sm font-semibold text-ink">Services and prices</h3>
+            <p className="text-xs text-ink-subtle">What the AI quotes when asked what you offer.</p>
           </div>
           <Button onClick={() => setNewService(true)}>Add service</Button>
         </div>
@@ -106,15 +106,15 @@ export default function KnowledgePage() {
         ) : (services.data ?? []).length === 0 ? (
           <EmptyState icon="rupee" title="No services listed" />
         ) : (
-          <div className="divide-y divide-ink-100">
+          <div className="divide-y divide-line">
             {(services.data ?? []).map((s) => (
               <div key={s.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-ink-900">
+                  <p className="text-sm font-medium text-ink">
                     {s.name_en}
-                    {s.name_te && <span className="ml-2 text-ink-500">{s.name_te}</span>}
+                    {s.name_te && <span className="ml-2 text-ink-subtle">{s.name_te}</span>}
                   </p>
-                  <p className="text-xs text-ink-500">
+                  <p className="text-xs text-ink-subtle">
                     {rupees(s.price_paise)}
                     {s.duration_min ? ` · ${s.duration_min} min` : ""}
                     {s.category ? ` · ${s.category}` : ""}

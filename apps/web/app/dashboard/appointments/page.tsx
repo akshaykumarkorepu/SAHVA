@@ -291,9 +291,9 @@ function BookModal({
           hint="Only genuinely free slots are shown, computed live from the doctor's schedule."
         >
           {slots.loading ? (
-            <p className="text-sm text-ink-500">Checking availability…</p>
+            <p className="text-sm text-ink-subtle">Checking availability…</p>
           ) : (slots.data ?? []).length === 0 ? (
-            <p className="text-sm text-ink-500">
+            <p className="text-sm text-ink-subtle">
               No free slots — the doctor may not consult on this day.
             </p>
           ) : (
@@ -305,8 +305,8 @@ function BookModal({
                   onClick={() => setSlot(s.slot_start)}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     slot === s.slot_start
-                      ? "border-primary-600 bg-primary-50 font-medium text-primary-700"
-                      : "border-ink-300 text-ink-700 hover:bg-ink-100"
+                      ? "border-brand-600 bg-brand-50 font-medium text-brand-700"
+                      : "border-line-strong text-ink-muted hover:bg-surface-sunken"
                   }`}
                 >
                   {formatTime(s.slot_start)}
@@ -406,13 +406,13 @@ function TimeOffModal({
         }
       >
         {affected === 0 ? (
-          <p className="text-sm text-ink-700">No appointments fell in that window.</p>
+          <p className="text-sm text-ink-muted">No appointments fell in that window.</p>
         ) : (
           <>
-            <p className="text-sm font-medium text-ink-900">
+            <p className="text-sm font-medium text-ink">
               {affected} appointment{affected === 1 ? " was" : "s were"} flagged for rescheduling.
             </p>
-            <p className="mt-2 text-sm text-ink-500">
+            <p className="mt-2 text-sm text-ink-subtle">
               Nobody has been cancelled and no message has been sent. The patients still hold
               their slots until someone reviews the list and sends the reschedule messages.
             </p>
@@ -445,7 +445,7 @@ function TimeOffModal({
       }
     >
       <div className="space-y-4">
-        <div className="rounded-lg bg-ink-100/60 px-3 py-2.5 text-xs text-ink-700">
+        <div className="rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-xs text-ink-muted">
           This flags affected appointments for review. It does <strong>not</strong> cancel
           anyone and does <strong>not</strong> message patients.
         </div>

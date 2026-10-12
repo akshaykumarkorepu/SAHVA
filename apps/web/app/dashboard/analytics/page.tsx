@@ -70,21 +70,21 @@ export default function AnalyticsPage() {
       </div>
 
       <Card className="mt-6 p-5">
-        <h3 className="text-sm font-semibold text-ink-900">Call volume</h3>
-        <p className="mb-3 text-xs text-ink-500">Total calls against successful bookings</p>
+        <h3 className="text-sm font-semibold text-ink">Call volume</h3>
+        <p className="mb-3 text-xs text-ink-subtle">Total calls against successful bookings</p>
         <CallVolumeChart data={summary.data?.daily ?? []} />
       </Card>
 
       {/* Unit economics. This is the number that decides pricing, so it is
           measured from real vendor usage rather than estimated. */}
       <Card className="mt-6 p-5">
-        <h3 className="text-sm font-semibold text-ink-900">Cost per call</h3>
-        <p className="mb-4 text-xs text-ink-500">
+        <h3 className="text-sm font-semibold text-ink">Cost per call</h3>
+        <p className="mb-4 text-xs text-ink-subtle">
           Measured from actual vendor usage over {rows.length} call{rows.length === 1 ? "" : "s"}.
         </p>
 
         {rows.length === 0 ? (
-          <p className="text-sm text-ink-500">
+          <p className="text-sm text-ink-subtle">
             No metered calls yet. Costs appear once real calls run through the voice pipeline.
           </p>
         ) : (
@@ -94,21 +94,21 @@ export default function AnalyticsPage() {
               <CostCell label="Text-to-speech" micro={totalMicro.tts} grand={grand} />
               <CostCell label="Language model" micro={totalMicro.llm} grand={grand} />
               <CostCell label="Telephony" micro={totalMicro.tel} grand={grand} />
-              <div className="rounded-lg bg-ink-100/60 p-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
+              <div className="rounded-lg bg-surface-sunken/60 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">
                   Per call
                 </p>
-                <p className="mt-1 text-xl font-semibold text-ink-900">
+                <p className="mt-1 text-xl font-semibold text-ink">
                   ₹{(grand / 1_000_000 / rows.length).toFixed(2)}
                 </p>
-                <p className="mt-0.5 text-xs text-ink-500">
+                <p className="mt-0.5 text-xs text-ink-subtle">
                   ₹{((grand / 1_000_000 / rows.length) * 100).toFixed(0)} per 100 calls
                 </p>
               </div>
             </div>
-            <p className="mt-4 text-xs text-ink-500">
+            <p className="mt-4 text-xs text-ink-subtle">
               Margin on a ₹999 Starter tier at 100 calls/month:{" "}
-              <span className="font-medium text-ink-700">
+              <span className="font-medium text-ink-muted">
                 {Math.round((1 - (grand / 1_000_000 / rows.length) * 100 / 999) * 100)}%
               </span>
             </p>
@@ -122,13 +122,13 @@ export default function AnalyticsPage() {
 function CostCell({ label, micro, grand }: { label: string; micro: number; grand: number }) {
   const pct = grand > 0 ? Math.round((micro / grand) * 100) : 0;
   return (
-    <div className="rounded-lg border border-ink-100 p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-ink-900">₹{(micro / 1_000_000).toFixed(2)}</p>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-100">
-        <div className="h-full bg-primary-600" style={{ width: `${pct}%` }} />
+    <div className="rounded-lg border border-line p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-ink">₹{(micro / 1_000_000).toFixed(2)}</p>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+        <div className="h-full bg-brand-600" style={{ width: `${pct}%` }} />
       </div>
-      <p className="mt-1 text-xs text-ink-500">{pct}% of spend</p>
+      <p className="mt-1 text-xs text-ink-subtle">{pct}% of spend</p>
     </div>
   );
 }

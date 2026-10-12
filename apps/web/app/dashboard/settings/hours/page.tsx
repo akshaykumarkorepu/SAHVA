@@ -52,8 +52,8 @@ function OperatingHours({ hours }: { hours: ReturnType<typeof useApi<Tables<"cli
 
   return (
     <Card className="p-5">
-      <h3 className="text-sm font-semibold text-ink-900">Operating hours</h3>
-      <p className="mb-4 text-xs text-ink-500">
+      <h3 className="text-sm font-semibold text-ink">Operating hours</h3>
+      <p className="mb-4 text-xs text-ink-subtle">
         When the clinic is open, independent of which doctor is sitting. The AI answers
         &ldquo;are you open?&rdquo; from here, and a call outside these hours counts as a
         recovered missed call.
@@ -64,26 +64,26 @@ function OperatingHours({ hours }: { hours: ReturnType<typeof useApi<Tables<"cli
       ) : hours.error ? (
         <ErrorState error={hours.error} onRetry={hours.reload} />
       ) : (
-        <div className="divide-y divide-ink-100 rounded-lg border border-ink-100">
+        <div className="divide-y divide-line rounded-lg border border-line">
           {DAYS.map((name, i) => {
             const blocks = byDay.get(i) ?? [];
             return (
               <div key={i} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                <span className="w-24 shrink-0 text-sm font-medium text-ink-900">{name}</span>
+                <span className="w-24 shrink-0 text-sm font-medium text-ink">{name}</span>
                 {blocks.length === 0 ? (
-                  <span className="text-sm text-ink-500">Closed</span>
+                  <span className="text-sm text-ink-subtle">Closed</span>
                 ) : (
                   <div className="flex flex-1 flex-wrap gap-2">
                     {blocks.map((b) => (
                       <span
                         key={b.id}
-                        className="inline-flex items-center gap-2 rounded-lg bg-ink-100 px-2.5 py-1 text-xs text-ink-700"
+                        className="inline-flex items-center gap-2 rounded-lg bg-surface-sunken px-2.5 py-1 text-xs text-ink-muted"
                       >
                         {b.opens_at.slice(0, 5)}–{b.closes_at.slice(0, 5)}
                         {b.label ? ` · ${b.label}` : ""}
                         <button
                           aria-label="Remove block"
-                          className="text-ink-500 hover:text-rose-600"
+                          className="text-ink-subtle hover:text-accent-rose"
                           onClick={async () => {
                             await remove.run(b.id);
                             hours.reload();
@@ -159,8 +159,8 @@ function Closures({
 
   return (
     <Card className="p-5">
-      <h3 className="text-sm font-semibold text-ink-900">Holidays and closures</h3>
-      <p className="mb-4 text-xs text-ink-500">
+      <h3 className="text-sm font-semibold text-ink">Holidays and closures</h3>
+      <p className="mb-4 text-xs text-ink-subtle">
         Sankranti, festivals, doctor travel. Slot generation subtracts these before offering any
         time, so the AI will never book a patient into a closed day.
       </p>
@@ -168,16 +168,16 @@ function Closures({
       {closures.loading ? (
         <Spinner />
       ) : (closures.data ?? []).length === 0 ? (
-        <p className="rounded-lg bg-ink-100/60 px-3 py-2.5 text-sm text-ink-500">
+        <p className="rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-sm text-ink-subtle">
           No upcoming closures.
         </p>
       ) : (
-        <div className="divide-y divide-ink-100 rounded-lg border border-ink-100">
+        <div className="divide-y divide-line rounded-lg border border-line">
           {(closures.data ?? []).map((c) => (
             <div key={c.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink-900">{c.reason}</p>
-                <p className="text-xs text-ink-500">
+                <p className="text-sm font-medium text-ink">{c.reason}</p>
+                <p className="text-xs text-ink-subtle">
                   {formatDate(`${c.starts_on}T09:00:00+05:30`)}
                   {c.ends_on !== c.starts_on && ` → ${formatDate(`${c.ends_on}T09:00:00+05:30`)}`}
                 </p>

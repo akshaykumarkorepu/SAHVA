@@ -63,14 +63,14 @@ export default function DoctorsSettingsPage() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-ink-900">{d.spoken_name}</p>
+                    <p className="text-sm font-semibold text-ink">{d.spoken_name}</p>
                     {!d.is_active && <Badge tone="neutral">Inactive</Badge>}
                   </div>
-                  <p className="mt-0.5 text-xs text-ink-500">
+                  <p className="mt-0.5 text-xs text-ink-subtle">
                     {d.full_name} · {d.specialty}
                     {d.qualifications ? ` · ${d.qualifications}` : ""}
                   </p>
-                  <p className="mt-1 text-xs text-ink-500">
+                  <p className="mt-1 text-xs text-ink-subtle">
                     {d.consult_duration_min} min · {rupees(d.consult_fee_paise)} consultation
                     {d.followup_fee_paise != null && ` · ${rupees(d.followup_fee_paise)} follow-up`}
                   </p>
@@ -232,8 +232,8 @@ function DoctorModal({
                   }
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     on
-                      ? "border-primary-600 bg-primary-50 font-medium text-primary-700"
-                      : "border-ink-300 text-ink-700 hover:bg-ink-100"
+                      ? "border-brand-600 bg-brand-50 font-medium text-brand-700"
+                      : "border-line-strong text-ink-muted hover:bg-surface-sunken"
                   }`}
                 >
                   {l.label}
@@ -276,7 +276,7 @@ function DoctorModal({
             type="color"
             value={f.colour_hex}
             onChange={(e) => setF({ ...f, colour_hex: e.target.value })}
-            className="h-10 w-20 cursor-pointer rounded-lg border border-ink-300"
+            className="h-10 w-20 cursor-pointer rounded-lg border border-line-strong"
           />
         </Field>
 
@@ -326,7 +326,7 @@ function ScheduleModal({ doctor, onClose }: { doctor: Doctor; onClose: () => voi
       }
     >
       <div className="space-y-5">
-        <p className="text-sm text-ink-500">
+        <p className="text-sm text-ink-subtle">
           Availability is computed from these blocks on every call. Add two blocks for a split
           shift.
         </p>
@@ -334,28 +334,28 @@ function ScheduleModal({ doctor, onClose }: { doctor: Doctor; onClose: () => voi
         {sessions.loading ? (
           <Spinner />
         ) : (sessions.data ?? []).length === 0 ? (
-          <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+          <p className="rounded-lg bg-accent-amber/[0.07] px-3 py-2.5 text-sm text-ink-muted">
             No sessions yet — the AI will tell callers this doctor has nothing available.
           </p>
         ) : (
-          <div className="divide-y divide-ink-100 rounded-lg border border-ink-100">
+          <div className="divide-y divide-line rounded-lg border border-line">
             {DAYS.map((name, i) => {
               const blocks = byDay.get(i) ?? [];
               if (blocks.length === 0) return null;
               return (
                 <div key={i} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                  <span className="w-24 shrink-0 text-sm font-medium text-ink-900">{name}</span>
+                  <span className="w-24 shrink-0 text-sm font-medium text-ink">{name}</span>
                   <div className="flex flex-1 flex-wrap gap-2">
                     {blocks.map((b) => (
                       <span
                         key={b.id}
-                        className="inline-flex items-center gap-2 rounded-lg bg-ink-100 px-2.5 py-1 text-xs text-ink-700"
+                        className="inline-flex items-center gap-2 rounded-lg bg-surface-sunken px-2.5 py-1 text-xs text-ink-muted"
                       >
                         {b.starts_at.slice(0, 5)}–{b.ends_at.slice(0, 5)}
                         {b.label ? ` · ${b.label}` : ""}
                         <button
                           aria-label="Remove block"
-                          className="text-ink-500 hover:text-rose-600"
+                          className="text-ink-subtle hover:text-accent-rose"
                           onClick={async () => {
                             await remove.run(b.id);
                             sessions.reload();
@@ -372,8 +372,8 @@ function ScheduleModal({ doctor, onClose }: { doctor: Doctor; onClose: () => voi
           </div>
         )}
 
-        <div className="rounded-lg border border-ink-100 p-3">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">
+        <div className="rounded-lg border border-line p-3">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-subtle">
             Add a block
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
