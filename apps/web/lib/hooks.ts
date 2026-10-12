@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, ApiError } from "./api";
 
 export type Async<T> = {
@@ -11,37 +12,32 @@ export type Async<T> = {
 };
 
 /**
- * Minimal data hook. No react-query yet — this app has a handful of screens and
- * the dependency is not earning its keep. Swap it in when caching, background
- * refetch or optimistic updates actually become the problem.
+ * Read hook over React Query, keeping the shape every screen was written
+ * against: `{ data, error, loading, reload }`.
+ *
+ * `loading` is true only while there is nothing to show yet. Background
+ * refetches — window focus, a realtime event — keep the current data on
+ * screen instead of flashing skeletons under a receptionist mid-task.
+ *
+ * `deps` become part of the cache key, so a value that changes what the path
+ * means (a date, a session) gets its own entry.
  */
-export function useApi<T>(path: string | null, deps: unknown[] = []): Async<T> {
-  const [data, setData] = React.useState<T | null>(null);
-  const [error, setError] = React.useState<ApiError | Error | null>(null);
-  const [loading, setLoading] = React.useState(path !== null);
-  const [nonce, setNonce] = React.useState(0);
+export function useApi<T>(path: string | null, deps: unknown[] = [], opts: { refetchInterval?: number } = {}): Async<T> {
+  const q = useQuery<T, ApiError | Error>({
+    queryKey: ["api", path, ...deps],
+    queryFn: () => get<T>(path as string),
+    enabled: path !== null,
+    refetchInterval: opts.refetchInterval,
+  });
+  const { refetch } = q;
+  const reload = React.useCallback(() => void refetch(), [refetch]);
 
-  React.useEffect(() => {
-    if (path === null) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    get<T>(path)
-      .then((d) => !cancelled && setData(d))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e : new Error(String(e))))
-      .finally(() => !cancelled && setLoading(false));
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, nonce, ...deps]);
-
-  return { data, error, loading, reload: () => setNonce((n) => n + 1) };
+  return {
+    data: q.data ?? null,
+    error: q.error ?? null,
+    loading: q.isLoading,
+    reload,
+  };
 }
 
 type ActionItem = { id: string; severity: string };
@@ -53,30 +49,22 @@ type ActionItem = { id: string; severity: string };
  * an interval rather than only on navigation.
  */
 export function useActionCount(): number {
-  const [count, setCount] = React.useState(0);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      get<ActionItem[]>("/actions")
-        .then((rows) => !cancelled && setCount(rows.length))
-        .catch(() => undefined);
-
-    load();
-    const id = setInterval(load, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
-
-  return count;
+  const q = useApi<ActionItem[]>("/actions", [], { refetchInterval: 60_000 });
+  return q.data?.length ?? 0;
 }
 
-/** Wraps a mutation with pending state and a typed error, for form buttons. */
+/**
+ * Wraps a mutation with pending state and a typed error, for form buttons.
+ *
+ * On success every cached read is marked stale and the ones on screen
+ * refetch. With this few screens, precise invalidation is not worth the
+ * risk of missing one — resolving an action must update the sidebar badge
+ * as well as the list it was resolved from.
+ */
 export function useMutation<TArgs extends unknown[], TResult>(
   fn: (...args: TArgs) => Promise<TResult>,
 ) {
+  const client = useQueryClient();
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<ApiError | Error | null>(null);
 
@@ -85,7 +73,9 @@ export function useMutation<TArgs extends unknown[], TResult>(
       setPending(true);
       setError(null);
       try {
-        return await fn(...args);
+        const result = await fn(...args);
+        void client.invalidateQueries({ queryKey: ["api"] });
+        return result;
       } catch (e) {
         setError(e instanceof Error ? e : new Error(String(e)));
         return null;

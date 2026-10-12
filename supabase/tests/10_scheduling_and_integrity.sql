@@ -184,3 +184,23 @@ begin
   raise notice '--- trust flow suite complete ---';
 end
 $t$;
+
+-- === 8. Realtime publication ==============================================
+do $t$
+declare v_n int;
+begin
+  select count(*) into v_n from pg_publication_tables
+   where pubname = 'supabase_realtime' and schemaname = 'public'
+     and tablename in ('appointments', 'action_items', 'messages');
+  perform pg_temp.check('appointments, action items and messages are published live', v_n = 3);
+
+  -- Realtime delivers rows through RLS. A published table without it would
+  -- broadcast every clinic's changes to every subscriber.
+  select count(*) into v_n
+    from pg_publication_tables pt
+    join pg_class c on c.relname = pt.tablename
+    join pg_namespace n on n.oid = c.relnamespace and n.nspname = pt.schemaname
+   where pt.pubname = 'supabase_realtime' and not c.relrowsecurity;
+  perform pg_temp.check('every live table has row level security', v_n = 0);
+end
+$t$;

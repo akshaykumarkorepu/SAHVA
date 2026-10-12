@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRequireSession } from "@/lib/session";
 import { useActionCount } from "@/lib/hooks";
+import { useLiveClinic, type LiveStatus } from "@/lib/live";
 import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./nav";
 import { Logo } from "./Logo";
 import { Icon } from "@/components/icons";
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { status, clinic, email, role, signOut } = useRequireSession();
   const pathname = usePathname();
   const count = useActionCount();
+  const live = useLiveClinic(clinic?.id);
   const [moreOpen, setMoreOpen] = React.useState(false);
 
   React.useEffect(() => setMoreOpen(false), [pathname]);
@@ -71,6 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
 
+            <LiveIndicator status={live} />
             <AiStatus enabled={clinic?.settings?.ai_enabled !== false} />
           </div>
         </header>
@@ -175,6 +178,25 @@ function CountPill({ count }: { count: number }) {
   return (
     <span className="grid h-5 min-w-[20px] place-items-center rounded-full bg-accent-rose px-1.5 text-[11px] font-bold text-white">
       {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+/**
+ * Whether this screen is receiving changes as they happen. Shown only when it
+ * is not — "live" is the expected state and does not need a badge, but a
+ * receptionist looking at a list that has quietly stopped updating does.
+ */
+function LiveIndicator({ status }: { status: LiveStatus }) {
+  if (status !== "reconnecting") return null;
+  return (
+    <span
+      role="status"
+      title="Live updates paused — the list may be out of date until this clears."
+      className="inline-flex shrink-0 items-center gap-2 rounded-full bg-accent-amber/10 px-2.5 py-1.5 text-xs font-medium text-accent-amber ring-1 ring-inset ring-accent-amber/20"
+    >
+      <Icon name="warning" className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Reconnecting…</span>
     </span>
   );
 }

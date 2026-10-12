@@ -347,5 +347,8 @@ export async function mockApi<T>(path: string, init: RequestInit = {}): Promise<
     // eslint-disable-next-line no-console
     console.debug(`[mock] ${method} ${path}`);
   }
-  return result as T;
+  // A copy, as a real response would be. Handing out the live fixture array
+  // means a later splice mutates data React already holds, and the cache sees
+  // the "new" result as the same reference and skips the re-render.
+  return (result === undefined ? result : structuredClone(result)) as T;
 }

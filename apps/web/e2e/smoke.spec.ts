@@ -103,3 +103,18 @@ test.describe("as a receptionist", () => {
     });
   }
 });
+
+test("resolving an action updates the nav badge without a reload", async ({ page }) => {
+  await page.goto("/dashboard/actions");
+  const badge = page.locator('a[href="/dashboard/actions"]').first();
+  await expect(page.getByRole("heading", { name: "Action Required" })).toBeVisible({ timeout: 15_000 });
+  await settle(page);
+
+  const before = Number(await badge.innerText().then((t) => t.match(/\d+/)?.[0] ?? "0"));
+  expect(before, "fixture should have open actions").toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: /resolve|done|mark/i }).first().click();
+  await expect
+    .poll(async () => Number((await badge.innerText()).match(/\d+/)?.[0] ?? "0"), { timeout: 5_000 })
+    .toBe(before - 1);
+});

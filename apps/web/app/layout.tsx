@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "sonner";
+import { QueryProvider } from "@/lib/query";
 
 /**
  * Fonts are vendored, not fetched.
@@ -45,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body className="font-sans">
-        {children}
+        <QueryProvider>{children}</QueryProvider>
         <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
