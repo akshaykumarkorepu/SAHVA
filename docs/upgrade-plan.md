@@ -224,6 +224,23 @@ patients — verify the current account model before building.
 **Exit:** a Telugu-only tester confirms an appointment on a low-end Android
 phone without help.
 
+**Status (2026-10-12): done except 3c.**
+
+- 3a: portal errors in the patient's language; "Tell family on WhatsApp"
+  without the link; today's checked-in patient no longer drops into "past".
+  New Telugu strings need a native speaker's read before a pilot.
+- 3b: the portal is guarded to scheduling tables only (test); patient pages
+  send no-store / no-referrer / noindex. A per-token scope column was not
+  needed once the guard existed.
+- 3c open: family switcher needs a decision on how one login maps to several
+  patients.
+- 3d: token numbers are now actually assigned (migration `000500`); walk-in
+  fast pass; waiting-room screen at `/display` (tokens only, "next" not "now
+  serving").
+- 3e: dosage chart (only when the prescription states timing for certain);
+  patient-side printable prescription. Staff-side print waits on a clinical
+  API.
+
 ---
 
 ## Phase 4 · Security verification — ~1 week, alongside Phases 2–3
@@ -241,6 +258,10 @@ Not left to the end.
 - **Security events:** log repeated auth failures, cross-tenant denials,
   unusual token validation volume, role changes.
 - DPDP Act applicability review written into `security.md`.
+
+**Status (2026-10-12): read audit done** (migration `000600`, fail-closed,
+owners see it, and a test fails any clinical route that skips it). Open:
+transcript retention, security-event logging, DPDP review.
 
 ---
 
