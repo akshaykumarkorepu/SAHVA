@@ -21,6 +21,10 @@ export type RescheduleBatch = Tables<"reschedule_batches"> & {
   items: (Tables<"reschedule_batch_items"> & {
     patients: Pick<Patient, "id" | "full_name" | "phone_e164" | "preferred_language"> | null;
     appointments: Pick<Appointment, "id" | "starts_at" | "status"> | null;
+    /** The replacement, once the patient has been rebooked. */
+    new_appointment: Pick<Appointment, "id" | "starts_at"> | null;
+    /** The message actually created for this patient, if any ever was. */
+    message: Pick<Tables<"messages">, "status" | "sent_at" | "delivered_at" | "failed_at" | "error_code"> | null;
   })[];
 };
 

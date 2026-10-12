@@ -137,3 +137,34 @@ test("overview: check a patient in from the side panel", async ({ page }) => {
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("reschedule batch: approve, rebook one, mark one unreachable, and it closes", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/actions/batch/44444444-4444-4444-8444-444444444401");
+  await expect(page.getByText("Nothing has been sent, and nobody has been cancelled.")).toBeVisible({ timeout: 15_000 });
+  // No contact controls before approval.
+  await expect(page.getByRole("button", { name: "Rebook" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Approve rescheduling 2/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText(/does not send WhatsApp messages yet/)).toBeVisible();
+
+  // Toasts are <li> too; "Was" only appears on a patient card.
+  const first = page.locator("li", { hasText: "Srinivas Rao" }).filter({ hasText: "Was" });
+  await first.getByRole("button", { name: "Rebook" }).click();
+  const slots = page.getByRole("dialog").getByRole("button", { name: /^\d{1,2}:\d{2} (am|pm)$/ });
+  await expect(slots.first()).toBeVisible();
+  // The doctor is on leave 9:00–13:00; nothing in that window may be offered.
+  for (const label of await slots.allInnerTexts()) {
+    expect(label, "slot inside the leave window").not.toMatch(/^(9|10|11|12):\d{2} am$|^12:\d{2} pm$/);
+  }
+  await slots.first().click();
+  await expect(first).toContainText("Rebooked");
+  await expect(first).toContainText("No message");
+
+  const second = page.locator("li", { hasText: "Priya Sharma" }).filter({ hasText: "Was" });
+  await second.getByRole("button", { name: "Couldn’t reach" }).click();
+  await expect(page.getByText("Every patient has been handled.")).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});

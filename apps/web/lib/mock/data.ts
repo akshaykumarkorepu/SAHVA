@@ -428,7 +428,10 @@ export const actionItems = [
   },
 ];
 
-/** Widened where the mock mutates it, so dispatch can set these. */
+/**
+ * Same columns as public.reschedule_batch_items plus the API's embeds.
+ * Widened (string status) where the mock mutates it.
+ */
 export type RescheduleBatchItem = {
   id: string;
   batch_id: string;
@@ -436,10 +439,17 @@ export type RescheduleBatchItem = {
   appointment_id: string;
   patient_id: string;
   status: string;
-  notified_at: string | null;
-  rebooked_appointment_id: string | null;
+  new_appointment_id: string | null;
+  message_id: string | null;
+  attempts: number;
+  last_error: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
   patients: ReturnType<typeof patientBrief>;
   appointments: { id: string; starts_at: string; status: string };
+  new_appointment: { id: string; starts_at: string } | null;
+  message: { status: string; sent_at: string | null; delivered_at: string | null; failed_at: string | null; error_code: string | null } | null;
 };
 
 export type RescheduleBatch = {
@@ -489,8 +499,15 @@ export const rescheduleBatch: RescheduleBatch = {
       appointment_id: "66666666-6666-4666-8666-666666666601",
       patient_id: PT_SRINIVAS,
       status: "pending",
-      notified_at: null,
-      rebooked_appointment_id: null,
+      new_appointment_id: null,
+      message_id: null,
+      attempts: 0,
+      last_error: null,
+      resolved_at: null,
+      created_at: at(0, "08:12"),
+      updated_at: at(0, "08:12"),
+      new_appointment: null,
+      message: null,
       patients: patientBrief(PT_SRINIVAS),
       appointments: {
         id: "66666666-6666-4666-8666-666666666601",
@@ -505,8 +522,15 @@ export const rescheduleBatch: RescheduleBatch = {
       appointment_id: "66666666-6666-4666-8666-666666666602",
       patient_id: PT_PRIYA,
       status: "pending",
-      notified_at: null,
-      rebooked_appointment_id: null,
+      new_appointment_id: null,
+      message_id: null,
+      attempts: 0,
+      last_error: null,
+      resolved_at: null,
+      created_at: at(0, "08:12"),
+      updated_at: at(0, "08:12"),
+      new_appointment: null,
+      message: null,
       patients: patientBrief(PT_PRIYA),
       appointments: {
         id: "66666666-6666-4666-8666-666666666602",
@@ -915,22 +939,32 @@ export function analyticsCosts(days: number) {
 }
 
 /** Availability for the booking dialog — three free slots, always live. */
+/**
+ * Free slots, morning and late afternoon, minus the doctor's time off — as
+ * get_available_slots does. Without that, the reschedule screen offered
+ * patients new times inside the very leave they were being moved out of.
+ */
 export function availability(doctorId: string, date: string) {
   const d = doctors.find((x) => x.id === doctorId);
   const dur = d?.consult_duration_min ?? 15;
+  const off = doctorTimeOff.filter((t) => t.doctor_id === doctorId);
   const out = [];
-  for (let i = 0; i < 6; i += 1) {
-    const startMin = 10 * 60 + i * dur;
-    const hh = String(Math.floor(startMin / 60)).padStart(2, "0");
-    const mm = String(startMin % 60).padStart(2, "0");
-    const endMin = startMin + dur;
-    const eh = String(Math.floor(endMin / 60)).padStart(2, "0");
-    const em = String(endMin % 60).padStart(2, "0");
-    out.push({
-      slot_start: new Date(`${date}T${hh}:${mm}:00+05:30`).toISOString(),
-      slot_end: new Date(`${date}T${eh}:${em}:00+05:30`).toISOString(),
-      remaining: 1,
-    });
+  for (const [fromMin, count] of [
+    [10 * 60, 6],
+    [16 * 60, 4],
+  ]) {
+    for (let i = 0; i < count; i += 1) {
+      const startMin = fromMin + i * dur;
+      const hh = String(Math.floor(startMin / 60)).padStart(2, "0");
+      const mm = String(startMin % 60).padStart(2, "0");
+      const endMin = startMin + dur;
+      const eh = String(Math.floor(endMin / 60)).padStart(2, "0");
+      const em = String(endMin % 60).padStart(2, "0");
+      const start = new Date(`${date}T${hh}:${mm}:00+05:30`);
+      const end = new Date(`${date}T${eh}:${em}:00+05:30`);
+      const blocked = off.some((t) => start < new Date(t.ends_at) && end > new Date(t.starts_at));
+      if (!blocked) out.push({ slot_start: start.toISOString(), slot_end: end.toISOString(), remaining: 1 });
+    }
   }
   return out;
 }

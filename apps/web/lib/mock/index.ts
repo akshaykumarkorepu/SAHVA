@@ -13,6 +13,7 @@
  * an appointment behaves the way it will against the real API — until reload.
  */
 import * as d from "./data";
+import { ApiError } from "../api";
 
 export { isMockMode } from "./flag";
 
@@ -52,6 +53,19 @@ function mockRole(): string {
     return localStorage.getItem("sahva.mock.role") ?? d.me.role;
   } catch {
     return d.me.role;
+  }
+}
+
+/** Mirrors sahva.sync_batch_progress: counts come from the items. */
+function syncBatch() {
+  const told = batch.items.filter((it) => it.status === "notified" || it.status === "rebooked").length;
+  const rebooked = batch.items.filter((it) => it.status === "rebooked").length;
+  const open = batch.items.filter((it) => it.status === "pending" || it.status === "notified").length;
+  batch = { ...batch, notified_count: told, rebooked_count: rebooked };
+  if (open === 0 && batch.status === "notifying") {
+    batch = { ...batch, status: "completed" };
+    const i = actionItems.findIndex((a) => a.related_batch_id === batch.id);
+    if (i >= 0) actionItems.splice(i, 1);
   }
 }
 
@@ -111,21 +125,26 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   }
   if (method === "GET" && seg[0] === "actions" && seg[1] === "batches" && seg[2]) return batch;
   if (method === "POST" && seg[0] === "actions" && seg[1] === "batches" && seg[3] === "dispatch") {
-    // The real table's reschedule_batches_human_dispatch CHECK requires both
-    // dispatched_at and dispatched_by, so set both rather than half the pair.
+    // Approval only. The real API moves the batch to 'notifying' and sends
+    // nothing — no worker exists — so the mock must not pretend patients were
+    // told. It used to mark every one "notified" on the spot.
+    if (batch.status !== "draft") throw new ApiError(400, "BATCH_NOT_DRAFT", `Batch is already ${batch.status}.`);
     const now = new Date().toISOString();
-    batch = {
-      ...batch,
-      status: "dispatched",
-      notified_count: batch.total_affected,
-      dispatched_at: now,
-      dispatched_by: d.me.user_id,
-      updated_at: now,
-      items: batch.items.map((it) => ({ ...it, status: "notified", notified_at: now })),
-    };
-    const i = actionItems.findIndex((a) => a.related_batch_id === seg[2]);
-    if (i >= 0) actionItems.splice(i, 1);
+    batch = { ...batch, status: "notifying", dispatched_at: now, dispatched_by: d.me.user_id, updated_at: now };
+    syncBatch();
     return batch;
+  }
+  if (method === "POST" && seg[0] === "actions" && seg[1] === "batch-items" && seg[3] === "status") {
+    // Mirrors sahva.guard_batch_item_contact.
+    if (batch.status === "draft") {
+      throw new ApiError(400, "CONSTRAINT_VIOLATED", "That change is not allowed.",
+        "Approve this reschedule batch before recording contact with patients");
+    }
+    const item = batch.items.find((it) => it.id === seg[2]);
+    if (!item) throw new MockNotFound(pathname);
+    item.status = String(b.status) as typeof item.status;
+    syncBatch();
+    return item;
   }
 
   // ---- appointments ------------------------------------------------------
@@ -165,6 +184,22 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     };
     appointments.unshift(row);
     return row;
+  }
+  if (method === "POST" && seg[0] === "appointments" && seg[2] === "reschedule") {
+    // Mirrors reschedule_appointment plus the trigger that links the rebook
+    // back to its batch item.
+    const item = batch.items.find((it) => it.appointment_id === seg[1]);
+    if (item?.status === "rebooked") {
+      throw new ApiError(409, "INVALID_STATE", "Appointment is already cancelled");
+    }
+    const created = { id: crypto.randomUUID(), starts_at: String(b.new_starts_at) };
+    if (item) {
+      item.status = "rebooked";
+      item.new_appointment_id = created.id;
+      item.new_appointment = created;
+      syncBatch();
+    }
+    return created;
   }
   if (method === "POST" && seg[0] === "appointments" && seg[2] === "status") {
     // Mirrors set_appointment_status: front-desk changes only, and never on a
