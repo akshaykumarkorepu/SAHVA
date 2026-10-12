@@ -322,6 +322,12 @@ function useAuthAvailability() {
   return { ok: true as const, reason: null };
 }
 
+/**
+ * Off unless the Google provider is configured in Supabase. A button that
+ * leads to "provider is not enabled" is worse than no button.
+ */
+const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "1";
+
 async function signInWithGoogle(next: string) {
   await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -360,6 +366,12 @@ function SignInForm({
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     setPending(false);
     if (authError) {
+      // A lockout is not a typo. Telling someone to recheck a password they
+      // typed correctly just burns more attempts against the limit.
+      if (authError.status === 429) {
+        setError("Too many attempts. Wait a few minutes, then try again.");
+        return;
+      }
       // Not distinguishing "no such account" from "wrong password" — that
       // difference tells an attacker which emails are registered.
       setError("That email and password did not match.");
@@ -374,10 +386,12 @@ function SignInForm({
       <RoleToggle role={role} setRole={setRole} />
 
       {avail.ok ? (
-        <>
-          <GoogleButton onClick={() => void signInWithGoogle(next)} />
-          <Divider>or</Divider>
-        </>
+        GOOGLE_ENABLED && (
+          <>
+            <GoogleButton onClick={() => void signInWithGoogle(next)} />
+            <Divider>or</Divider>
+          </>
+        )
       ) : avail.reason === "mock" ? (
         <Alert tone="info">
           Mock mode — fixtures only, no sign-in. Continue to see the{" "}
@@ -493,7 +507,11 @@ function SignUpForm({
     });
     setPending(false);
     if (authError) {
-      setError(authError.message);
+      setError(
+        authError.status === 429
+          ? "Too many sign-up attempts. Wait a few minutes, then try again."
+          : authError.message,
+      );
       return;
     }
     setSent(true);
@@ -530,10 +548,12 @@ function SignUpForm({
       ) : (
         <>
           {avail.ok ? (
-            <>
-              <GoogleButton onClick={() => void signInWithGoogle(next)} />
-              <Divider>or</Divider>
-            </>
+            GOOGLE_ENABLED && (
+              <>
+                <GoogleButton onClick={() => void signInWithGoogle(next)} />
+                <Divider>or</Divider>
+              </>
+            )
           ) : avail.reason === "mock" ? (
             <Alert tone="info">Mock mode — fixtures only. Continue to the patient record.</Alert>
           ) : (

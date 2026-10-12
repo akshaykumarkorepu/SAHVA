@@ -156,6 +156,10 @@ begin
    where related_batch_id = v_batch.id and type = 'reschedule_needed';
   perform pg_temp.check('an Action Required item was raised', v_item.id is not null);
   perform pg_temp.check('action item is open', v_item.status = 'open');
+  perform pg_temp.check('action item times are clinic-local, not raw UTC',
+    v_item.description !~ '\+00' and v_item.description ~ '(AM|PM)');
+  perform pg_temp.check('doctor named once, not "Dr Dr"',
+    v_item.title !~ 'Dr Dr' and v_item.description !~ 'Dr Dr');
 
   select count(*) into v_n from public.reschedule_batch_items where batch_id = v_batch.id;
   perform pg_temp.check('every affected patient is tracked as a batch item', v_n = v_batch.total_affected);
