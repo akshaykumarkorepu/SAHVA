@@ -2,7 +2,7 @@
   "name": "sahva",
   "version": "0.1.0",
   "private": true,
-  "description": "SAHVA \u2014 Telugu-and-English AI receptionist for Tier 2/3 clinics.",
+  "description": "SAHVA — Telugu-and-English AI receptionist for Tier 2/3 clinics.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -17,7 +17,8 @@
     "gen:types": "python3 scripts/gen-types.py > packages/types/database.ts",
     "test:db": "./supabase/tests/run.sh",
     "test": "npm run test -w apps/api",
-    "test:api": "npm run test -w apps/api"
+    "test:api": "npm run test -w apps/api",
+    "lint": "npm run lint -w apps/web"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

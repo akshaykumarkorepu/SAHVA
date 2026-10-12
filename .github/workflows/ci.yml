@@ -60,7 +60,7 @@ jobs:
       - run: npm test
 
   typecheck:
-    name: TypeScript
+    name: TypeScript, lint and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,4 +71,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build

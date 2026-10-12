@@ -96,6 +96,7 @@ const config: Config = {
           "100%": { opacity: "0" },
         },
         marquee: { from: { transform: "translateX(0)" }, to: { transform: "translateX(-50%)" } },
+        wave: { "0%, 100%": { transform: "scaleY(.35)" }, "50%": { transform: "scaleY(1)" } },
       },
       animation: {
         "fade-up": "fade-up .45s cubic-bezier(.22,1,.36,1) both",
@@ -106,6 +107,7 @@ const config: Config = {
         shimmer: "shimmer 1.8s infinite",
         "pulse-ring": "pulse-ring 2s cubic-bezier(.24,.6,.35,1) infinite",
         marquee: "marquee 28s linear infinite",
+        wave: "wave .9s ease-in-out infinite",
       },
       transitionTimingFunction: {
         spring: "cubic-bezier(.22,1,.36,1)",

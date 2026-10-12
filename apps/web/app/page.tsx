@@ -157,27 +157,32 @@ function Hero() {
   );
 }
 
+/** Scripted, not live — the landing page never touches the API. */
+const CONVERSATION = [
+  { side: "left" as const, text: "నమస్తే, శ్రీ సాయి క్లినిక్. నేను మాయ. మీకు ఎలా సహాయం చేయగలను?", lang: "te", delay: 2000 },
+  { side: "right" as const, text: "డాక్టర్ అనిత గారిని కలవాలి", lang: "te", delay: 2000 },
+  { side: "left" as const, text: "రేపు ఉదయం 10:00 లేదా 10:30 ఖాళీ ఉంది. ఏది అనుకూలం?", lang: "te", delay: 2000 },
+  { side: "right" as const, text: "10 o'clock fine. Ravi Kumar, 98765 43210", lang: "en", delay: 2000 },
+];
+
+// Fixed rather than random: Math.random() in render differs between server
+// and client and breaks hydration.
+const WAVE_HEIGHTS = [45, 80, 60, 95, 50];
+
 function CallDemo() {
   const [step, setStep] = React.useState(0);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
 
-  const conversation = [
-    { side: "left" as const, text: "నమస్తే, శ్రీ సాయి క్లినిక్. నేను మాయ. మీకు ఎలా సహాయం చేయగలను?", lang: "te", delay: 2000 },
-    { side: "right" as const, text: "డాక్టర్ అనిత గారిని కలవాలి", lang: "te", delay: 2000 },
-    { side: "left" as const, text: "రేపు ఉదయం 10:00 లేదా 10:30 ఖాళీ ఉంది. ఏది అనుకూలం?", lang: "te", delay: 2000 },
-    { side: "right" as const, text: "10 o'clock fine. Ravi Kumar, 98765 43210", lang: "en", delay: 2000 },
-  ];
-
   React.useEffect(() => {
-    if (step >= conversation.length) {
+    if (step >= CONVERSATION.length) {
       const timer = setTimeout(() => setStep(0), 5000);
       return () => clearTimeout(timer);
     }
 
-    setIsSpeaking(conversation[step].side === "left");
+    setIsSpeaking(CONVERSATION[step].side === "left");
     const timer = setTimeout(() => {
       setStep(s => s + 1);
-    }, conversation[step].delay);
+    }, CONVERSATION[step].delay);
 
     return () => clearTimeout(timer);
   }, [step]);
@@ -198,18 +203,18 @@ function CallDemo() {
       </div>
 
       <div className="space-y-4 min-h-[300px] flex flex-col justify-end">
-        {conversation.slice(0, step).map((msg, i) => (
+        {CONVERSATION.slice(0, step).map((msg, i) => (
           <Bubble key={i} side={msg.side} lang={msg.lang} text={msg.text} />
         ))}
 
-        {isSpeaking && step < conversation.length && (
+        {isSpeaking && step < CONVERSATION.length && (
           <div className="flex justify-start items-center gap-3 animate-fade-in">
             <div className="flex items-end gap-1 h-4">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {WAVE_HEIGHTS.map((h, i) => (
                 <span
                   key={i}
                   className="w-0.5 bg-brand-500 rounded-full animate-wave"
-                  style={{ animationDelay: `${i * 0.1}s`, height: `${Math.random() * 100 + 20}%` }}
+                  style={{ animationDelay: `${i * 0.1}s`, height: `${h}%` }}
                 />
               ))}
             </div>
@@ -218,7 +223,7 @@ function CallDemo() {
         )}
       </div>
 
-      {step === conversation.length && (
+      {step === CONVERSATION.length && (
         <div className="mt-6 animate-scale-in flex items-center gap-3 rounded-2xl border border-brand-600/20 bg-brand-500/10 p-4">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-on-brand">
             <Icon name="check" className="h-5 w-5" />
@@ -259,7 +264,7 @@ function ProblemSection() {
       <div className="mx-auto max-w-6xl px-5">
         <div className="text-center max-w-2xl mx-auto mb-16">
           <h2 className="font-display text-display-lg text-ink">The cost of silence.</h2>
-          <p className="mt-4 text-lg text-ink-muted">A missed call isn't just a notification—it's a patient moving to the next clinic on their list.</p>
+          <p className="mt-4 text-lg text-ink-muted">A missed call isn’t just a notification—it’s a patient moving to the next clinic on their list.</p>
         </div>
         <div className="grid gap-8 md:grid-cols-3">
           {[
