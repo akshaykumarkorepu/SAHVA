@@ -2,11 +2,19 @@
 
 import type { Appointment, Doctor, Patient } from "@/lib/types";
 import { useApi } from "@/lib/hooks";
-import { useSession } from "@/lib/session";
+import { useCanAdminister, useSession } from "@/lib/session";
 import { appointmentStatus, formatDateTime, formatPhone, LANGUAGE_LABEL } from "@/lib/format";
 import { summarise } from "@/lib/patient-summary";
 import { Badge, Button, ErrorState, LoadingRows, Modal, cn } from "@/components/ui";
 import { Icon } from "@/components/icons";
+
+type AccessRow = {
+  id: string;
+  actor_type: "staff" | "patient";
+  actor_name: string;
+  record_type: "medical_record" | "patient_profile";
+  accessed_at: string;
+};
 
 type Detail = Patient & {
   appointments: (Appointment & { doctors: Pick<Doctor, "spoken_name" | "specialty"> | null })[];
@@ -34,6 +42,8 @@ export function PatientQuickView({
   const { clinic } = useSession();
   const tz = clinic?.timezone;
   const q = useApi<Detail>(`/patients/${patientId}`, [patientId]);
+  const canAudit = useCanAdminister();
+  const log = useApi<AccessRow[]>(canAudit ? `/patients/${patientId}/access-log` : null, [patientId, canAudit]);
   const p = q.data;
   const s = summarise(p?.appointments ?? []);
   const others = family.filter((f) => f.id !== patientId);
@@ -103,6 +113,34 @@ export function PatientQuickView({
               </ul>
             )}
           </section>
+
+          {canAudit && (
+            <section>
+              <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                Who opened this record
+              </h4>
+              {log.loading ? (
+                <LoadingRows rows={1} />
+              ) : (log.data ?? []).length === 0 ? (
+                <p className="text-sm text-ink-muted">Nobody yet.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {(log.data ?? []).slice(0, 8).map((r) => (
+                    <li key={r.id} className="flex justify-between gap-3">
+                      <span className="truncate text-ink">
+                        {r.actor_name}
+                        <span className="text-ink-subtle">
+                          {" "}
+                          · {r.record_type === "medical_record" ? "medical record" : "profile"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs text-ink-subtle">{formatDateTime(r.accessed_at, tz)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {others.length > 0 && (
             <section>

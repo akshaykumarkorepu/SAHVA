@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { recordAccess } from "../lib/audit.js";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requirePatientAuth } from "../middleware/patientAuth.js";
@@ -139,6 +140,7 @@ patientAccount.get(
   "/me/medical",
   asyncRoute(async (req, res) => {
     const { db, patientId } = req.patient!;
+    await recordAccess(db, req, patientId, "medical_record");
 
     const [history, prescriptions, conditions, vaccinations] = await Promise.all([
       db

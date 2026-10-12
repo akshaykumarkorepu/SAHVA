@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { recordAccess } from "../lib/audit.js";
+import { requireRole } from "../middleware/auth.js";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { dbAdmin } from "../lib/supabase.js";
@@ -46,6 +48,7 @@ patients.get(
   validate({ params: z.object({ id: uuid }) }),
   asyncRoute(async (req, res) => {
     const { db } = req.auth!;
+    await recordAccess(db, req, req.params.id, "patient_profile");
     const [patient, appts] = await Promise.all([
       db.from("patients").select("*").eq("id", req.params.id).single(),
       db
@@ -56,6 +59,40 @@ patients.get(
         .limit(50),
     ]);
     res.json({ ...unwrap(patient, "patient"), appointments: appts.data ?? [] });
+  }),
+);
+
+/**
+ * Who has opened this patient's record, most recent first. Owners and
+ * managers only — enforced here and again by RLS on record_access_log.
+ */
+patients.get(
+  "/:id/access-log",
+  requireRole("owner", "manager"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const rows = unwrap(
+      await db
+        .from("record_access_log")
+        .select("id, actor_type, actor_user_id, record_type, accessed_at")
+        .eq("patient_id", req.params.id)
+        .order("accessed_at", { ascending: false })
+        .limit(20),
+      "access log",
+    );
+    // Names for the staff who appear, resolved in one query.
+    const staffIds = [...new Set(rows.filter((r) => r.actor_type === "staff").map((r) => r.actor_user_id))];
+    const names = staffIds.length
+      ? unwrap(await db.from("staff_profiles").select("id, full_name").in("id", staffIds), "staff")
+      : [];
+    const byId = new Map(names.map((n) => [n.id, n.full_name]));
+    res.json(
+      rows.map((r) => ({
+        ...r,
+        actor_name: r.actor_type === "patient" ? "The patient" : byId.get(r.actor_user_id) ?? "A staff member",
+      })),
+    );
   }),
 );
 

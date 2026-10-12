@@ -101,10 +101,33 @@ clinics and asserts, among others:
 - nobody, at any role, can hand-write the audit log
 - `anon` cannot read patient data
 
+Later suites add:
+
+- `23_appointment_status` — front-desk status changes land in the audit log
+  naming the staff member, and cannot be made across clinics
+- `24_batch_progress` — no patient contact is recorded before a reschedule is
+  approved, and an appointment cannot be rebooked twice
+- `26_record_access_log` — every read of a medical record or patient profile
+  is logged with who read it; a patient cannot log or read anyone else's; staff
+  of another clinic are refused; only owners and managers can see the log; it
+  cannot be written directly, updated or deleted
+
+## Reads are audited
+
+`GET /me/medical` and `GET /patients/:id` call `log_record_access()` before
+returning anything. The function derives the reader from the session — staff
+of that patient's clinic, or the patient's own account — so the API cannot
+record a read against someone else. If the log write fails, the read is
+refused (503): an unaudited read of health data is worse than a retry. Owners
+and managers see the last reads in the patient quick view.
+
+Portal links do not reach clinical tables at all (`test/portal-scope.test.ts`),
+so they are not in this log; their use is counted on `patient_access_tokens`.
+
 ## Not yet addressed
 
-- **Audit of reads.** Writes are logged; who *viewed* a patient record is not.
-  Medical record regulations may require this.
+- **Audit of reads beyond these two routes.** Any new route that returns
+  clinical data must call `recordAccess` first. Nothing enforces that yet.
 - **Encryption at rest beyond Supabase defaults.** No column-level encryption
   on phone numbers or clinical notes.
 - **Rate limiting.** Nothing here stops a compromised account enumerating its

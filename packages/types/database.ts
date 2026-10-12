@@ -2134,6 +2134,54 @@ export type Database = {
           },
         ];
       };
+      record_access_log: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          patient_id: string;
+          actor_type: Database["public"]["Enums"]["actor_type"];
+          actor_user_id: string;
+          record_type: string;
+          request_id: string | null;
+          accessed_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          patient_id: string;
+          actor_type: Database["public"]["Enums"]["actor_type"];
+          actor_user_id: string;
+          record_type: string;
+          request_id?: string | null;
+          accessed_at?: string;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          patient_id?: string;
+          actor_type?: Database["public"]["Enums"]["actor_type"];
+          actor_user_id?: string;
+          record_type?: string;
+          request_id?: string | null;
+          accessed_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "record_access_log_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "record_access_log_patient_id_clinic_id_fkey";
+            columns: ["patient_id", "clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id", "clinic_id"];
+          },
+        ];
+      };
       reschedule_batch_items: {
         Row: {
           id: string;
@@ -2782,6 +2830,14 @@ export type Database = {
           p_date: string;
         };
         Returns: { slot_start: string; slot_end: string; remaining: number }[];
+      };
+      log_record_access: {
+        Args: {
+          p_patient_id: string;
+          p_record_type: string;
+          p_request_id?: string;
+        };
+        Returns: undefined;
       };
       reschedule_appointment: {
         Args: {

@@ -365,3 +365,20 @@ test("patient record: a prescription prints on its own, without the page's butto
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("patient quick view: owners see who opened the record; receptionists do not", async ({ page }) => {
+  await page.goto("/dashboard/patients");
+  await page.getByRole("button", { name: "Lakshmi Devi", exact: true }).click({ timeout: 15_000 });
+  const panel = page.getByRole("dialog", { name: "Lakshmi Devi" });
+  await expect(panel).toContainText("Who opened this record");
+  await expect(panel).toContainText("The patient");
+});
+
+test("as a receptionist, the record access log is not shown", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sahva.mock.role", "receptionist"));
+  await page.goto("/dashboard/patients");
+  await page.getByRole("button", { name: "Lakshmi Devi", exact: true }).click({ timeout: 15_000 });
+  const panel = page.getByRole("dialog", { name: "Lakshmi Devi" });
+  await expect(panel).toContainText("Coming up");
+  await expect(panel).not.toContainText("Who opened this record");
+});

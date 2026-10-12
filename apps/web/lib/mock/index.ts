@@ -322,6 +322,13 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       : d.patients;
     return paged(rows, query);
   }
+  if (method === "GET" && seg[0] === "patients" && seg[2] === "access-log") {
+    // As the API returns it: names resolved, newest first.
+    return [
+      { id: "al-1", actor_type: "staff", actor_name: "Geeta", record_type: "patient_profile", accessed_at: new Date().toISOString() },
+      { id: "al-2", actor_type: "patient", actor_name: "The patient", record_type: "medical_record", accessed_at: new Date(Date.now() - 864e5).toISOString() },
+    ];
+  }
   if (method === "GET" && seg[0] === "patients" && seg.length === 2 && seg[1] !== "by-phone") {
     // Same shape as GET /patients/:id: the patient plus their appointments.
     const p = d.patients.find((x) => x.id === seg[1]);
