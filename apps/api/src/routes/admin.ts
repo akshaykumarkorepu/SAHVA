@@ -37,20 +37,24 @@ admin.post(
 admin.get(
   "/overview",
   asyncRoute(async (_req, res) => {
-    const [clinics, subs, payments, plan] = await Promise.all([
+    const [clinics, subs, payments, plan, exceptions, queue] = await Promise.all([
       dbAdmin.from("clinics").select("created_at"),
       dbAdmin.from("subscriptions").select("clinic_id, status, billing_cycle, current_period_end, trial_ends_at"),
       dbAdmin.from("subscription_payments").select("amount_paise, paid_at, status"),
       dbAdmin.from("plans").select("monthly_price_paise, yearly_price_paise").eq("code", "starter").single(),
+      dbAdmin.from("payment_exceptions").select("id", { count: "exact", head: true }).eq("status", "open"),
+      dbAdmin.from("clinics").select("id", { count: "exact", head: true }).in("verification_status", ["submitted", "under_review"]),
     ]);
-    res.json(
-      overview({
+    res.json({
+      ...overview({
         clinics: unwrap(clinics, "clinics"),
         subs: unwrap(subs, "subscriptions"),
         payments: unwrap(payments, "payments"),
         price: unwrap(plan, "plan"),
       }),
-    );
+      openPaymentExceptions: exceptions.count ?? 0,
+      applicationsWaiting: queue.count ?? 0,
+    });
   }),
 );
 

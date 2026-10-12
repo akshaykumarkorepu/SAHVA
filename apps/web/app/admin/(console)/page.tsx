@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useApi } from "@/lib/hooks";
 import { inr } from "@/lib/pricing";
 import { ErrorState, PageHeader, Skeleton } from "@/components/ui";
@@ -18,6 +19,8 @@ type Overview = {
   arrPaise: number;
   collectedThisMonthPaise: number;
   paymentsThisMonth: number;
+  openPaymentExceptions: number;
+  applicationsWaiting: number;
 };
 
 /** The business at a glance. Figures come from /api/admin/overview. */
@@ -38,6 +41,20 @@ export default function AdminOverview() {
         </div>
       ) : (
         <div className="space-y-8">
+          {(o.applicationsWaiting > 0 || o.openPaymentExceptions > 0) && (
+            <section className="grid gap-3 sm:grid-cols-2">
+              {o.applicationsWaiting > 0 && (
+                <Link href="/admin/applications" className="rounded-2xl border border-accent-sky/30 bg-accent-sky/[0.06] p-4 text-sm text-ink hover:bg-accent-sky/10">
+                  <strong>{o.applicationsWaiting}</strong> clinic{o.applicationsWaiting === 1 ? "" : "s"} waiting for verification →
+                </Link>
+              )}
+              {o.openPaymentExceptions > 0 && (
+                <Link href="/admin/payments" className="rounded-2xl border border-accent-amber/30 bg-accent-amber/[0.08] p-4 text-sm text-ink hover:bg-accent-amber/15">
+                  <strong>{o.openPaymentExceptions}</strong> payment problem{o.openPaymentExceptions === 1 ? "" : "s"} to look at →
+                </Link>
+              )}
+            </section>
+          )}
           <section>
             <h2 className="mb-3 text-sm font-semibold text-ink">Revenue</h2>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

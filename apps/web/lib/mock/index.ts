@@ -128,6 +128,20 @@ function adminClinics() {
     is_live: c.verification_status === "approved" && (!c.current_period_end || new Date(c.current_period_end).getTime() + 3 * day > Date.now()),
   }));
 }
+/** Payments as the admin ledger shows them, with one duplicate to deal with. */
+const ledger = [
+  { id: "l1", clinic_id: "a0000000-0000-4000-8000-000000000001", billing_cycle: "yearly", amount_paise: 999900, captured_paise: 999900 as number | null, refunded_paise: 0, status: "paid", razorpay_order_id: "order_mock_y1", razorpay_payment_id: "pay_mock_y1" as string | null, period_start: new Date(Date.now() - 20 * day).toISOString(), period_end: new Date(Date.now() + 345 * day).toISOString(), created_at: new Date(Date.now() - 20 * day).toISOString(), paid_at: new Date(Date.now() - 20 * day).toISOString() as string | null, clinics: { name: "Sri Sai Clinic", city: "Warangal" } },
+  { id: "l2", clinic_id: "a0000000-0000-4000-8000-000000000002", billing_cycle: "monthly", amount_paise: 199900, captured_paise: 199900, refunded_paise: 0, status: "paid", razorpay_order_id: "order_mock_m1", razorpay_payment_id: "pay_mock_m1", period_start: new Date(Date.now() - 2 * day).toISOString(), period_end: new Date(Date.now() + 28 * day).toISOString(), created_at: new Date(Date.now() - 2 * day).toISOString(), paid_at: new Date(Date.now() - 2 * day).toISOString(), clinics: { name: "Krishna Clinic", city: "Karimnagar" } },
+  { id: "l3", clinic_id: "a0000000-0000-4000-8000-000000000002", billing_cycle: "monthly", amount_paise: 199900, captured_paise: 199900, refunded_paise: 0, status: "paid", razorpay_order_id: "order_mock_m2", razorpay_payment_id: "pay_mock_m2", period_start: new Date(Date.now() + 28 * day).toISOString(), period_end: new Date(Date.now() + 58 * day).toISOString(), created_at: new Date(Date.now() - 2 * day + 600e3).toISOString(), paid_at: new Date(Date.now() - 2 * day + 600e3).toISOString(), clinics: { name: "Krishna Clinic", city: "Karimnagar" } },
+  { id: "l4", clinic_id: "a0000000-0000-4000-8000-000000000003", billing_cycle: "monthly", amount_paise: 199900, captured_paise: null, refunded_paise: 0, status: "created", razorpay_order_id: "order_mock_open", razorpay_payment_id: null, period_start: null, period_end: null, created_at: new Date(Date.now() - 3 * 3600e3).toISOString(), paid_at: null, clinics: { name: "Lotus Clinic", city: "Nizamabad" } },
+];
+const paymentExceptions = [
+  { id: "e1", kind: "duplicate_payment", status: "open", clinic_id: "a0000000-0000-4000-8000-000000000002", razorpay_payment_id: "pay_mock_m2", razorpay_order_id: "order_mock_m2", amount_paise: 199900 as number | null, details: { note: "Another payment for this subscription was made in the last 30 minutes" } as Record<string, unknown>, detected_at: new Date(Date.now() - 2 * day + 600e3).toISOString(), resolution: null as string | null, clinics: { name: "Krishna Clinic" } },
+];
+const paymentEvents: { id: string; event_type: string | null; signature_ok: boolean; razorpay_payment_id: string | null; razorpay_order_id: string | null; amount_paise: number | null; outcome: string | null; received_at: string }[] = [
+  { id: "ev1", event_type: "payment.captured", signature_ok: true, razorpay_payment_id: "pay_mock_m2", razorpay_order_id: "order_mock_m2", amount_paise: 199900, outcome: "activated", received_at: new Date(Date.now() - 2 * day + 600e3).toISOString() },
+  { id: "ev2", event_type: null, signature_ok: false, razorpay_payment_id: null, razorpay_order_id: null, amount_paise: null, outcome: "rejected: bad signature", received_at: new Date(Date.now() - day).toISOString() },
+];
 const adminNotes: { id: string; clinic_id: string; body: string; created_at: string; platform_admins: { full_name: string } }[] = [];
 const applicationHistory: { id: string; target_id: string; action: string; reason: string | null; created_at: string; platform_admins: { full_name: string } }[] = [];
 const clinicDocuments: Record<string, unknown>[] = [];
@@ -508,6 +522,8 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       payingMonthly: 4, payingYearly: 3, lapsed: 2,
       mrrPaise: 4 * 199900 + Math.round((3 * 999900) / 12), arrPaise: (4 * 199900 + Math.round((3 * 999900) / 12)) * 12,
       collectedThisMonthPaise: 2 * 199900 + 999900, paymentsThisMonth: 3,
+      openPaymentExceptions: paymentExceptions.filter((e) => e.status === "open").length,
+      applicationsWaiting: applications.filter((a) => ["submitted", "under_review"].includes(a.verification_status)).length,
     };
   }
   if (method === "GET" && pathname === "/admin/audit") {
@@ -588,6 +604,33 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     const n = { id: crypto.randomUUID(), clinic_id: seg[2], body: String(b.body), created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } };
     adminNotes.unshift(n);
     return n;
+  }
+
+  if (method === "GET" && pathname === "/admin/payments") {
+    const st = query.get("status") ?? "all";
+    return ledger.filter((p) => st === "all" || p.status === st);
+  }
+  if (method === "GET" && pathname === "/admin/payments/exceptions") {
+    return paymentExceptions.filter((e) => e.status === (query.get("status") ?? "open"));
+  }
+  if (method === "GET" && pathname === "/admin/payments/events") return paymentEvents;
+  if (method === "POST" && pathname === "/admin/payments/reconcile") return { checked: 2, activated: 0, held: 0, authorized: 0, expired: 1, errors: 0 };
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "payments" && seg[2] === "exceptions" && seg[4] === "resolve") {
+    const ex = paymentExceptions.find((e) => e.id === seg[3]);
+    if (!ex || ex.status !== "open") throw new ApiError(409, "INVALID_STATE", "That exception is not open");
+    ex.status = b.action === "dismissed" ? "dismissed" : "resolved";
+    ex.resolution = String(b.note);
+    return ex;
+  }
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "payments" && seg[3] === "refund") {
+    // Mirrors admin_record_refund(): never more than is left.
+    const p = ledger.find((x) => x.id === seg[2]);
+    if (!p) throw new MockNotFound(pathname);
+    const left = (p.captured_paise ?? p.amount_paise) - p.refunded_paise;
+    if (Number(b.amount_paise) > left) throw new ApiError(409, "TOO_MUCH", "That is more than is left to refund.");
+    p.refunded_paise += Number(b.amount_paise);
+    paymentEvents.unshift({ id: crypto.randomUUID(), event_type: "refund.processed", signature_ok: true, razorpay_payment_id: p.razorpay_payment_id, razorpay_order_id: null, amount_paise: Number(b.amount_paise), outcome: "refund processed", received_at: new Date().toISOString() });
+    return { id: crypto.randomUUID(), amount_paise: b.amount_paise };
   }
 
   // ---- billing -------------------------------------------------------------

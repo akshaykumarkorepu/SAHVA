@@ -37,6 +37,10 @@ export default function BillingPage() {
       if (outcome.kind === "paid") {
         toast.success("Payment received — thank you. Your plan is active.");
         void client.invalidateQueries({ queryKey: ["api"] });
+      } else if (outcome.kind === "pending") {
+        // Not "active": the money is being checked. Say exactly that.
+        toast(outcome.message);
+        void client.invalidateQueries({ queryKey: ["api"] });
       } else if (outcome.kind === "cancelled") {
         toast("Payment window closed. Nothing was charged.");
       } else {

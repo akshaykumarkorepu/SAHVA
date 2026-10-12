@@ -521,3 +521,41 @@ test("admin clinic detail shows patient counts, never patient names", async ({ p
   await expect(page.getByText("214")).toBeVisible({ timeout: 15_000 });
   for (const name of ["Lakshmi", "Aarav", "Priya", "Srinivas"]) await expect(page.locator("main")).not.toContainText(name);
 });
+
+test("admin payments: refund a duplicate from the policy suggestion, then close the exception", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/payments");
+  await expect(page.locator("table")).toContainText("Krishna Clinic", { timeout: 15_000 });
+
+  // The second Krishna payment (paid twice) — refund it in full.
+  const dupRow = page.locator("tr", { hasText: "pay_mock_m2" });
+  await dupRow.getByRole("button", { name: "Refund" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Policy suggests ₹1,999");
+  await expect(dialog).toContainText("Within 7 days");
+  const go = dialog.getByRole("button", { name: /^Refund/ });
+  await expect(go).toBeDisabled(); // reason still empty
+  await dialog.getByLabel("Reason").fill("Paid twice by mistake");
+  await go.click();
+  await expect(page.getByText("Refunded ₹1,999 through Razorpay.")).toBeVisible();
+  await expect(dupRow).toContainText("refunded");
+
+  await page.getByRole("tab", { name: /Exceptions/ }).click();
+  await expect(page.getByText("Paid twice")).toBeVisible();
+  await page.getByRole("button", { name: "Resolved" }).click();
+  await expect(page.getByText(/Say what was done/)).toBeVisible();
+  await page.getByLabel("What was done").fill("Refunded the second payment");
+  await page.getByRole("button", { name: "Resolved" }).click();
+  await expect(page.getByText("Nothing needs attention")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Webhook events" }).click();
+  await expect(page.getByText("bad signature", { exact: true })).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("admin overview points at waiting applications and payment problems", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByRole("link", { name: /waiting for verification/ })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: /payment problem/ })).toBeVisible();
+});

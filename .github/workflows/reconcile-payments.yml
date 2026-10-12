@@ -1,0 +1,31 @@
+name: Nightly payment reconciliation
+
+# Checks every unfinished Razorpay order against Razorpay: activates payments
+# whose confirmation never reached SAHVA, flags held ones, expires stale ones.
+# See apps/api/src/lib/reconcile.ts.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   SAHVA_API_URL     e.g. https://sahva-api.onrender.com
+#   SAHVA_WORKER_KEY  the API's VOICE_API_KEY
+# Until both are set, the job reports that and exits without failing.
+
+on:
+  schedule:
+    - cron: "30 21 * * *" # 03:00 IST
+  workflow_dispatch:
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reconcile
+        env:
+          API: ${{ secrets.SAHVA_API_URL }}
+          KEY: ${{ secrets.SAHVA_WORKER_KEY }}
+        run: |
+          if [ -z "$API" ] || [ -z "$KEY" ]; then
+            echo "::notice::SAHVA_API_URL / SAHVA_WORKER_KEY not set — skipping."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST "$API/api/internal/reconcile-payments" \
+            -H "x-sahva-key: $KEY" -H "content-type: application/json"

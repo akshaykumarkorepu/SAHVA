@@ -303,5 +303,20 @@ patient-facing until paid; legacy clinics without a subscription stay live.
 Note: the hosted Sri Sai demo subscription ends 1 Nov 2026, so its patient
 features stop on 4 Nov unless it pays or an admin extends it.
 
-Next: step 4, payments ledger, Razorpay webhook event store, reconciliation,
-exceptions queue and refunds.
+**Step 4 done (2026-10-12):** `/admin/payments` (migration `001100`, live):
+ledger with refunds, exceptions queue, webhook event log, reconciliation.
+
+### Razorpay setup for step 4
+
+- Razorpay → Webhooks → `https://<api-host>/api/webhooks/razorpay`, secret in
+  `RAZORPAY_WEBHOOK_SECRET`, events: `payment.captured`, `refund.processed`,
+  `refund.failed`, `payment.dispute.created`, `payment.dispute.won`,
+  `payment.dispute.lost`, `payment.dispute.closed`.
+- Razorpay → Account & Settings → Payment capture: **automatic**. Held
+  (authorised-only) payments otherwise wait in the exceptions queue.
+- Nightly reconciliation: `.github/workflows/reconcile-payments.yml`; add
+  repository secrets `SAHVA_API_URL` and `SAHVA_WORKER_KEY` (the API's
+  `VOICE_API_KEY`). It skips quietly until they exist.
+
+Next: step 5, analytics (business, per clinic, patient aggregates) and a
+health score.

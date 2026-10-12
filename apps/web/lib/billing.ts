@@ -53,7 +53,14 @@ function loadCheckout(): Promise<void> {
   });
 }
 
-export type PayOutcome = { kind: "paid" } | { kind: "cancelled" } | { kind: "failed"; message: string };
+export type PayOutcome =
+  | { kind: "paid" }
+  /** Money arrived but is still being confirmed (held, or amount under review). */
+  | { kind: "pending"; message: string }
+  | { kind: "cancelled" }
+  | { kind: "failed"; message: string };
+
+type VerifyReply = { status?: string; message?: string };
 
 /**
  * Pay for a period: create the order on the server, open Razorpay Checkout,
@@ -98,8 +105,8 @@ export async function pay(
       theme: { color: "#0F766E" },
       handler: async (r: CheckoutResult) => {
         try {
-          await post("/billing/verify", r);
-          done({ kind: "paid" });
+          const v = await post<VerifyReply>("/billing/verify", r);
+          done(v?.status === "pending" ? { kind: "pending", message: v.message ?? "Payment received and being confirmed." } : { kind: "paid" });
         } catch (e) {
           done({
             kind: "failed",
