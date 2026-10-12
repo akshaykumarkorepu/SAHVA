@@ -65,6 +65,7 @@ run_suite "$HERE/21_rls_isolation.sql"
 run_suite "$HERE/22_patient_rls.sql"
 run_suite "$HERE/23_appointment_status.sql"
 run_suite "$HERE/24_batch_progress.sql"
+run_suite "$HERE/25_token_numbers.sql"
 
 echo
 echo "All suites passed. Stop the cluster with:"
