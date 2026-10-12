@@ -62,11 +62,13 @@ begin
   -- Clinic ------------------------------------------------------------------
   insert into public.clinics (slug, name, legal_name, phone_e164, whatsapp_e164, support_email,
                               address_line, landmark, city, district, state, pincode,
-                              timezone, default_language, supported_languages, onboarded_at)
+                              timezone, default_language, supported_languages, onboarded_at,
+                              verification_status)
   values ('sri-sai-warangal','Sri Sai Clinic','Sri Sai Poly Clinic',
           '+918702345678','+918702345678','frontdesk@srisaiclinic.in',
           '2-4-118, Station Road','Opposite Hanamkonda bus stand','Warangal','Hanamkonda',
-          'Telangana','506001', tz, 'te', '{te,en}', now() - interval '40 days')
+          'Telangana','506001', tz, 'te', '{te,en}', now() - interval '40 days',
+          'approved')  -- an established clinic, as if reviewed before verification existed
   on conflict (slug) do update set name = excluded.name
   returning id into v_clinic;
 

@@ -1,4 +1,6 @@
-import { Router } from "express";
+import express, { Router } from "express";
+import { dbAdmin } from "../lib/supabase.js";
+import { applicationError } from "../lib/applicationErrors.js";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
@@ -178,5 +180,121 @@ clinic.delete(
     const { error } = await db.from("clinic_closures").delete().eq("id", req.params.id);
     if (error) throw error;
     res.status(204).end();
+  }),
+);
+
+// --- Verification -------------------------------------------------------------
+
+const optionalText = (max: number) =>
+  z.string().trim().max(max).optional().transform((v) => (v ? v : ""));
+
+/**
+ * The owner corrects the application — while it waits, or after a reviewer
+ * asked for more information, which resubmits it.
+ */
+clinic.patch(
+  "/application",
+  requireRole("owner"),
+  validate({
+    body: z.object({
+      hfr_id: optionalText(32),
+      establishment_reg_no: optionalText(64),
+      registration_state: optionalText(60),
+      owner_reg_no: z.string().trim().min(3).max(32),
+      owner_council: z.string().trim().min(3).max(120),
+      gstin: optionalText(15),
+    }),
+  }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const b = req.body as Record<string, string>;
+    const { data, error } = await db.rpc("update_clinic_application", {
+      p_hfr_id: b.hfr_id,
+      p_est_reg_no: b.establishment_reg_no,
+      p_reg_state: b.registration_state,
+      p_owner_reg_no: b.owner_reg_no,
+      p_owner_council: b.owner_council,
+      p_gstin: b.gstin,
+    });
+    if (error) throw applicationError(error);
+    res.json(data);
+  }),
+);
+
+const DOC_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
+const EXT: Record<(typeof DOC_TYPES)[number], string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
+
+clinic.get(
+  "/documents",
+  requireRole("owner", "manager"),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const rows = unwrap(
+      await db
+        .from("clinic_documents")
+        .select("id, kind, file_name, content_type, size_bytes, uploaded_at")
+        .eq("clinic_id", clinicId)
+        .order("uploaded_at", { ascending: false }),
+      "documents",
+    );
+    res.json(rows);
+  }),
+);
+
+/**
+ * Upload a registration certificate. The body is the file itself
+ * (PDF, JPEG or PNG, up to 5 MB). Stored in a private bucket through the
+ * service role; nobody reaches it except through a short-lived signed URL
+ * an admin's review screen asks for.
+ */
+clinic.post(
+  "/documents",
+  requireRole("owner"),
+  express.raw({ type: [...DOC_TYPES], limit: "5mb" }),
+  validate({
+    query: z.object({
+      kind: z.enum(["facility_registration", "doctor_registration", "other"]),
+      name: z.string().trim().min(1).max(200),
+    }),
+  }),
+  asyncRoute(async (req, res) => {
+    const { clinicId, userId } = req.auth!;
+    const type = (req.header("content-type") ?? "").split(";")[0].trim() as (typeof DOC_TYPES)[number];
+    if (!DOC_TYPES.includes(type) || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+      throw badRequest("BAD_FILE", "Upload a PDF, JPG or PNG file, up to 5 MB.");
+    }
+    const { kind, name } = req.query as unknown as { kind: string; name: string };
+
+    const clinicRow = unwrap(
+      await dbAdmin.from("clinics").select("verification_status").eq("id", clinicId).single(),
+      "clinic",
+    );
+    if (!["submitted", "under_review", "needs_info"].includes(clinicRow.verification_status)) {
+      throw badRequest("NOT_UNDER_REVIEW", "Documents can be added while the application is being reviewed.");
+    }
+
+    const path = `${clinicId}/${kind}-${Date.now()}.${EXT[type]}`;
+    const up = await dbAdmin.storage.from("clinic-documents").upload(path, req.body, { contentType: type, upsert: false });
+    if (up.error) {
+      req.log.error({ err: up.error }, "document upload failed");
+      throw badRequest("UPLOAD_FAILED", "The file could not be stored. Try again.");
+    }
+    const row = unwrap(
+      await dbAdmin
+        .from("clinic_documents")
+        .insert({
+          clinic_id: clinicId,
+          kind,
+          storage_path: path,
+          file_name: name,
+          content_type: type,
+          size_bytes: req.body.length,
+          uploaded_by: userId,
+        })
+        .select("id, kind, file_name, content_type, size_bytes, uploaded_at")
+        .single(),
+      "document",
+    );
+    res.status(201).json(row);
   }),
 );

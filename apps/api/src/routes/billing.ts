@@ -68,6 +68,11 @@ billing.post(
     const amount = cycle === "yearly" ? plan.yearly_price_paise : plan.monthly_price_paise;
     if (!amount) throw badRequest("PLAN_UNAVAILABLE", "That billing period is not available.");
 
+    const clinicRow = unwrap(await db.from("clinics").select("verification_status").eq("id", clinicId).single(), "clinic");
+    if (clinicRow.verification_status !== "approved") {
+      throw new AppError(403, "NOT_APPROVED", "Payments open once SAHVA has approved your clinic.");
+    }
+
     const sub = unwrap(
       await db
         .from("subscriptions")

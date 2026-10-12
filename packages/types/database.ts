@@ -796,6 +796,57 @@ export type Database = {
           },
         ];
       };
+      clinic_documents: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          kind: string;
+          storage_path: string;
+          file_name: string;
+          content_type: string;
+          size_bytes: number;
+          uploaded_by: string | null;
+          uploaded_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          kind: string;
+          storage_path: string;
+          file_name: string;
+          content_type: string;
+          size_bytes: number;
+          uploaded_by?: string | null;
+          uploaded_at?: string;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          kind?: string;
+          storage_path?: string;
+          file_name?: string;
+          content_type?: string;
+          size_bytes?: number;
+          uploaded_by?: string | null;
+          uploaded_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clinic_documents_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "clinic_documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "staff_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       clinic_faqs: {
         Row: {
           id: string;
@@ -1107,6 +1158,17 @@ export type Database = {
           onboarded_at: string | null;
           created_at: string;
           updated_at: string;
+          verification_status: Database["public"]["Enums"]["clinic_verification_status"];
+          hfr_id: string | null;
+          establishment_reg_no: string | null;
+          registration_state: string | null;
+          owner_reg_no: string | null;
+          owner_council: string | null;
+          gstin: string | null;
+          submitted_at: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          review_note: string | null;
         };
         Insert: {
           id?: string;
@@ -1130,6 +1192,17 @@ export type Database = {
           onboarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          verification_status?: Database["public"]["Enums"]["clinic_verification_status"];
+          hfr_id?: string | null;
+          establishment_reg_no?: string | null;
+          registration_state?: string | null;
+          owner_reg_no?: string | null;
+          owner_council?: string | null;
+          gstin?: string | null;
+          submitted_at?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          review_note?: string | null;
         };
         Update: {
           id?: string;
@@ -1153,8 +1226,27 @@ export type Database = {
           onboarded_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          verification_status?: Database["public"]["Enums"]["clinic_verification_status"];
+          hfr_id?: string | null;
+          establishment_reg_no?: string | null;
+          registration_state?: string | null;
+          owner_reg_no?: string | null;
+          owner_council?: string | null;
+          gstin?: string | null;
+          submitted_at?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          review_note?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "clinics_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+        ];
       };
       consultations: {
         Row: {
@@ -2966,6 +3058,16 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["subscription_payments"]["Row"];
       };
+      admin_review_clinic: {
+        Args: {
+          p_clinic_id: string;
+          p_decision: string;
+          p_note: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["clinics"]["Row"];
+      };
       book_appointment: {
         Args: {
           p_clinic_id: string;
@@ -3042,6 +3144,33 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["appointments"]["Row"];
       };
+      submit_clinic_application: {
+        Args: {
+          p_name: string;
+          p_address: string;
+          p_city: string;
+          p_pincode: string;
+          p_phone: string;
+          p_hfr_id: string;
+          p_est_reg_no: string;
+          p_reg_state: string;
+          p_owner_reg_no: string;
+          p_owner_council: string;
+          p_gstin: string;
+        };
+        Returns: string;
+      };
+      update_clinic_application: {
+        Args: {
+          p_hfr_id: string;
+          p_est_reg_no: string;
+          p_reg_state: string;
+          p_owner_reg_no: string;
+          p_owner_council: string;
+          p_gstin: string;
+        };
+        Returns: Database["public"]["Tables"]["clinics"]["Row"];
+      };
     };
     Enums: {
       action_severity: "low" | "normal" | "high" | "urgent";
@@ -3059,6 +3188,7 @@ export type Database = {
       call_status: "in_progress" | "completed" | "missed" | "abandoned" | "failed" | "transferred";
       care_task_status: "pending" | "sent" | "completed" | "skipped" | "failed";
       care_trigger: "after_appointment" | "chronic_medication" | "preventive_checkup" | "vaccination_due";
+      clinic_verification_status: "submitted" | "under_review" | "needs_info" | "approved" | "rejected" | "suspended";
       condition_status: "active" | "chronic" | "resolved";
       faq_category: "fees" | "timings" | "location" | "services" | "doctors" | "insurance" | "preparation" | "other";
       invoice_status: "draft" | "issued" | "paid" | "partially_paid" | "void";

@@ -11,8 +11,8 @@ declare v_w uuid; v_k uuid; v_ravi uuid; v_suresh uuid; v_recep uuid;
 begin
   select id into v_w from public.clinics where slug = 'sri-sai-warangal';
 
-  insert into public.clinics (slug, name, phone_e164, city)
-  values ('krishna-karimnagar','Krishna Clinic','+918712223333','Karimnagar')
+  insert into public.clinics (slug, name, phone_e164, city, verification_status)
+  values ('krishna-karimnagar','Krishna Clinic','+918712223333','Karimnagar','approved')
   on conflict (slug) do update set name = excluded.name returning id into v_k;
 
   insert into auth.users (email, raw_user_meta_data)

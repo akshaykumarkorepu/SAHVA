@@ -23,30 +23,63 @@ select set_config('request.jwt.claims',
   json_build_object('sub', current_setting('sahva_test.padma'), 'role','authenticated')::text, true);
 set local role authenticated;
 do $t$
-declare v_clinic uuid; v_sub public.subscriptions; v_blocked boolean := false; v_n int;
+declare v_clinic uuid; v_blocked boolean := false; v_n int;
 begin
-  v_clinic := public.create_clinic_with_trial('Padma Children''s Clinic', 'Karimnagar', '+918712000111');
+  v_clinic := public.submit_clinic_application(
+    'Padma Children''s Clinic', '1-2-3 Main Road', 'Karimnagar', '505001', '+918712000111',
+    'IN3610000099', null, null, 'TSMC/12345', 'Telangana State Medical Council', null);
   perform set_config('sahva_test.padma_clinic', v_clinic::text, false);
 
-  select * into v_sub from public.subscriptions where clinic_id = v_clinic;
-  perform pg_temp.check('a new clinic starts on a trial', v_sub.status = 'trialing');
-  perform pg_temp.check('the trial is 14 days',
-    v_sub.trial_ends_at between now() + interval '13 days 23 hours' and now() + interval '14 days 1 minute');
+  perform pg_temp.check('an application waits for review',
+    (select verification_status = 'submitted' from public.clinics where id = v_clinic));
+  select count(*) into v_n from public.subscriptions where clinic_id = v_clinic;
+  perform pg_temp.check('no trial before approval', v_n = 0);
 
   select count(*) into v_n from public.clinic_members
    where clinic_id = v_clinic and staff_id = auth.uid() and role = 'owner' and status = 'active';
-  perform pg_temp.check('the person who signed up owns the clinic', v_n = 1);
+  perform pg_temp.check('the applicant owns the clinic and can set it up', v_n = 1);
 
+  begin
+    perform public.submit_clinic_application('Second Try', null, 'Karimnagar', null, '+918712000112',
+      'IN3610000098', null, null, 'TSMC/1', 'TSMC', null);
+  exception when unique_violation then v_blocked := true;
+  end;
+  perform pg_temp.check('one account cannot apply for a second clinic', v_blocked);
+
+  v_blocked := false;
+  begin
+    perform public.create_clinic_with_trial('Old Path', 'Karimnagar', '+918712000113');
+  exception when insufficient_privilege then v_blocked := true;
+  end;
+  perform pg_temp.check('the old no-review signup is withdrawn', v_blocked);
+end $t$;
+commit;
+
+-- A SAHVA reviewer approves it; the trial starts now.
+do $t$
+declare v_admin uuid; v_sub public.subscriptions;
+begin
+  insert into auth.users (email, raw_user_meta_data) values ('reviewer@sahva.example', '{"account_type":"admin"}'::jsonb);
+  v_admin := sahva.grant_platform_admin('reviewer@sahva.example', 'reviewer', 'Reviewer');
+  perform public.admin_review_clinic(current_setting('sahva_test.padma_clinic')::uuid, 'approve', null, v_admin);
+
+  select * into v_sub from public.subscriptions where clinic_id = current_setting('sahva_test.padma_clinic')::uuid;
+  perform pg_temp.check('approval starts a trial', v_sub.status = 'trialing');
+  perform pg_temp.check('the trial is 14 days from approval',
+    v_sub.trial_ends_at between now() + interval '13 days 23 hours' and now() + interval '14 days 1 minute');
+end $t$;
+
+begin;
+select set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('sahva_test.padma'), 'role','authenticated')::text, true);
+set local role authenticated;
+do $t$
+declare v_clinic uuid := current_setting('sahva_test.padma_clinic')::uuid; v_sub public.subscriptions; v_blocked boolean := false; v_n int;
+begin
+  select * into v_sub from public.subscriptions where clinic_id = v_clinic;
   select count(*) into v_n from public.clinics;
   perform pg_temp.check('the new owner sees only their own clinic', v_n = 1);
 
-  begin
-    perform public.create_clinic_with_trial('Second Try', 'Karimnagar', '+918712000112');
-  exception when unique_violation then v_blocked := true;
-  end;
-  perform pg_temp.check('one account cannot start a second free trial', v_blocked);
-
-  v_blocked := false;
   begin
     perform public.activate_paid_subscription('order_x', 'pay_x');
   exception when insufficient_privilege then v_blocked := true;
@@ -72,7 +105,7 @@ do $t$
 declare v_blocked boolean := false;
 begin
   begin
-    perform public.create_clinic_with_trial('Not A Clinic', 'Warangal', '+918712000113');
+    perform public.submit_clinic_application('Not A Clinic', null, 'Warangal', null, '+918712000113', 'IN3610000097', null, null, 'X/1', 'TSMC', null);
   exception when insufficient_privilege then v_blocked := true;
   end;
   perform pg_temp.check('a patient account cannot create a clinic', v_blocked);

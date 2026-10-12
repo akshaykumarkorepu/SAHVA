@@ -101,8 +101,8 @@ begin
   -- === 6. Cross-tenant composite FK =======================================
   declare v_other uuid;
   begin
-    insert into public.clinics (slug, name, phone_e164, city)
-    values ('other-clinic','Other Clinic','+918700000000','Karimnagar')
+    insert into public.clinics (slug, name, phone_e164, city, verification_status)
+    values ('other-clinic','Other Clinic','+918700000000','Karimnagar','approved')
     on conflict (slug) do update set name = excluded.name
     returning id into v_other;
 
