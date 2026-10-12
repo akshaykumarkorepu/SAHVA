@@ -54,7 +54,8 @@ export function fromPostgrest(e: PostgrestError, context: string): AppError {
         e.details,
       );
     case "23514": // check_violation
-      return badRequest("CONSTRAINT_VIOLATED", "That change is not allowed.", e.details);
+      // A trigger's own raise carries its reason in message, not details.
+      return badRequest("CONSTRAINT_VIOLATED", "That change is not allowed.", e.details ?? e.message);
     case "23502": // not_null_violation
       return badRequest("MISSING_FIELD", "A required field was missing.", e.details);
     case "42501": // insufficient_privilege — RLS or an explicit raise

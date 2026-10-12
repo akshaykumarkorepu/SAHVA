@@ -46,7 +46,7 @@ actions.get(
       db
         .from("reschedule_batch_items")
         .select(
-          "*, patients(id, full_name, phone_e164, preferred_language), appointments!reschedule_batch_items_appointment_id_fkey(id, starts_at, status)",
+          "*, patients(id, full_name, phone_e164, preferred_language), appointments!reschedule_batch_items_appointment_id_fkey(id, starts_at, status), new_appointment:appointments!reschedule_batch_items_new_appointment_id_fkey(id, starts_at), message:messages!reschedule_batch_items_message_fkey(status, sent_at, delivered_at, failed_at, error_code)",
         )
         .eq("batch_id", req.params.id)
         .order("created_at"),
@@ -99,6 +99,34 @@ actions.post(
     );
 
     res.json(updated);
+  }),
+);
+
+/**
+ * Record what happened when staff phoned a patient from a reschedule batch.
+ *
+ * Rebooking is not set here: it follows from actually moving the appointment
+ * (reschedule_appointment), so the list can never claim a patient was moved
+ * when they were not. The database refuses these while the batch is a draft.
+ */
+actions.post(
+  "/batch-items/:id/status",
+  validate({
+    params: z.object({ id: uuid }),
+    body: z.object({ status: z.enum(["notified", "unreachable", "cancelled"]) }),
+  }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const row = unwrap(
+      await db
+        .from("reschedule_batch_items")
+        .update({ status: (req.body as { status: "notified" | "unreachable" | "cancelled" }).status })
+        .eq("id", req.params.id)
+        .select()
+        .single(),
+      "reschedule batch item",
+    );
+    res.json(row);
   }),
 );
 

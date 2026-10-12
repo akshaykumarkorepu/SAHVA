@@ -23,6 +23,8 @@ import test from "node:test";
 const AMBIGUOUS: Record<string, string[]> = {
   staff_profiles: ["action_items", "clinic_members", "reschedule_batches"],
   appointments: ["reschedule_batch_items"],
+  // items.message_id → messages, and messages.batch_item_id → items.
+  messages: ["reschedule_batch_items"],
   calls: ["calls"],
 };
 
