@@ -50,6 +50,7 @@ export type AnalyticsSummary = {
     recovered_missed: number;
     telugu_calls: number;
     english_calls: number;
+    escalations: number;
   }[];
 };
 

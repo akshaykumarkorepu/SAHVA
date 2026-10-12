@@ -40,9 +40,9 @@ export function Card({
         className,
       )}
     >
-      <div className="h-full w-full ring-1 ring-inset ring-black/5 rounded-[inherit]">
-        {children}
-      </div>
+      {/* Children go straight in. A wrapper here drew a box inside every
+          padded card and swallowed the flex/grid classes callers pass. */}
+      {children}
     </Tag>
   );
 }
@@ -489,7 +489,13 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex items-end justify-center",
+        // A dialog centres; a slide-over pins to the right edge, full height.
+        variant === "dialog" ? "sm:items-center sm:p-4" : "sm:items-stretch sm:justify-end",
+      )}
+    >
       <div
         className="absolute inset-0 bg-surface-inverse/50 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
@@ -501,15 +507,13 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative flex max-h-[92vh] w-full flex-col overflow-hidden border border-line bg-surface-raised shadow-lift",
+          "relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-surface-raised shadow-lift",
           variant === "dialog"
-            ? "animate-scale-in sm:rounded-3xl"
-            : "animate-slide-right rounded-l-none rounded-r-3xl",
-          variant === "dialog"
-            ? "rounded-t-3xl"
-            : "h-full rounded-none",
-          size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg",
-          variant === "slide-over" && "sm:max-w-md sm:rounded-l-none",
+            ? cn("animate-scale-in sm:rounded-3xl", size === "lg" ? "sm:max-w-2xl" : "sm:max-w-lg")
+            : // On a phone it is the same bottom sheet as a dialog; from sm up
+              // it is a panel along the right edge, so the list it was opened
+              // from stays visible beside it.
+              "animate-slide-up sm:h-full sm:max-h-none sm:max-w-md sm:animate-slide-in-right sm:rounded-none sm:border-y-0 sm:border-r-0",
         )}
       >
         {/* Drag affordance for the mobile sheet. */}

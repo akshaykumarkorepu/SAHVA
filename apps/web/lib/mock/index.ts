@@ -152,7 +152,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       ends_at: String(b.starts_at),
       duration_min: doc.consult_duration_min,
       status: "booked",
-      source: "staff",
+      source: "staff_manual",
       reason: (b.reason as string) ?? null,
       token_number: appointments.length + 1,
       doctors: { id: doc.id, spoken_name: doc.spoken_name, specialty: doc.specialty, colour_hex: doc.colour_hex },
@@ -165,6 +165,20 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     };
     appointments.unshift(row);
     return row;
+  }
+  if (method === "POST" && seg[0] === "appointments" && seg[2] === "status") {
+    // Mirrors set_appointment_status: front-desk changes only, and never on a
+    // finished appointment.
+    const status = String(b.status);
+    const rows = [...appointments, ...d.todaysAppointments].filter((x) => x.id === seg[1]);
+    if (rows.length === 0) throw new MockNotFound(pathname);
+    for (const row of rows) {
+      if (row.status === "completed" || row.status === "cancelled") {
+        throw new Error(`Appointment is already ${row.status}`);
+      }
+      row.status = status;
+    }
+    return rows[0];
   }
   if (method === "POST" && seg[0] === "appointments" && seg[2] === "cancel") {
     const a = appointments.find((x) => x.id === seg[1]);

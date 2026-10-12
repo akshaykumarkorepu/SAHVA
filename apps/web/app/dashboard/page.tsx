@@ -1,241 +1,256 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import type { AnalyticsSummary, TodayAppointment } from "@/lib/types";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingRows,
-  PageHeader,
-  Section,
-  Skeleton,
-  cn,
-} from "@/components/ui";
+import type { ActionItem, AnalyticsSummary, TodayAppointment } from "@/lib/types";
+import { Badge, Card, EmptyState, ErrorState, LoadingRows, PageHeader, Section, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { CallVolumeChart } from "@/components/dashboard/CallVolumeChart";
-import { appointmentStatus, formatPhone, formatTime } from "@/lib/format";
+import { TodayTimeline } from "@/components/dashboard/TodayTimeline";
+import { AppointmentPanel } from "@/components/dashboard/AppointmentPanel";
+import { formatDate, relativeTime, todayIso } from "@/lib/format";
+import { countDay, topActions } from "@/lib/today";
 
+/**
+ * The Command Center.
+ *
+ * A clinic owner opens this to answer four questions in a few seconds:
+ * what is happening today, what needs me, is SAHVA working, and are we
+ * losing appointments. Trends live on Analytics; this page is about today.
+ */
 export default function OverviewPage() {
   const { clinic } = useSession();
   const tz = clinic?.timezone;
   const summary = useApi<AnalyticsSummary>("/analytics/summary?days=7");
   const today = useApi<TodayAppointment[]>("/appointments/today");
+  const actions = useApi<ActionItem[]>("/actions");
+  const now = useMinute();
+  const [selected, setSelected] = React.useState<TodayAppointment | null>(null);
 
-  if (summary.error) return <ErrorState error={summary.error} onRetry={summary.reload} />;
-
-  const s = summary.data;
-  const t = s?.totals;
-  const actions = s?.open_action_items;
+  const rows = today.data ?? [];
+  const day = countDay(rows);
+  const todayCalls = summary.data?.daily.find((d) => d.day === todayIso(tz));
+  const open = actions.data ?? [];
+  const urgent = open.filter((a) => a.severity === "urgent").length;
 
   return (
     <>
       <PageHeader
-        eyebrow="Last 7 days"
-        title="Overview"
-        subtitle="How the AI receptionist has been handling your phone."
+        eyebrow={formatDate(now.toISOString(), tz)}
+        title="Today"
+        subtitle={headline(day.total, open.length, today.loading || actions.loading)}
       />
 
-      {/* The queue first: it is the only thing here that needs a person. */}
-      {actions && actions.total > 0 && <ActionBanner total={actions.total} urgent={actions.urgent} high={actions.high} />}
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {summary.loading ? (
+      {/* 1 · Four numbers: today's load, the AI's work, its value, what's waiting.
+          2×2 on a phone, so the day itself is still on the first screen. */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {today.loading || summary.loading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[124px]" />)
         ) : (
           <>
-            <KpiCard label="Calls answered" value={t?.calls ?? 0} sub="Last 7 days" icon="calls" delay={0} />
             <KpiCard
-              label="Bookings made"
-              value={t?.bookings ?? 0}
-              sub={`${t?.conversion_rate ?? 0}% of calls converted`}
+              label="Appointments today"
+              value={day.total}
+              sub={day.unconfirmed > 0 ? `${day.unconfirmed} not yet confirmed` : "None waiting on confirmation"}
               icon="appointments"
-              tone="brand"
+              tone={day.unconfirmed > 0 ? "warn" : "neutral"}
+            />
+            <KpiCard
+              label="Calls handled by SAHVA"
+              value={todayCalls?.total_calls ?? 0}
+              sub={`${todayCalls?.escalations ?? 0} passed to staff today`}
+              icon="calls"
               delay={60}
             />
             <KpiCard
-              label="Missed calls recovered"
-              value={t?.recovered_missed ?? 0}
-              sub="Would have gone unanswered"
+              label="Booked from calls"
+              value={todayCalls?.bookings ?? 0}
+              sub={bookingRate(todayCalls?.bookings ?? 0, todayCalls?.total_calls ?? 0)}
               icon="sparkles"
               tone="brand"
               delay={120}
             />
-            <KpiCard
-              label="Cost per call"
-              value={`₹${(s?.cost.per_call_inr ?? 0).toFixed(2)}`}
-              sub={`₹${(s?.cost.total_inr ?? 0).toFixed(0)} this week`}
-              icon="rupee"
-              delay={180}
-            />
+            <Link href="/dashboard/actions" className="block rounded-2xl">
+              <KpiCard
+                label="Needs a person"
+                value={open.length}
+                sub={urgent > 0 ? `${urgent} urgent` : open.length > 0 ? "Nothing urgent" : "Queue is clear"}
+                icon="actions"
+                tone={urgent > 0 ? "bad" : open.length > 0 ? "warn" : "neutral"}
+                delay={180}
+              />
+            </Link>
           </>
         )}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-ink">Call volume</h3>
-              <p className="mt-0.5 text-xs text-ink-subtle">Total calls against successful bookings</p>
-            </div>
-            <div className="flex items-center gap-4 text-xs">
-              <Legend colour="bg-brand-600" label="Calls" />
-              <Legend colour="bg-accent-sky" label="Bookings" />
-            </div>
-          </div>
-          {summary.loading ? <Skeleton className="h-56" /> : <CallVolumeChart data={s?.daily ?? []} />}
-        </Card>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        {/* 2 · The day, in order. */}
+        <Section
+          title="Today's appointments"
+          action={
+            <Link
+              href="/dashboard/appointments"
+              className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-700 transition hover:text-brand-800"
+            >
+              Open diary
+              <Icon name="chevronRight" className="h-3.5 w-3.5" />
+            </Link>
+          }
+        >
+          {today.loading ? (
+            <LoadingRows rows={4} />
+          ) : today.error ? (
+            <ErrorState error={today.error} onRetry={today.reload} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon="appointments"
+              title="Nothing booked for today"
+              body="Appointments appear here as they are booked — by the AI, at the desk, or online."
+            />
+          ) : (
+            <TodayTimeline rows={rows} tz={tz} now={now} onSelect={setSelected} />
+          )}
+        </Section>
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-ink">Language mix</h3>
-          <p className="mt-0.5 text-xs text-ink-subtle">Which language callers used</p>
-          <LanguageSplit te={t?.telugu_calls ?? 0} en={t?.english_calls ?? 0} />
+        <div className="space-y-6">
+          {/* 3 · What needs a person. */}
+          <Section
+            title="Needs a person"
+            action={
+              open.length > 0 ? (
+                <Link
+                  href="/dashboard/actions"
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-700 transition hover:text-brand-800"
+                >
+                  All {open.length}
+                  <Icon name="chevronRight" className="h-3.5 w-3.5" />
+                </Link>
+              ) : undefined
+            }
+          >
+            {actions.loading ? (
+              <LoadingRows rows={2} />
+            ) : actions.error ? (
+              <ErrorState error={actions.error} onRetry={actions.reload} />
+            ) : open.length === 0 ? (
+              <Card className="flex items-center gap-3 p-4">
+                <Icon name="success" className="h-5 w-5 text-brand-600" />
+                <p className="text-sm text-ink-muted">Nothing waiting. Everything the AI handled went through cleanly.</p>
+              </Card>
+            ) : (
+              <Card className="divide-y divide-line overflow-hidden">
+                {topActions(open).map((item) => (
+                  <Link
+                    key={item.id}
+                    href="/dashboard/actions"
+                    className="flex items-start gap-3 px-4 py-3 transition hover:bg-surface-sunken/60"
+                  >
+                    <SeverityDot severity={item.severity} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium leading-snug text-ink">{item.title}</span>
+                      <span className="mt-0.5 block text-xs text-ink-subtle">
+                        {item.created_at ? relativeTime(item.created_at) : ""}
+                      </span>
+                    </span>
+                  </Link>
+                ))}
+              </Card>
+            )}
+          </Section>
 
-          <dl className="mt-6 space-y-3 border-t border-line pt-4 text-sm">
-            <Stat label="Rescheduled" value={t?.reschedules ?? 0} />
-            <Stat label="Escalated to staff" value={t?.escalations ?? 0} />
-          </dl>
-        </Card>
+          {/* 4 · Is SAHVA earning its keep — the week, in four lines. */}
+          <Section
+            title="This week"
+            action={
+              <Link
+                href="/dashboard/analytics"
+                className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-700 transition hover:text-brand-800"
+              >
+                Analytics
+                <Icon name="chevronRight" className="h-3.5 w-3.5" />
+              </Link>
+            }
+          >
+            {summary.loading ? (
+              <Skeleton className="h-40" />
+            ) : summary.error ? (
+              <ErrorState error={summary.error} onRetry={summary.reload} />
+            ) : (
+              <Card className="p-4">
+                <dl className="space-y-3 text-sm">
+                  <WeekStat label="Calls answered" value={summary.data?.totals.calls ?? 0} />
+                  <WeekStat
+                    label="Bookings made"
+                    value={summary.data?.totals.bookings ?? 0}
+                    note={`${summary.data?.totals.conversion_rate ?? 0}% of calls`}
+                  />
+                  <WeekStat
+                    label="Missed calls recovered"
+                    value={summary.data?.totals.recovered_missed ?? 0}
+                    note="would have gone unanswered"
+                  />
+                  <WeekStat
+                    label="Cost per call"
+                    value={`₹${(summary.data?.cost.per_call_inr ?? 0).toFixed(2)}`}
+                  />
+                </dl>
+              </Card>
+            )}
+          </Section>
+        </div>
       </div>
 
-      <Section
-        className="mt-6"
-        title="Today's appointments"
-        action={
-          <Link
-            href="/dashboard/appointments"
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-600 transition hover:text-brand-700"
-          >
-            View diary
-            <Icon name="chevronRight" className="h-3.5 w-3.5" />
-          </Link>
-        }
-      >
-        {today.loading ? (
-          <LoadingRows rows={3} />
-        ) : today.error ? (
-          <ErrorState error={today.error} onRetry={today.reload} />
-        ) : (today.data ?? []).length === 0 ? (
-          <EmptyState icon="appointments" title="Nothing booked for today" body="Appointments booked by the AI appear here automatically." />
-        ) : (
-          <Card className="divide-y divide-line overflow-hidden">
-            {(today.data ?? []).map((a, i) => {
-              const st = appointmentStatus(a.status!);
-              return (
-                <div
-                  key={a.id}
-                  className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-sunken/60 animate-fade-up"
-                  style={{ animationDelay: `${i * 40}ms` }}
-                >
-                  <span className="w-[68px] shrink-0 font-display text-sm font-semibold tabular-nums text-ink">
-                    {a.starts_at ? formatTime(a.starts_at, tz) : "—"}
-                  </span>
-                  <span
-                    aria-hidden
-                    className="h-8 w-1 shrink-0 rounded-full"
-                    style={{ background: a.colour_hex ?? "rgb(5 150 105)" }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{a.patient_name}</p>
-                    <p className="truncate text-xs text-ink-subtle">
-                      {a.doctor_name} · {formatPhone(a.phone_e164)}
-                    </p>
-                  </div>
-                  <Badge tone={st.tone}>{st.label}</Badge>
-                </div>
-              );
-            })}
-          </Card>
-        )}
-      </Section>
+      <AppointmentPanel appointment={selected} tz={tz} onClose={() => setSelected(null)} />
     </>
   );
 }
 
-function ActionBanner({ total, urgent, high }: { total: number; urgent: number; high: number }) {
-  return (
-    <Link href="/dashboard/actions" className="mb-4 block animate-fade-up">
-      <div className="group relative overflow-hidden rounded-2xl border border-accent-rose/25 bg-accent-rose/[0.07] p-5 transition duration-200 ease-spring hover:-translate-y-0.5 hover:shadow-lift">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent-rose text-white">
-              <Icon name="actions" className="h-5 w-5" />
-              <span className="absolute inset-0 animate-pulse-ring rounded-2xl bg-accent-rose/50" aria-hidden />
-            </span>
-            <div>
-              <p className="font-display text-base font-semibold tracking-tight text-ink">
-                {total} item{total === 1 ? "" : "s"} need a person
-              </p>
-              <p className="mt-0.5 text-sm text-ink-muted">
-                {urgent > 0 && `${urgent} urgent · `}
-                {high > 0 && `${high} high priority · `}
-                Patients are waiting on these.
-              </p>
-            </div>
-          </div>
-          <Button iconRight="arrowRight" className="shrink-0">
-            Review queue
-          </Button>
-        </div>
-      </div>
-    </Link>
-  );
+function headline(total: number, open: number, loading: boolean): string {
+  if (loading) return "Loading today…";
+  const visits = total === 1 ? "1 appointment" : `${total} appointments`;
+  if (open === 0) return `${visits}. Nothing needs a person right now.`;
+  return `${visits}. ${open === 1 ? "1 thing needs" : `${open} things need`} a person.`;
 }
 
-function Legend({ colour, label }: { colour: string; label: string }) {
+/** Measured against today's calls, so it reads with the number above it. */
+function bookingRate(bookings: number, calls: number): string {
+  if (calls === 0) return "No calls yet today";
+  return `${Math.round((bookings / calls) * 100)}% of today's calls`;
+}
+
+/** Re-renders once a minute so the now-line and relative times keep up. */
+function useMinute(): Date {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+const SEVERITY_LABEL: Record<string, string> = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
+
+function SeverityDot({ severity }: { severity: string | null }) {
+  const tone =
+    severity === "urgent" ? "bad" : severity === "high" ? "warn" : ("neutral" as const);
   return (
-    <span className="flex items-center gap-1.5 text-ink-subtle">
-      <span className={cn("h-2 w-2 rounded-full", colour)} aria-hidden />
-      {label}
+    <span className="mt-0.5 shrink-0">
+      <Badge tone={tone}>{SEVERITY_LABEL[severity ?? "normal"] ?? "Normal"}</Badge>
     </span>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function WeekStat({ label, value, note }: { label: string; value: number | string; note?: string }) {
   return (
-    <div className="flex justify-between">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-semibold tabular-nums text-ink">{value}</dd>
-    </div>
-  );
-}
-
-function LanguageSplit({ te, en }: { te: number; en: number }) {
-  const total = te + en;
-  if (total === 0) return <p className="mt-4 text-sm text-ink-subtle">No calls yet.</p>;
-  const tePct = Math.round((te / total) * 100);
-
-  return (
-    <div className="mt-5">
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-sunken">
-        <div
-          className="bg-brand-600 transition-all duration-700 ease-spring"
-          style={{ width: `${tePct}%` }}
-        />
-        <div className="flex-1 bg-accent-sky transition-all duration-700 ease-spring" />
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <p className="flex items-center gap-1.5 text-xs text-ink-subtle">
-            <span className="h-2 w-2 rounded-full bg-brand-600" aria-hidden />
-            Telugu
-          </p>
-          <p className="mt-1 font-display text-xl font-bold tabular-nums text-ink">{tePct}%</p>
-        </div>
-        <div>
-          <p className="flex items-center gap-1.5 text-xs text-ink-subtle">
-            <span className="h-2 w-2 rounded-full bg-accent-sky" aria-hidden />
-            English
-          </p>
-          <p className="mt-1 font-display text-xl font-bold tabular-nums text-ink">{100 - tePct}%</p>
-        </div>
-      </div>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-ink-muted">
+        {label}
+        {note && <span className="block text-[11px] text-ink-subtle">{note}</span>}
+      </dt>
+      <dd className="font-display text-base font-semibold tabular-nums text-ink">{value}</dd>
     </div>
   );
 }

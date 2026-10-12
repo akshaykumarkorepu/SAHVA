@@ -89,6 +89,10 @@ const config: Config = {
           from: { transform: "translateX(-100%)" },
           to: { transform: "translateX(0)" },
         },
+        "slide-in-right": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
         shimmer: { "100%": { transform: "translateX(100%)" } },
         "pulse-ring": {
           "0%": { transform: "scale(.9)", opacity: "0.7" },
@@ -104,6 +108,7 @@ const config: Config = {
         "scale-in": "scale-in .2s cubic-bezier(.22,1,.36,1) both",
         "slide-up": "slide-up .28s cubic-bezier(.22,1,.36,1) both",
         "slide-in-left": "slide-in-left .25s cubic-bezier(.22,1,.36,1) both",
+        "slide-in-right": "slide-in-right .28s cubic-bezier(.22,1,.36,1) both",
         shimmer: "shimmer 1.8s infinite",
         "pulse-ring": "pulse-ring 2s cubic-bezier(.24,.6,.35,1) infinite",
         marquee: "marquee 28s linear infinite",

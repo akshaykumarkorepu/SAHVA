@@ -118,3 +118,22 @@ test("resolving an action updates the nav badge without a reload", async ({ page
     .poll(async () => Number((await badge.innerText()).match(/\d+/)?.[0] ?? "0"), { timeout: 5_000 })
     .toBe(before - 1);
 });
+
+test("overview: check a patient in from the side panel", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard");
+  const row = page.locator("ol button", { hasText: "Priya Sharma" });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await expect(row).toContainText("Booked");
+
+  await row.click();
+  const panel = page.getByRole("dialog", { name: "Priya Sharma" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("AI call");
+  await panel.getByRole("button", { name: "Check in" }).click();
+
+  await expect(panel).toBeHidden();
+  await expect(row).toContainText("Checked in");
+  await settle(page);
+  expect(errors).toEqual([]);
+});

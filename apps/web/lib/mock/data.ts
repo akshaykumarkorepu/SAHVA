@@ -868,6 +868,7 @@ export function analyticsSummary(days: number) {
       recovered_missed: Math.round(total / 3),
       telugu_calls: Math.round(total * 0.75),
       english_calls: total - Math.round(total * 0.75),
+      escalations: i === 0 ? 1 : i % 3 === 0 ? 1 : 0,
     });
   }
   const calls_total = daily.reduce((s, d) => s + d.total_calls, 0);

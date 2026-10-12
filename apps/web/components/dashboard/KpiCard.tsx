@@ -39,7 +39,7 @@ export function KpiCard({
   return (
     <Card
       interactive
-      className="relative overflow-hidden p-6 animate-fade-up"
+      className="relative overflow-hidden p-4 animate-fade-up sm:p-6"
     >
       <div style={{ animationDelay: `${delay}ms` }}>
         <div className="flex items-start justify-between gap-3">
@@ -47,12 +47,12 @@ export function KpiCard({
             {label}
           </p>
           {icon && (
-            <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl ring-1 ring-inset transition-colors duration-200 group-hover:ring-brand-500/30", chip)}>
+            <span className={cn("hidden h-8 w-8 shrink-0 sm:grid place-items-center rounded-xl ring-1 ring-inset transition-colors duration-200 group-hover:ring-brand-500/30", chip)}>
               <Icon name={icon} className="h-4 w-4" />
             </span>
           )}
         </div>
-        <p className={cn("mt-4 font-display text-stat tabular-nums tracking-tight", accent)}>{value}</p>
+        <p className={cn("mt-3 font-display sm:mt-4 text-stat tabular-nums tracking-tight", accent)}>{value}</p>
         {sub && <p className="mt-2 text-xs leading-relaxed text-ink-subtle">{sub}</p>}
       </div>
     </Card>
