@@ -415,7 +415,10 @@ begin
     select 1 from public.appointments
      where patient_id = v_lakshmi and starts_at > now()
   ) then
-    declare v_day date := today + 1;
+    -- Three days out, not tomorrow. A same-day appointment is in the past by
+    -- the afternoon, and then the patient record opens on an empty hero — the
+    -- demo degrades within hours of seeding.
+    declare v_day date := today + 3;
     begin
       while extract(dow from v_day) = 0 loop v_day := v_day + 1; end loop;
       insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at,
