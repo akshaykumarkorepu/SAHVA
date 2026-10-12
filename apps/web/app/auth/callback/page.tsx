@@ -87,7 +87,7 @@ function Callback() {
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">{failed}</p>
           <a
             href="/signin"
-            className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white transition hover:bg-brand-700"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-brand-600 px-6 text-sm font-semibold text-on-brand transition hover:bg-brand-700"
           >
             Try again
           </a>

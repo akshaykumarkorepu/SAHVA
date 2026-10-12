@@ -33,6 +33,10 @@
        product requirement here, not a preference. Was 3.71:1. */
     --ink-subtle: 97 114 119;
     --ink-inverse: 237 248 244;
+    /* Label on a filled brand button. White clears AA on the light fill
+       (4.96:1). In dark the fill is a light tint, so the label flips dark —
+       white on it measured 2.55:1, well under AA. */
+    --on-brand: 255 255 255;
 
     --line: 210 225 220;
     --line-strong: 180 200 195;
@@ -51,24 +55,25 @@
     --brand-100: 20 70 65;
     --brand-200: 30 90 85;
     --brand-400: 85 185 180;
-    --brand-500: 21 155 148;
-    --brand-600: 40 180 175;
+    --brand-500: 45 196 178;
+    --brand-600: 94 214 198;
     --brand-700: 85 185 180;
     --brand-900: 200 235 228;
 
-    --surface: 12 25 28;
-    --surface-raised: 18 35 40;
-    --surface-sunken: 8 18 22;
+    --surface: 14 19 24;
+    --surface-raised: 30 39 48;
+    --surface-sunken: 9 12 16;
     --surface-inverse: 237 248 244;
 
-    --ink: 237 248 244;
-    --ink-muted: 140 160 165;
+    --ink: 233 239 245;
+    --ink-muted: 150 164 178;
     /* 4.6:1 on the dark --surface. Was 4.44:1, just under AA. */
-    --ink-subtle: 112 133 138;
+    --ink-subtle: 129 145 159;
+    --on-brand: 8 28 30;
     --ink-inverse: 16 53 68;
 
-    --line: 30 50 55;
-    --line-strong: 50 70 75;
+    --line: 42 53 64;
+    --line-strong: 64 78 92;
 
     --accent-amber: 251 191 36;
     --accent-rose: 251 113 133;

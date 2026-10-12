@@ -219,7 +219,7 @@ function AccountCard({
   return (
     <div className="mt-auto rounded-2xl border border-line bg-surface-sunken/60 p-3">
       <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-white">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-on-brand">
           {(email ?? "?").slice(0, 2)}
         </span>
         <span className="min-w-0 flex-1">
@@ -289,7 +289,7 @@ function MoreSheet({
         </nav>
 
         <div className="mt-4 flex items-center gap-3 border-t border-line pt-4">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-white">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold uppercase text-on-brand">
             {(email ?? "?").slice(0, 2)}
           </span>
           <span className="min-w-0 flex-1">

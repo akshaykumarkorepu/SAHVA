@@ -424,7 +424,7 @@ function RescheduleSheet({
                 className={cn(
                   "rounded-xl border py-3 text-sm font-medium transition duration-200 ease-spring active:scale-95",
                   picked === s.slot_start
-                    ? "border-brand-600 bg-brand-600 text-white"
+                    ? "border-brand-600 bg-brand-600 text-on-brand"
                     : "border-line-strong text-ink hover:bg-surface-sunken",
                 )}
               >
@@ -548,7 +548,7 @@ function UpgradeCard({ token, lang, t }: { token: string; lang: Lang; t: Strings
     <>
       <section className="mt-8 overflow-hidden rounded-2xl border border-brand-500/25 bg-brand-500/[0.06] p-5">
         <div className="flex items-start gap-3.5">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-600 text-white">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-600 text-on-brand">
             <Icon name="shield" className="h-5 w-5" />
           </span>
           <div className="min-w-0">

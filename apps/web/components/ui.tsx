@@ -58,7 +58,7 @@ const TONES: Record<Tone, string> = {
   warn: "bg-accent-amber/12 text-accent-amber ring-accent-amber/20",
   bad: "bg-accent-rose/12 text-accent-rose ring-accent-rose/20",
   info: "bg-accent-sky/12 text-accent-sky ring-accent-sky/20",
-  brand: "bg-brand-600 text-white ring-brand-600",
+  brand: "bg-brand-600 text-on-brand ring-brand-600",
   neutral: "bg-surface-sunken text-ink-muted ring-line",
 };
 
@@ -101,7 +101,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS = {
   primary:
-    "bg-brand-600 text-white shadow-glow hover:bg-brand-700 active:bg-brand-800 disabled:shadow-none active:scale-[.97]",
+    "bg-brand-600 text-on-brand shadow-glow hover:bg-brand-700 active:bg-brand-800 disabled:shadow-none active:scale-[.97]",
   secondary:
     "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken active:bg-surface-sunken active:scale-[.97]",
   ghost: "text-ink-muted hover:bg-surface-sunken hover:text-ink active:scale-[.97]",

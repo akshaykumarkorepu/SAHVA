@@ -77,7 +77,7 @@ function SiteHeader() {
         </nav>
         <Link
           href="/signin"
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-on-brand shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
         >
           Sign in
           <Icon name="arrowRight" className="h-4 w-4" />
@@ -120,7 +120,7 @@ function Hero() {
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
             <a
               href="tel:+918702345678"
-              className="inline-flex h-14 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-8 text-lg font-semibold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
+              className="inline-flex h-14 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-8 text-lg font-semibold text-on-brand shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
             >
               <Icon name="calls" className="h-5 w-5" />
               Hear the demo call
@@ -220,7 +220,7 @@ function CallDemo() {
 
       {step === conversation.length && (
         <div className="mt-6 animate-scale-in flex items-center gap-3 rounded-2xl border border-brand-600/20 bg-brand-500/10 p-4">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-white">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-600 text-on-brand">
             <Icon name="check" className="h-5 w-5" />
           </div>
           <div>
@@ -243,7 +243,7 @@ function Bubble({ side, lang, text }: { side: "left" | "right"; lang?: string; t
           "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed animate-fade-up",
           lang === "te" ? "text-base leading-relaxed" : "",
           isRight
-            ? "rounded-br-sm bg-brand-600 text-white font-medium"
+            ? "rounded-br-sm bg-brand-600 text-on-brand font-medium"
             : "rounded-bl-sm bg-surface-sunken text-ink"
         )}
       >
@@ -451,7 +451,7 @@ function Pricing() {
               )}
             >
               {p.featured && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-brand">
                   Most Popular
                 </span>
               )}
@@ -474,7 +474,7 @@ function Pricing() {
                 className={cn(
                   "mt-8 inline-flex h-12 items-center justify-center rounded-xl text-sm font-bold transition active:scale-[.98]",
                   p.featured
-                    ? "bg-brand-600 text-white shadow-glow hover:bg-brand-700"
+                    ? "bg-brand-600 text-on-brand shadow-glow hover:bg-brand-700"
                     : "border border-line-strong bg-surface-raised text-ink hover:bg-surface-sunken"
                 )}
               >
@@ -500,7 +500,7 @@ function FinalCta() {
         </p>
         <a
           href="tel:+918702345678"
-          className="mt-10 inline-flex h-16 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-10 text-xl font-bold text-white shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
+          className="mt-10 inline-flex h-16 items-center justify-center gap-3 rounded-2xl bg-brand-600 px-10 text-xl font-bold text-on-brand shadow-glow transition duration-200 ease-spring hover:bg-brand-700 active:scale-[.98]"
         >
           <Icon name="calls" className="h-6 w-6" />
           +91 87023 45678

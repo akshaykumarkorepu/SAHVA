@@ -30,6 +30,7 @@ const config: Config = {
           sunken: "rgb(var(--surface-sunken) / <alpha-value>)",
           inverse: "rgb(var(--surface-inverse) / <alpha-value>)",
         },
+        "on-brand": "rgb(var(--on-brand) / <alpha-value>)",
         ink: {
           DEFAULT: "rgb(var(--ink) / <alpha-value>)",
           muted: "rgb(var(--ink-muted) / <alpha-value>)",

@@ -230,6 +230,42 @@ export default function PatientHomePage() {
 
   const loading = medical.loading || tasks.loading || invoices.loading;
 
+  // Tiles earn their place. A row of zeroes is noise, and on a record with
+  // nothing in it yet that row was most of the screen.
+  type Tile = { icon: IconName; value: string; label: string; tone?: "warn" };
+  const tiles: Tile[] = [];
+
+  if (activeRx.length > 0) {
+    tiles.push({
+      icon: "activity",
+      value: String(activeRx.reduce((n, r) => n + r.items.length, 0)),
+      label: L ? "ప్రస్తుత మందులు" : "Medicines you take",
+    });
+  }
+  if (vaccinesDue.length > 0) {
+    tiles.push({
+      icon: "shield",
+      value: String(vaccinesDue.length),
+      label: L ? "రాబోయే టీకాలు" : "Vaccines due",
+      tone: vaccinesDue.some((v) => v.status === "overdue") ? "warn" : undefined,
+    });
+  }
+  if (owed > 0) {
+    tiles.push({
+      icon: "rupee",
+      value: rupees(owed),
+      label: L ? "చెల్లించాల్సినది" : "Amount to pay",
+      tone: "warn",
+    });
+  }
+  if (conditions.length > 0) {
+    tiles.push({
+      icon: "heart",
+      value: String(conditions.length),
+      label: L ? "ప్రస్తుత పరిస్థితులు" : "Ongoing conditions",
+    });
+  }
+
   return (
     <main className="min-h-[100dvh] bg-surface pb-20">
       <PatientHeader
@@ -241,42 +277,20 @@ export default function PatientHomePage() {
         signOutLabel={L ? "సైన్ అవుట్" : "Sign out"}
       />
 
-      <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
-          <div className="min-w-0 space-y-6">
-            <NextAppointment appt={next} L={L} clinic={me.clinic} />
-
-            <StatRow
-              L={L}
-              stats={[
-                {
-                  icon: "appointments",
-                  label: L ? "రాబోయే విజిట్" : "Next visit",
-                  value: next ? patientDate(next.starts_at, next.timezone, lang) : L ? "లేదు" : "None",
-                },
-                {
-                  icon: "activity",
-                  label: L ? "ప్రస్తుత మందులు" : "Active medicines",
-                  value: String(activeRx.reduce((n, r) => n + r.items.length, 0)),
-                },
-                {
-                  icon: "shield",
-                  label: L ? "రాబోయే టీకాలు" : "Vaccines due",
-                  value: String(vaccinesDue.length),
-                  tone: vaccinesDue.some((v) => v.status === "overdue") ? "warn" : undefined,
-                },
-                {
-                  icon: "rupee",
-                  label: L ? "చెల్లించాల్సినది" : "Amount due",
-                  value: owed > 0 ? rupees(owed) : "—",
-                  tone: owed > 0 ? "warn" : undefined,
-                },
-              ]}
-            />
-
-            {openTasks.length > 0 && (
-              <CareTasks tasks={openTasks} L={L} lang={lang} />
+      <div className="mx-auto max-w-5xl px-4 pt-5 sm:px-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_292px] lg:items-start">
+          <div className="min-w-0 space-y-5">
+            {next ? (
+              <AppointmentHero appt={next} L={L} lang={lang} clinic={me.clinic} />
+            ) : (
+              <NoAppointment L={L} lang={lang} clinic={me.clinic} lastVisit={me.past[0] ?? null} />
             )}
+
+            <QuickActions L={L} clinic={me.clinic} onJump={setTab} />
+
+            {tiles.length > 0 && <StatRow L={L} stats={tiles} />}
+
+            {openTasks.length > 0 && <CareTasks tasks={openTasks} L={L} lang={lang} />}
 
             <div className="no-scrollbar -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
               <Segmented options={tabs} value={tab} onChange={setTab} />
@@ -299,19 +313,16 @@ export default function PatientHomePage() {
             )}
           </div>
 
-          <aside className="space-y-5 lg:sticky lg:top-24">
+          <aside className="space-y-4 lg:sticky lg:top-24">
             {conditions.length > 0 && <ConditionsCard conditions={conditions} L={L} />}
             <ClinicCard clinic={me.clinic} L={L} />
+            <PrivacyNote L={L} />
           </aside>
         </div>
       </div>
     </main>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Chrome                                                                      */
-/* -------------------------------------------------------------------------- */
 
 function Centred({ children, tone }: { children: React.ReactNode; tone?: "amber" }) {
   return (
@@ -412,38 +423,67 @@ type Appt = {
   timezone: string;
 };
 
-function NextAppointment({
+/**
+ * No upcoming visit.
+ *
+ * This used to be a 250px dashed box containing an icon and an apology, which
+ * on a record with nothing else in it was most of the screen. A patient in
+ * that state wants one thing — to get an appointment — so the card is now the
+ * height of its content and leads with the way to get one.
+ */
+function NoAppointment({
+  L,
+  lang,
+  clinic,
+  lastVisit,
+}: {
+  L: boolean;
+  lang: Lang;
+  clinic: ClinicInfo;
+  lastVisit: Appt | null;
+}) {
+  return (
+    <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-ink-subtle">
+          {L ? "రాబోయే అపాయింట్‌మెంట్" : "Next appointment"}
+        </p>
+        <p className="mt-1.5 font-display text-xl font-semibold tracking-tight text-ink">
+          {L ? "ఏదీ షెడ్యూల్ కాలేదు" : "Nothing scheduled"}
+        </p>
+        <p className="mt-1 text-sm text-ink-muted">
+          {lastVisit
+            ? L
+              ? `చివరి సందర్శన ${patientDate(lastVisit.starts_at, lastVisit.timezone, lang)}`
+              : `Last visit ${patientDate(lastVisit.starts_at, lastVisit.timezone, lang)}`
+            : L
+              ? "క్లినిక్‌కి కాల్ చేస్తే మాయ 24/7 బుక్ చేస్తుంది."
+              : "Call the clinic — Maya books appointments 24/7."}
+        </p>
+      </div>
+      <a
+        href={`tel:${clinic.phone_e164}`}
+        className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-on-brand shadow-glow transition hover:bg-brand-700 active:scale-[.98]"
+      >
+        <Icon name="calls" className="h-4 w-4" />
+        {L ? "బుక్ చేయడానికి కాల్ చేయండి" : "Call to book"}
+      </a>
+    </Card>
+  );
+}
+
+/** The appointment itself — the one thing a patient opens this page for. */
+function AppointmentHero({
   appt,
   L,
+  lang,
   clinic,
 }: {
-  appt: Appt | null;
+  appt: Appt;
   L: boolean;
+  lang: Lang;
   clinic: ClinicInfo;
 }) {
-  if (!appt) {
-    return (
-      <Card className="p-6">
-        <EmptyState
-          icon="appointments"
-          title={L ? "రాబోయే అపాయింట్‌మెంట్ లేదు" : "No upcoming appointment"}
-          body={
-            L
-              ? "బుక్ చేయడానికి క్లినిక్‌కి కాల్ చేయండి. మా AI రిసెప్షనిస్ట్ 24/7 సమాధానం ఇస్తుంది."
-              : "Call the clinic to book. The AI receptionist answers 24/7."
-          }
-        />
-        <a
-          href={`tel:${clinic.phone_e164}`}
-          className="mx-auto mt-2 flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-brand-600 text-sm font-semibold text-white transition hover:bg-brand-700"
-        >
-          <Icon name="calls" className="h-4 w-4" />
-          {L ? "క్లినిక్‌కి కాల్ చేయండి" : "Call the clinic"}
-        </a>
-      </Card>
-    );
-  }
-
   const days = Math.round(
     (new Date(appt.starts_at).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86_400_000,
   );
@@ -460,33 +500,32 @@ function NextAppointment({
           ? `${days} రోజుల్లో`
           : `In ${days} days`;
 
-  const confirmed = appt.status === "confirmed";
+  const address = [clinic.address_line, clinic.landmark, clinic.city].filter(Boolean).join(", ");
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 p-6 text-white sm:p-7">
+      <div className="bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 p-5 text-on-brand sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/75">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] opacity-75">
               {L ? "రాబోయే అపాయింట్‌మెంట్" : "Next appointment"}
             </p>
-            <p className="mt-2 font-display text-[26px] font-bold leading-tight tracking-tight sm:text-[30px]">
+            <p className="mt-1.5 font-display text-[25px] font-bold leading-tight tracking-tight sm:text-[29px]">
               {patientDateTime(appt.starts_at, appt.timezone, L ? "te" : "en")}
             </p>
-            <p className="mt-2 text-[15px] text-white/90">
+            <p className="mt-1.5 text-[15px] opacity-90">
               {L ? "వద్ద " : "with "}
-              <strong className="font-semibold text-white">{appt.doctor_name}</strong> ·{" "}
-              {appt.doctor_specialty}
+              <strong className="font-semibold">{appt.doctor_name}</strong> · {appt.doctor_specialty}
             </p>
-            {appt.reason && <p className="mt-1 text-sm text-white/75">{appt.reason}</p>}
+            {appt.reason && <p className="mt-0.5 text-sm opacity-75">{appt.reason}</p>}
           </div>
-          <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ring-inset ring-white/25">
+          <span className="shrink-0 rounded-full bg-on-brand/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ring-inset ring-current/25">
             {when}
           </span>
         </div>
 
-        {confirmed && (
-          <p className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-[13px] font-medium ring-1 ring-inset ring-white/20">
+        {appt.status === "confirmed" && (
+          <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-on-brand/15 px-3 py-2 text-[13px] font-medium ring-1 ring-inset ring-current/20">
             <Icon name="check" className="h-4 w-4" />
             {L ? "నిర్ధారించబడింది — అప్పుడు కలుద్దాం" : "Confirmed — see you then"}
           </p>
@@ -494,24 +533,15 @@ function NextAppointment({
       </div>
 
       <div className="grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-3">
+        <ApptAction href={`tel:${clinic.phone_e164}`} icon="calls" label={L ? "కాల్ చేయండి" : "Call clinic"} />
         <ApptAction
-          href={`tel:${clinic.phone_e164}`}
-          icon="calls"
-          label={L ? "కాల్ చేయండి" : "Call clinic"}
-        />
-        <ApptAction
-          href={
-            clinic.map_url ??
-            `https://maps.google.com/?q=${encodeURIComponent(
-              [clinic.address_line, clinic.landmark, clinic.city].filter(Boolean).join(", "),
-            )}`
-          }
+          href={clinic.map_url ?? `https://maps.google.com/?q=${encodeURIComponent(address)}`}
           icon="chevronRight"
           label={L ? "దారి చూపించు" : "Directions"}
           external
         />
         {appt.consult_fee_paise != null && (
-          <div className="col-span-2 flex items-center justify-center gap-2 px-4 py-3.5 text-[13px] text-ink-muted sm:col-span-1">
+          <div className="col-span-2 flex items-center justify-center gap-2 px-4 py-3 text-[13px] text-ink-muted sm:col-span-1">
             <Icon name="rupee" className="h-4 w-4 text-ink-subtle" />
             {L ? "ఫీజు" : "Fee"}
             <strong className="font-semibold text-ink">{rupees(appt.consult_fee_paise)}</strong>
@@ -519,6 +549,71 @@ function NextAppointment({
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * The four things a patient does here, as targets rather than prose.
+ * Patient-portal research is consistent on this: large, obvious buttons for
+ * the handful of common tasks beat a navigable information architecture.
+ */
+function QuickActions({
+  L,
+  clinic,
+  onJump,
+}: {
+  L: boolean;
+  clinic: ClinicInfo;
+  onJump: (t: Tab) => void;
+}) {
+  const address = [clinic.address_line, clinic.landmark, clinic.city].filter(Boolean).join(", ");
+  const base =
+    "flex flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface-raised px-2 py-4 text-center text-[12px] font-medium text-ink transition hover:border-line-strong hover:bg-surface-sunken active:scale-[.98]";
+
+  return (
+    <div className="grid grid-cols-4 gap-2.5">
+      <a href={`tel:${clinic.phone_e164}`} className={base}>
+        <Icon name="calls" className="h-[18px] w-[18px] text-brand-600" />
+        {L ? "కాల్" : "Call"}
+      </a>
+      <a
+        href={clinic.map_url ?? `https://maps.google.com/?q=${encodeURIComponent(address)}`}
+        target="_blank"
+        rel="noreferrer"
+        className={base}
+      >
+        <Icon name="chevronRight" className="h-[18px] w-[18px] text-brand-600" />
+        {L ? "దారి" : "Directions"}
+      </a>
+      <button type="button" onClick={() => onJump("medicines")} className={base}>
+        <Icon name="activity" className="h-[18px] w-[18px] text-brand-600" />
+        {L ? "మందులు" : "Medicines"}
+      </button>
+      <button type="button" onClick={() => onJump("visits")} className={base}>
+        <Icon name="doctor" className="h-[18px] w-[18px] text-brand-600" />
+        {L ? "రికార్డు" : "Records"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Patients in portal research consistently ask who can see their record.
+ * Saying it plainly costs one card and is the honest answer here.
+ */
+function PrivacyNote({ L }: { L: boolean }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface-sunken/60 p-4">
+      <p className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+        <Icon name="shield" className="h-4 w-4 text-brand-600" />
+        {L ? "మీ రికార్డు ప్రైవేట్" : "Your record is private"}
+      </p>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-ink-muted">
+        {L
+          ? "మీ క్లినిక్ సిబ్బంది మాత్రమే దీన్ని చూడగలరు. వేరే క్లినిక్ చూడలేదు."
+          : "Only your clinic's staff can see this. No other clinic can."}
+      </p>
+    </div>
   );
 }
 
