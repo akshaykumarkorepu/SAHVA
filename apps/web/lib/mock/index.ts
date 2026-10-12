@@ -113,6 +113,22 @@ const applications = [
     review_note: "Certificate photo is unreadable" as string | null, owner_name: "Dr Latha", docs: [],
   },
 ];
+/** Clinics as the admin console lists them (admin_clinic_summaries). */
+const day = 864e5;
+const adminClinicRows = [
+  { id: "a0000000-0000-4000-8000-000000000001", name: "Sri Sai Clinic", city: "Warangal", verification_status: "approved", created_at: new Date(Date.now() - 40 * day).toISOString(), subscription_status: "active" as string | null, billing_cycle: "yearly" as string | null, current_period_end: new Date(Date.now() + 300 * day).toISOString() as string | null, is_live: true, staff: 3, patients: 214, appointments_30d: 182, ai_bookings_30d: 97, last_appointment_at: new Date(Date.now() - 3600e3).toISOString() as string | null, paid_total_paise: 999900 },
+  { id: "a0000000-0000-4000-8000-000000000002", name: "Krishna Clinic", city: "Karimnagar", verification_status: "approved", created_at: new Date(Date.now() - 16 * day).toISOString(), subscription_status: "trialing", billing_cycle: null, current_period_end: new Date(Date.now() - 1 * day).toISOString(), is_live: true, staff: 2, patients: 38, appointments_30d: 41, ai_bookings_30d: 22, last_appointment_at: new Date(Date.now() - 2 * day).toISOString(), paid_total_paise: 0 },
+  { id: "a0000000-0000-4000-8000-000000000003", name: "Lotus Clinic", city: "Nizamabad", verification_status: "approved", created_at: new Date(Date.now() - 30 * day).toISOString(), subscription_status: "trialing", billing_cycle: null, current_period_end: new Date(Date.now() - 9 * day).toISOString(), is_live: false, staff: 1, patients: 6, appointments_30d: 4, ai_bookings_30d: 0, last_appointment_at: new Date(Date.now() - 12 * day).toISOString(), paid_total_paise: 0 },
+  { id: "a0000000-0000-4000-8000-000000000004", name: "Padma Children's Clinic", city: "Karimnagar", verification_status: "submitted", created_at: new Date(Date.now() - 2 * day).toISOString(), subscription_status: null, billing_cycle: null, current_period_end: null, is_live: false, staff: 1, patients: 0, appointments_30d: 0, ai_bookings_30d: 0, last_appointment_at: null, paid_total_paise: 0 },
+];
+function adminClinics() {
+  // is_live follows the 3-day grace rule, as the database computes it.
+  return adminClinicRows.map((c) => ({
+    ...c,
+    is_live: c.verification_status === "approved" && (!c.current_period_end || new Date(c.current_period_end).getTime() + 3 * day > Date.now()),
+  }));
+}
+const adminNotes: { id: string; clinic_id: string; body: string; created_at: string; platform_admins: { full_name: string } }[] = [];
 const applicationHistory: { id: string; target_id: string; action: string; reason: string | null; created_at: string; platform_admins: { full_name: string } }[] = [];
 const clinicDocuments: Record<string, unknown>[] = [];
 function mockVerification(): Record<string, unknown> {
@@ -540,6 +556,38 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     c.review_note = (b.note as string) ?? null;
     applicationHistory.unshift({ id: crypto.randomUUID(), target_id: c.id, action: `clinic.${b.decision}`, reason: (b.note as string) ?? null, created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } });
     return c;
+  }
+
+  if (method === "GET" && pathname === "/admin/clinics") return adminClinics();
+  if (method === "GET" && seg[0] === "admin" && seg[1] === "clinics" && seg[2] && !seg[3]) {
+    const r = adminClinics().find((c) => c.id === seg[2]);
+    if (!r) throw new MockNotFound(pathname);
+    return {
+      clinic: { id: r.id, name: r.name, city: r.city, phone_e164: "+918702345678", verification_status: r.verification_status, created_at: r.created_at },
+      is_live: r.is_live,
+      subscriptions: r.subscription_status ? [{ id: "s-" + r.id, status: r.subscription_status, billing_cycle: r.billing_cycle, trial_ends_at: null, current_period_end: r.current_period_end }] : [],
+      payments: r.paid_total_paise > 0
+        ? [{ id: "p1", billing_cycle: "yearly", amount_paise: r.paid_total_paise, status: "paid", razorpay_payment_id: "pay_mock_1", razorpay_order_id: "order_mock_1", paid_at: new Date(Date.now() - 20 * 864e5).toISOString(), created_at: new Date(Date.now() - 20 * 864e5).toISOString() }]
+        : [],
+      staff: [{ role: "owner", status: "active", full_name: "Ravi Kumar", phone: "+919848012345" }, { role: "receptionist", status: "active", full_name: "Geeta", phone: null }],
+      usage: { appointments_30d: r.appointments_30d, by_source: { ai_call: r.ai_bookings_30d, staff_manual: r.appointments_30d - r.ai_bookings_30d }, no_show_rate: 8, calls_30d: 61, escalated_30d: 4, open_actions: 3, portal_links_30d: 12 },
+      patients: { total: r.patients, new_30d: 9 },
+      notes: adminNotes.filter((n) => n.clinic_id === r.id),
+      history: applicationHistory.filter((h) => h.target_id === r.id),
+    };
+  }
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "clinics" && seg[3] === "subscription") {
+    const c = adminClinicRows.find((x) => x.id === seg[2]);
+    if (!c) throw new MockNotFound(pathname);
+    const base = Math.max(Date.now(), new Date(c.current_period_end ?? Date.now()).getTime());
+    c.current_period_end = new Date(base + Number(b.days) * 864e5).toISOString();
+    applicationHistory.unshift({ id: crypto.randomUUID(), target_id: c.id, action: `subscription.${b.action}`, reason: String(b.note), created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } });
+    return c;
+  }
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "clinics" && seg[3] === "notes") {
+    const n = { id: crypto.randomUUID(), clinic_id: seg[2], body: String(b.body), created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } };
+    adminNotes.unshift(n);
+    return n;
   }
 
   // ---- billing -------------------------------------------------------------

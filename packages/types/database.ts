@@ -191,6 +191,45 @@ export type Database = {
           },
         ];
       };
+      admin_clinic_notes: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          admin_user_id: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          admin_user_id: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          admin_user_id?: string;
+          body?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_clinic_notes_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+          {
+            foreignKeyName: "admin_clinic_notes_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       appointment_events: {
         Row: {
           id: string;
@@ -3057,6 +3096,21 @@ export type Database = {
           p_payment_id: string;
         };
         Returns: Database["public"]["Tables"]["subscription_payments"]["Row"];
+      };
+      admin_adjust_subscription: {
+        Args: {
+          p_clinic_id: string;
+          p_action: string;
+          p_days: number;
+          p_note: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      admin_clinic_summaries: {
+        Args: Record<string, never>;
+        Returns: { id: string; name: string; city: string; verification_status: Database["public"]["Enums"]["clinic_verification_status"]; created_at: string; subscription_status: Database["public"]["Enums"]["subscription_status"]; billing_cycle: string; current_period_end: string; is_live: boolean; staff: number; patients: number; appointments_30d: number; ai_bookings_30d: number; last_appointment_at: string; paid_total_paise: number }[];
       };
       admin_review_clinic: {
         Args: {

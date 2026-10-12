@@ -490,3 +490,34 @@ test("an approved clinic shows no verification banner", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Your clinic is being verified")).toHaveCount(0);
 });
+
+test("admin clinics: stages, the attention filter, and extending a trial with a reason", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/clinics");
+  await expect(page.getByRole("link", { name: "Sri Sai Clinic" })).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("tab", { name: /Needs attention/ }).click();
+  const table = page.locator("table");
+  await expect(table).toContainText("Krishna Clinic"); // ended yesterday: grace
+  await expect(table).toContainText("Grace");
+  await expect(table).toContainText("Lotus Clinic"); // ended 9 days ago: read-only
+  await expect(table).toContainText("Read-only");
+  await expect(table).not.toContainText("Sri Sai Clinic");
+
+  await page.getByRole("link", { name: "Lotus Clinic" }).click();
+  await expect(page.getByText("Not live for patients")).toBeVisible();
+  await page.getByRole("button", { name: /Extend by 7 days/ }).click();
+  await expect(page.getByText(/Write the reason/)).toBeVisible();
+  await page.getByLabel("Reason").fill("Owner asked for more time to set up");
+  await page.getByRole("button", { name: /Extend by 7 days/ }).click();
+  await expect(page.getByText("Extended by 7 days.")).toBeVisible();
+  await expect(page.locator("main")).toContainText("subscription.extend_trial");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("admin clinic detail shows patient counts, never patient names", async ({ page }) => {
+  await page.goto("/admin/clinics/a0000000-0000-4000-8000-000000000001");
+  await expect(page.getByText("214")).toBeVisible({ timeout: 15_000 });
+  for (const name of ["Lakshmi", "Aarav", "Priya", "Srinivas"]) await expect(page.locator("main")).not.toContainText(name);
+});

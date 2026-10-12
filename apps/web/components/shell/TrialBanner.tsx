@@ -21,12 +21,16 @@ export function TrialBanner() {
 
   const left = daysLeft(sub.current_period_end);
   const urgent = state !== "trial" || left <= 3;
+  // Mirrors sahva.clinic_is_live(): 3 days of grace, then patient features stop.
+  const graceEnds = new Date(new Date(sub.current_period_end).getTime() + 3 * 86_400_000);
+  const inGrace = graceEnds.getTime() > Date.now();
+  const ended = state === "trial_ended" ? "Your free trial has ended" : "Your plan has expired";
   const text =
     state === "trial"
       ? `Free trial — ${left} day${left === 1 ? "" : "s"} left.`
-      : state === "trial_ended"
-        ? "Your free trial has ended."
-        : "Your plan has expired.";
+      : inGrace
+        ? `${ended}. Patient bookings and links stop on ${graceEnds.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}.`
+        : `${ended}. Patients cannot book or get links until you pay — your data is safe.`;
 
   return (
     <div

@@ -297,4 +297,11 @@ the doctor's council registration, upload certificates on
 `/dashboard/verification`, and set up while waiting; nothing reaches patients
 and no trial starts until a reviewer approves in `/admin/applications`.
 
-Next: step 3, clinics list and detail, subscription actions.
+**Step 3 done (2026-10-12):** `/admin/clinics` and clinic detail (migration
+`001000`, live). Expiry rule enforced: 3 days of grace, then nothing
+patient-facing until paid; legacy clinics without a subscription stay live.
+Note: the hosted Sri Sai demo subscription ends 1 Nov 2026, so its patient
+features stop on 4 Nov unless it pays or an admin extends it.
+
+Next: step 4, payments ledger, Razorpay webhook event store, reconciliation,
+exceptions queue and refunds.

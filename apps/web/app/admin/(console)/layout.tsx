@@ -9,7 +9,7 @@ import { Icon, type IconName } from "@/components/icons";
 const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin", label: "Overview", icon: "overview" },
   { href: "/admin/applications", label: "Applications", icon: "shield" },
-  { href: "/admin/clinics", label: "Clinics", icon: "patients", soon: true },
+  { href: "/admin/clinics", label: "Clinics", icon: "patients" },
   { href: "/admin/payments", label: "Payments", icon: "rupee", soon: true },
   { href: "/admin/audit", label: "Audit log", icon: "inbox" },
 ];
