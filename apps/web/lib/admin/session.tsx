@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from "../supabase";
 import { isMockMode } from "../mock/flag";
 import { ApiError, get } from "../api";
 
-export type AdminMe = { email: string | null; role: string; full_name: string };
+export type AdminMe = { user_id: string; email: string | null; role: string; full_name: string };
 
 type State = {
   status: "loading" | "signed-out" | "needs-mfa" | "not-admin" | "ready" | "unconfigured";

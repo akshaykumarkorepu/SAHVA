@@ -37,6 +37,9 @@ loadDotenv();
  * key and only discovers it on the first patient call is worse than one that
  * refuses to start.
  */
+/** An optional value left blank in .env (`KEY=`) means not set, not invalid. */
+const optional = <T extends z.ZodTypeAny>(t: T) => z.preprocess((v) => (v === "" ? undefined : v), t.optional());
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -85,10 +88,22 @@ const schema = z.object({
    * Use test-mode keys (rzp_test_…) everywhere but production — live keys
    * are refused outside it, so a dev machine can never take real money.
    */
-  RAZORPAY_KEY_ID: z.string().regex(/^rzp_(test|live)_\w+$/, "must look like rzp_test_…").optional(),
-  RAZORPAY_KEY_SECRET: z.string().min(10).optional(),
+  RAZORPAY_KEY_ID: optional(z.string().regex(/^rzp_(test|live)_\w+$/, "must look like rzp_test_…")),
+  RAZORPAY_KEY_SECRET: optional(z.string().min(10)),
   /** Set in Razorpay → Webhooks; signs payment.captured events. */
-  RAZORPAY_WEBHOOK_SECRET: z.string().min(8).optional(),
+  RAZORPAY_WEBHOOK_SECRET: optional(z.string().min(8)),
+
+  /**
+   * Email, through Resend (resend.com). Optional: without them notifications
+   * wait in the outbox (and are dropped after 7 days) — nothing else breaks.
+   * EMAIL_FROM must be on a domain verified in Resend, e.g.
+   * "SAHVA <notifications@sahva.in>".
+   */
+  RESEND_API_KEY: optional(z.string().startsWith("re_")),
+  EMAIL_FROM: optional(z.string().min(5)),
+  /** Where links in emails point: the clinic app, and the admin console. */
+  WEB_URL: z.string().url().default("http://localhost:3000"),
+  ADMIN_URL: optional(z.string().url()),
 });
 
 const parsed = schema.safeParse(process.env);

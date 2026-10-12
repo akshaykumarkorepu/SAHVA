@@ -21,6 +21,8 @@ export type BillingStatus = {
     paid_at: string;
     razorpay_payment_id: string;
   }[];
+  /** Invoices and credit notes; a payment's appear once SAHVA issues them. */
+  invoices?: { id: string; kind: "invoice" | "credit_note"; number: string; payment_id: string; total_paise: number; issued_at: string }[];
   payments_enabled: boolean;
 };
 

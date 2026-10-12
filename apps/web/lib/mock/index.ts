@@ -142,6 +142,42 @@ const paymentEvents: { id: string; event_type: string | null; signature_ok: bool
   { id: "ev1", event_type: "payment.captured", signature_ok: true, razorpay_payment_id: "pay_mock_m2", razorpay_order_id: "order_mock_m2", amount_paise: 199900, outcome: "activated", received_at: new Date(Date.now() - 2 * day + 600e3).toISOString() },
   { id: "ev2", event_type: null, signature_ok: false, razorpay_payment_id: null, razorpay_order_id: null, amount_paise: null, outcome: "rejected: bad signature", received_at: new Date(Date.now() - day).toISOString() },
 ];
+// ---- step 6: invoices, refund approvals, support access, emails ----
+const platformSettings = {
+  legal_name: "SAHVA Health Technologies Pvt Ltd", address: "Plot 12, Hanamkonda, Warangal 506001", state: "Telangana", state_code: "36",
+  gstin: "36AAACS1234A1Z1" as string | null, pan: "AAACS1234A" as string | null, email: "billing@sahva.example", phone: "+914023456789",
+  sac_code: "997331", gst_rate_bps: 1800, refund_second_approval_paise: 200000,
+};
+const ME_ADMIN = "ad000000-0000-4000-8000-000000000001";
+const refundRequests: {
+  id: string; clinic_id: string; payment_id: string; amount_paise: number; revoke_period: boolean; reason: string;
+  status: string; requested_by: string; requested_at: string; decided_at: string | null; decision_note: string | null;
+  clinics: { name: string }; subscription_payments: { razorpay_payment_id: string | null; billing_cycle: string; amount_paise: number };
+  requester: { full_name: string }; decider: { full_name: string } | null;
+}[] = [
+  {
+    id: "rr1", clinic_id: "a0000000-0000-4000-8000-000000000001", payment_id: "l1", amount_paise: 833200, revoke_period: true,
+    reason: "Clinic is moving to a hospital system; refund the unused 10 months", status: "pending", requested_by: "ad000000-0000-4000-8000-000000000002",
+    requested_at: new Date(Date.now() - 3 * 3600e3).toISOString(), decided_at: null, decision_note: null, clinics: { name: "Sri Sai Clinic" },
+    subscription_payments: { razorpay_payment_id: "pay_mock_y1", billing_cycle: "yearly", amount_paise: 999900 }, requester: { full_name: "Finance Two" }, decider: null,
+  },
+];
+const supportGrants: { id: string; reason: string; created_at: string; expires_at: string; revoked_at: string | null; granted_by: string | null; active: boolean; records_opened: number }[] = [];
+const supportPatients = [
+  { id: "f0000000-0000-4000-8000-000000000001", full_name: "Lakshmi Devi", phone_e164: "+919876500001", sex: "female", date_of_birth: "1971-03-02", preferred_language: "te", created_at: new Date(Date.now() - 90 * 864e5).toISOString() },
+  { id: "f0000000-0000-4000-8000-000000000002", full_name: "Mohan Kumar", phone_e164: "+919876500002", sex: "male", date_of_birth: null, preferred_language: "te", created_at: new Date(Date.now() - 30 * 864e5).toISOString() },
+];
+/** As sahva.issue_invoice builds it: GST-inclusive, CGST + SGST for a Telangana buyer. */
+function mockInvoice(id: string, kind: "invoice" | "credit_note", n: number, total: number, cycle: string, start: string | null, end: string | null, buyer: string, clinicId: string) {
+  const tax = platformSettings.gstin ? total - Math.round((total * 10000) / (10000 + platformSettings.gst_rate_bps)) : 0;
+  return {
+    id, kind, clinic_id: clinicId, number: `${kind === "invoice" ? "INV" : "CN"}/26-27/${String(n).padStart(5, "0")}`, issued_at: new Date().toISOString(),
+    seller: { ...platformSettings }, buyer: { name: buyer, address: "Station Road, Hanamkonda, Warangal, Telangana, 506001", state: "Telangana", state_code: "36", gstin: null },
+    description: `SAHVA for Clinics — ${cycle === "yearly" ? "1 year" : "1 month"} subscription`, sac_code: platformSettings.sac_code,
+    period_start: start, period_end: end, is_tax_invoice: !!platformSettings.gstin, gst_rate_bps: platformSettings.gstin ? platformSettings.gst_rate_bps : 0,
+    taxable_paise: total - tax, cgst_paise: Math.floor(tax / 2), sgst_paise: tax - Math.floor(tax / 2), igst_paise: 0, total_paise: total,
+  };
+}
 const adminNotes: { id: string; clinic_id: string; body: string; created_at: string; platform_admins: { full_name: string } }[] = [];
 const applicationHistory: { id: string; target_id: string; action: string; reason: string | null; created_at: string; platform_admins: { full_name: string } }[] = [];
 const clinicDocuments: Record<string, unknown>[] = [];
@@ -203,6 +239,25 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     return row;
   }
   if (method === "GET" && pathname === "/clinic/me") return { ...d.me, role: mockRole() };
+  if (method === "GET" && pathname === "/clinic/support-access") {
+    const now = Date.now();
+    return supportGrants.map((g) => ({ ...g, active: !g.revoked_at && new Date(g.expires_at).getTime() > now }));
+  }
+  if (method === "POST" && pathname === "/clinic/support-access") {
+    // Mirrors grant_support_access(): owner only, 1–72 hours, one open at a time.
+    if (mockRole() !== "owner") throw new ApiError(403, "FORBIDDEN", "Only the clinic owner can open access for SAHVA support");
+    if (supportGrants.some((g) => !g.revoked_at && new Date(g.expires_at).getTime() > Date.now()))
+      throw new ApiError(400, "ALREADY_OPEN", "Support access is already open. Close it first.");
+    const g = { id: crypto.randomUUID(), reason: String(b.reason), created_at: new Date().toISOString(), expires_at: new Date(Date.now() + Number(b.hours) * 3600e3).toISOString(), revoked_at: null as string | null, granted_by: "Ravi Kumar", active: true, records_opened: 0 };
+    supportGrants.unshift(g);
+    return g;
+  }
+  if (method === "POST" && seg[0] === "clinic" && seg[1] === "support-access" && seg[3] === "revoke") {
+    const g = supportGrants.find((x) => x.id === seg[2]);
+    if (!g) throw new MockNotFound(pathname);
+    g.revoked_at = g.revoked_at ?? new Date().toISOString();
+    return g;
+  }
   if (method === "PATCH" && pathname === "/clinic/settings") {
     settings = { ...settings, ...b };
     return settings;
@@ -514,7 +569,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   }
 
   // ---- platform admin ------------------------------------------------------
-  if (method === "GET" && pathname === "/admin/me") return { email: "ops@sahva.example", role: "super_admin", full_name: "Ops Admin" };
+  if (method === "GET" && pathname === "/admin/me") return { user_id: "ad000000-0000-4000-8000-000000000001", email: "ops@sahva.example", role: "super_admin", full_name: "Ops Admin" };
   if (method === "POST" && pathname === "/admin/sessions") return { ok: true };
   if (method === "GET" && pathname === "/admin/overview") {
     return {
@@ -523,6 +578,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       mrrPaise: 4 * 199900 + Math.round((3 * 999900) / 12), arrPaise: (4 * 199900 + Math.round((3 * 999900) / 12)) * 12,
       collectedThisMonthPaise: 2 * 199900 + 999900, paymentsThisMonth: 3,
       payingFromLedger: 2,
+      refundApprovalsWaiting: refundRequests.filter((r) => r.status === "pending").length,
       openPaymentExceptions: paymentExceptions.filter((e) => e.status === "open").length,
       applicationsWaiting: applications.filter((a) => ["submitted", "under_review"].includes(a.verification_status)).length,
     };
@@ -591,7 +647,26 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       patients: { total: r.patients, new_30d: 9 },
       notes: adminNotes.filter((n) => n.clinic_id === r.id),
       history: applicationHistory.filter((h) => h.target_id === r.id),
+      invoices: r.paid_total_paise > 0 ? [{ id: "inv-p1", kind: "invoice", number: "INV/26-27/00001", payment_id: "p1", total_paise: r.paid_total_paise, issued_at: new Date(Date.now() - 20 * 864e5).toISOString() }] : [],
+      emails: [
+        { id: "em1", kind: "payment.received", to_email: "ravi@srisai.example", status: "sent", attempts: 1, last_error: null, created_at: new Date(Date.now() - 20 * 864e5).toISOString(), sent_at: new Date(Date.now() - 20 * 864e5).toISOString() },
+        { id: "em2", kind: "application.approved", to_email: "ravi@srisai.example", status: "sent", attempts: 1, last_error: null, created_at: new Date(Date.now() - 39 * 864e5).toISOString(), sent_at: new Date(Date.now() - 39 * 864e5).toISOString() },
+      ],
+      // Sri Sai's owner has opened access, so the support flow can be tried.
+      support_access: r.id === "a0000000-0000-4000-8000-000000000001"
+        ? { id: "g1", reason: "A patient's booking shows twice — please check", created_at: new Date(Date.now() - 3600e3).toISOString(), expires_at: new Date(Date.now() + 3 * 3600e3).toISOString() }
+        : null,
     };
+  }
+  if (method === "GET" && seg[0] === "admin" && seg[1] === "clinics" && seg[3] === "support" && seg[4] === "patients") {
+    if (seg[2] !== "a0000000-0000-4000-8000-000000000001") throw new ApiError(403, "FORBIDDEN", "This clinic has not opened access for SAHVA support");
+    if (seg[5]) {
+      const p = supportPatients.find((x) => x.id === seg[5]);
+      if (!p) throw new MockNotFound(pathname);
+      return { ...p, appointments: [{ id: "ap1", starts_at: new Date(Date.now() + 864e5).toISOString(), status: "booked", source: "ai_call", token_number: 7, doctors: { full_name: "Dr. Ramesh Babu" } }] };
+    }
+    const q = (query.get("q") ?? "").toLowerCase();
+    return supportPatients.filter((p) => p.full_name.toLowerCase().includes(q) || p.phone_e164.includes(q)).map(({ id, full_name, phone_e164 }) => ({ id, full_name, phone_e164 }));
   }
   if (method === "POST" && seg[0] === "admin" && seg[1] === "clinics" && seg[3] === "subscription") {
     const c = adminClinicRows.find((x) => x.id === seg[2]);
@@ -609,7 +684,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
 
   if (method === "GET" && pathname === "/admin/payments") {
     const st = query.get("status") ?? "all";
-    return ledger.filter((p) => st === "all" || p.status === st);
+    return ledger.filter((p) => st === "all" || p.status === st).map((p) => ({ ...p, invoice_id: p.status === "paid" ? `inv-${p.id}` : null }));
   }
   if (method === "GET" && pathname === "/admin/payments/exceptions") {
     return paymentExceptions.filter((e) => e.status === (query.get("status") ?? "open"));
@@ -623,12 +698,54 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     ex.resolution = String(b.note);
     return ex;
   }
+  if (method === "GET" && seg[0] === "admin" && seg[1] === "invoices" && seg[2]) {
+    const p = ledger.find((x) => `inv-${x.id}` === seg[2]) ?? (seg[2] === "inv-p1" ? ledger[0] : undefined);
+    if (!p) throw new MockNotFound(pathname);
+    return mockInvoice(seg[2], "invoice", ledger.indexOf(p) + 1, p.captured_paise ?? p.amount_paise, p.billing_cycle, p.period_start, p.period_end, p.clinics.name, p.clinic_id);
+  }
+  if (method === "GET" && pathname === "/admin/settings") {
+    return { ...platformSettings, invoicing_ready: platformSettings.legal_name.length >= 3, invoices_issued: ledger.filter((p) => p.status === "paid").length };
+  }
+  if (method === "PUT" && pathname === "/admin/settings") {
+    Object.assign(platformSettings, b, { gstin: (b.gstin as string) || null, pan: (b.pan as string) || null });
+    return platformSettings;
+  }
+  if (method === "GET" && pathname === "/admin/payments/refund-requests") return refundRequests;
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "payments" && seg[2] === "refund-requests" && seg[3]) {
+    // Mirrors admin_decide_refund_request(): someone else approves; the asker may withdraw.
+    const r = refundRequests.find((x) => x.id === seg[3]);
+    if (!r) throw new MockNotFound(pathname);
+    if (r.status !== "pending") throw new ApiError(409, "INVALID_STATE", `This refund is ${r.status} already`);
+    const action = seg[4];
+    if ((action === "approve" || action === "decline") && r.requested_by === ME_ADMIN)
+      throw new ApiError(403, "FORBIDDEN", "A refund you asked for must be approved by someone else");
+    if (action === "cancel" && r.requested_by !== ME_ADMIN) throw new ApiError(403, "FORBIDDEN", "Only the admin who asked can withdraw it");
+    r.status = action === "approve" ? "approved" : action === "decline" ? "declined" : "cancelled";
+    r.decided_at = new Date().toISOString();
+    r.decision_note = (b.note as string) || null;
+    r.decider = action === "cancel" ? null : { full_name: "Ops Admin" };
+    if (action === "approve") {
+      const p = ledger.find((x) => x.id === r.payment_id);
+      if (p) p.refunded_paise += r.amount_paise;
+    }
+    return r;
+  }
   if (method === "POST" && seg[0] === "admin" && seg[1] === "payments" && seg[3] === "refund") {
     // Mirrors admin_record_refund(): never more than is left.
     const p = ledger.find((x) => x.id === seg[2]);
     if (!p) throw new MockNotFound(pathname);
     const left = (p.captured_paise ?? p.amount_paise) - p.refunded_paise;
     if (Number(b.amount_paise) > left) throw new ApiError(409, "TOO_MUCH", "That is more than is left to refund.");
+    if (Number(b.amount_paise) > platformSettings.refund_second_approval_paise) {
+      const req = {
+        id: crypto.randomUUID(), clinic_id: p.clinic_id, payment_id: p.id, amount_paise: Number(b.amount_paise), revoke_period: !!b.revoke_period,
+        reason: String(b.reason), status: "pending", requested_by: ME_ADMIN, requested_at: new Date().toISOString(), decided_at: null, decision_note: null,
+        clinics: { name: p.clinics.name }, subscription_payments: { razorpay_payment_id: p.razorpay_payment_id, billing_cycle: p.billing_cycle, amount_paise: p.amount_paise },
+        requester: { full_name: "Ops Admin" }, decider: null,
+      };
+      refundRequests.unshift(req);
+      return { needs_approval: true, request: req };
+    }
     p.refunded_paise += Number(b.amount_paise);
     paymentEvents.unshift({ id: crypto.randomUUID(), event_type: "refund.processed", signature_ok: true, razorpay_payment_id: p.razorpay_payment_id, razorpay_order_id: null, amount_paise: Number(b.amount_paise), outcome: "refund processed", received_at: new Date().toISOString() });
     return { id: crypto.randomUUID(), amount_paise: b.amount_paise };
@@ -661,7 +778,15 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   // ---- billing -------------------------------------------------------------
   // Mirrors routes/billing.ts. A trial with 11 days left; "paying" goes
   // through the same verify endpoint and activate rules as the real API.
-  if (method === "GET" && pathname === "/billing") return billing;
+  if (method === "GET" && pathname === "/billing") {
+    return { ...billing, invoices: billing.payments.map((p, i) => ({ id: `inv-${p.id}`, kind: "invoice", number: `INV/26-27/${String(billing.payments.length - i).padStart(5, "0")}`, payment_id: p.id, total_paise: p.amount_paise, issued_at: p.paid_at })) };
+  }
+  if (method === "GET" && seg[0] === "billing" && seg[1] === "invoices" && seg[2]) {
+    const i = billing.payments.findIndex((p) => `inv-${p.id}` === seg[2]);
+    if (i < 0) throw new MockNotFound(pathname);
+    const p = billing.payments[i];
+    return mockInvoice(seg[2], "invoice", billing.payments.length - i, p.amount_paise, p.billing_cycle, p.period_start, p.period_end, d.clinic.name, d.clinic.id);
+  }
   if (method === "POST" && pathname === "/billing/orders") {
     const cycle = b.cycle === "yearly" ? "yearly" : "monthly";
     const amount = cycle === "yearly" ? billing.plan.yearly_price_paise : billing.plan.monthly_price_paise;

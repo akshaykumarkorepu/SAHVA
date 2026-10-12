@@ -22,7 +22,7 @@ admin.get(
   "/me",
   asyncRoute(async (req, res) => {
     const a = req.admin!;
-    res.json({ email: a.email, role: a.role, full_name: a.fullName });
+    res.json({ user_id: a.userId, email: a.email, role: a.role, full_name: a.fullName });
   }),
 );
 
@@ -47,6 +47,7 @@ admin.get(
       dbAdmin.from("clinics").select("id", { count: "exact", head: true }).in("verification_status", ["submitted", "under_review"]),
       dbAdmin.rpc("admin_monthly_metrics", { p_months: 1 }),
     ]);
+    const approvals = await dbAdmin.from("refund_requests").select("id", { count: "exact", head: true }).eq("status", "pending");
     // MRR from the payment ledger, as Analytics computes it: what has
     // actually been paid for, not what subscriptions claim. A seeded or
     // comped "active" subscription with no payment is not revenue.
@@ -64,6 +65,7 @@ admin.get(
       payingFromLedger: Number(ledger?.paying_clinics ?? 0),
       openPaymentExceptions: exceptions.count ?? 0,
       applicationsWaiting: queue.count ?? 0,
+      refundApprovalsWaiting: approvals.count ?? 0,
     });
   }),
 );
@@ -272,6 +274,13 @@ admin.get(
       dbAdmin.from("appointments").select("source, status").eq("clinic_id", id).gte("created_at", since),
       dbAdmin.rpc("admin_clinic_summaries"),
     ]);
+    const [emails, grants, invoices] = await Promise.all([
+      dbAdmin.from("notifications").select("id, kind, to_email, status, attempts, last_error, created_at, sent_at").eq("clinic_id", id).eq("audience", "clinic").order("created_at", { ascending: false }).limit(20),
+      dbAdmin.from("support_access_grants").select("id, reason, created_at, expires_at, revoked_at").eq("clinic_id", id).order("created_at", { ascending: false }).limit(5),
+      dbAdmin.from("invoices").select("id, kind, number, payment_id, total_paise, issued_at").eq("clinic_id", id).order("issued_at", { ascending: false }).limit(50),
+    ]);
+    const now = Date.now();
+    const activeGrant = (grants.data ?? []).find((g) => !g.revoked_at && new Date(g.expires_at).getTime() > now) ?? null;
 
     const rows = appts.data ?? [];
     const bySource: Record<string, number> = {};
@@ -314,6 +323,9 @@ admin.get(
       patients: { total: patients, new_30d: newPatients },
       notes: notes.data ?? [],
       history: history.data ?? [],
+      emails: emails.data ?? [],
+      invoices: invoices.data ?? [],
+      support_access: activeGrant,
     });
   }),
 );
@@ -378,7 +390,13 @@ admin.get(
       .order("created_at", { ascending: false })
       .limit(300);
     if (status !== "all") q = q.eq("status", status);
-    res.json(unwrap(await q, "payments"));
+    const rows = unwrap(await q, "payments");
+    const paid = rows.filter((r) => r.status === "paid").map((r) => r.id);
+    const inv = paid.length
+      ? (await dbAdmin.from("invoices").select("id, payment_id").eq("kind", "invoice").in("payment_id", paid)).data ?? []
+      : [];
+    const invoiceOf = new Map(inv.map((i) => [i.payment_id, i.id]));
+    res.json(rows.map((r) => ({ ...r, invoice_id: invoiceOf.get(r.id) ?? null })));
   }),
 );
 
@@ -472,6 +490,25 @@ admin.post(
     const left = (pay.captured_paise ?? pay.amount_paise) - pay.refunded_paise;
     if (b.amount_paise > left) throw new AppError(409, "TOO_MUCH", `At most ${left / 100} rupees is left to refund.`);
 
+    // Above the threshold a second admin must approve: ask, do not refund.
+    const settings = unwrap(await dbAdmin.from("platform_settings").select("refund_second_approval_paise").single(), "settings");
+    if (b.amount_paise > settings.refund_second_approval_paise) {
+      const { data, error } = await dbAdmin.rpc("admin_request_refund", {
+        p_payment_id: pay.id,
+        p_amount: b.amount_paise,
+        p_revoke_period: b.revoke_period,
+        p_reason: b.reason,
+        p_admin_id: req.admin!.userId,
+        p_request_id: req.id,
+      });
+      if (error) {
+        if (error.code === "23505") throw new AppError(409, "ALREADY_REQUESTED", "A refund for this payment is already waiting for approval.");
+        throw fromPostgrest(error, "requesting the refund");
+      }
+      res.status(202).json({ needs_approval: true, request: data });
+      return;
+    }
+
     const refund = await createRefund(razorpayConfig(), pay.razorpay_payment_id, b.amount_paise, {
       reason: b.reason.slice(0, 250),
       by: req.admin!.email ?? req.admin!.userId,
@@ -519,6 +556,206 @@ admin.post(
     const summary = await reconcile();
     await logAdminAction(req, { action: "payment.reconcile", after: summary });
     res.json(summary);
+  }),
+);
+
+// --- Two-person refunds ------------------------------------------------------------------------
+
+admin.get(
+  "/payments/refund-requests",
+  asyncRoute(async (_req, res) => {
+    const rows = unwrap(
+      await dbAdmin
+        .from("refund_requests")
+        .select("*, clinics(name), subscription_payments(razorpay_payment_id, billing_cycle, amount_paise), requester:platform_admins!refund_requests_requested_by_fkey(full_name), decider:platform_admins!refund_requests_decided_by_fkey(full_name)")
+        .order("requested_at", { ascending: false })
+        .limit(100),
+      "refund requests",
+    );
+    res.json(rows);
+  }),
+);
+
+/**
+ * Approve: claim the request (so a second approver cannot also refund it),
+ * refund through Razorpay, record it. If Razorpay refuses, the claim is
+ * released and nothing changed.
+ */
+admin.post(
+  "/payments/refund-requests/:id/approve",
+  requireAdminRole("finance"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const claim = await dbAdmin.rpc("admin_decide_refund_request", {
+      p_request: req.params.id,
+      p_action: "claim",
+      p_note: null as never,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+    });
+    if (claim.error) throw fromPostgrest(claim.error, "approving the refund");
+    const r = claim.data!;
+    const pay = unwrap(await dbAdmin.from("subscription_payments").select("razorpay_payment_id").eq("id", r.payment_id).single(), "payment");
+
+    let refund;
+    try {
+      refund = await createRefund(razorpayConfig(), pay.razorpay_payment_id!, r.amount_paise, {
+        reason: r.reason.slice(0, 250),
+        by: req.admin!.email ?? req.admin!.userId,
+      });
+    } catch (e) {
+      await dbAdmin.rpc("admin_decide_refund_request", {
+        p_request: r.id, p_action: "release", p_note: null as never, p_admin_id: req.admin!.userId, p_request_id: req.id,
+      });
+      throw e;
+    }
+
+    const { data, error } = await dbAdmin.rpc("admin_record_refund", {
+      p_payment_id: r.payment_id,
+      p_razorpay_refund_id: refund.id,
+      p_amount: refund.amount,
+      p_status: refund.status === "processed" ? "processed" : "processing",
+      p_revoke_period: r.revoke_period,
+      p_reason: r.reason,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+      p_refund_request: r.id,
+    });
+    if (error) {
+      req.log.error({ err: error, refundId: refund.id }, "approved refund issued at Razorpay but not recorded");
+      throw new AppError(500, "REFUND_NOT_RECORDED", `Razorpay issued refund ${refund.id}, but SAHVA could not record it. Do not retry — record it by hand.`);
+    }
+    res.status(201).json(data);
+  }),
+);
+
+admin.post(
+  "/payments/refund-requests/:id/:action(decline|cancel)",
+  requireAdminRole("finance"),
+  validate({ params: z.object({ id: uuid, action: z.enum(["decline", "cancel"]) }), body: z.object({ note: z.string().trim().max(1000).default("") }) }),
+  asyncRoute(async (req, res) => {
+    const { data, error } = await dbAdmin.rpc("admin_decide_refund_request", {
+      p_request: req.params.id,
+      p_action: req.params.action,
+      p_note: (req.body as { note: string }).note,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+    });
+    if (error) throw fromPostgrest(error, "updating the refund request");
+    res.json(data);
+  }),
+);
+
+// --- Invoices and settings ----------------------------------------------------------------------
+
+admin.get(
+  "/invoices/:id",
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    res.json(unwrap(await dbAdmin.from("invoices").select("*").eq("id", req.params.id).single(), "invoice"));
+  }),
+);
+
+admin.get(
+  "/settings",
+  asyncRoute(async (_req, res) => {
+    const [settings, ready] = await Promise.all([
+      dbAdmin.from("platform_settings").select("*").single(),
+      dbAdmin.from("invoices").select("id", { count: "exact", head: true }),
+    ]);
+    const s = unwrap(settings, "settings");
+    res.json({ ...s, invoicing_ready: s.legal_name.trim().length >= 3 && s.address.trim().length >= 10, invoices_issued: ready.count ?? 0 });
+  }),
+);
+
+const gstin = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+admin.put(
+  "/settings",
+  requireAdminRole("super_admin"),
+  validate({
+    body: z
+      .object({
+        legal_name: z.string().trim().min(3).max(200),
+        address: z.string().trim().min(10).max(500),
+        state: z.string().trim().min(2).max(60),
+        state_code: z.string().regex(/^[0-9]{2}$/),
+        gstin: z.union([z.literal(""), z.string().trim().toUpperCase().regex(gstin, "GSTIN format")]),
+        pan: z.union([z.literal(""), z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "PAN format")]),
+        email: z.union([z.literal(""), z.string().email()]),
+        phone: z.string().trim().max(20),
+        sac_code: z.string().regex(/^[0-9]{6}$/),
+        gst_rate_bps: z.number().int().min(0).max(2800),
+        refund_second_approval_paise: z.number().int().min(0),
+      })
+      .partial(),
+  }),
+  asyncRoute(async (req, res) => {
+    const { data, error } = await dbAdmin.rpc("admin_update_platform_settings", {
+      p_changes: req.body,
+      p_admin_id: req.admin!.userId,
+      p_request_id: req.id,
+    });
+    if (error) throw fromPostgrest(error, "saving settings");
+    res.json(data);
+  }),
+);
+
+// --- Support access (opened by the clinic) -----------------------------------------------------
+
+/**
+ * Find a patient while the clinic has support access open. Support and super
+ * admins only; the search itself is audited, before any name is returned.
+ */
+admin.get(
+  "/clinics/:id/support/patients",
+  requireAdminRole("support"),
+  validate({ params: z.object({ id: uuid }), query: z.object({ q: z.string().trim().min(2).max(60) }) }),
+  asyncRoute(async (req, res) => {
+    const { q } = req.query as unknown as { q: string };
+    const grant = await dbAdmin.rpc("admin_log_support_access", {
+      p_admin_id: req.admin!.userId, p_clinic: req.params.id, p_patient: null as never, p_query: q, p_request_id: req.id,
+    });
+    if (grant.error) throw fromPostgrest(grant.error, "support access");
+    const digits = q.replace(/\D/g, "");
+    const rows = unwrap(
+      await dbAdmin
+        .from("patients")
+        .select("id, full_name, phone_e164")
+        .eq("clinic_id", req.params.id)
+        .or(digits.length >= 4 ? `phone_e164.like.*${digits}*` : `full_name.ilike.*${q.replace(/[,()*%]/g, "")}*`)
+        .limit(20),
+      "patients",
+    );
+    res.json(rows);
+  }),
+);
+
+/** One patient's profile and appointments — never medical records. Logged where the owner sees it. */
+admin.get(
+  "/clinics/:id/support/patients/:patientId",
+  requireAdminRole("support"),
+  validate({ params: z.object({ id: uuid, patientId: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const grant = await dbAdmin.rpc("admin_log_support_access", {
+      p_admin_id: req.admin!.userId, p_clinic: req.params.id, p_patient: req.params.patientId, p_query: null as never, p_request_id: req.id,
+    });
+    if (grant.error) throw fromPostgrest(grant.error, "support access");
+    const [patient, appts] = await Promise.all([
+      dbAdmin
+        .from("patients")
+        .select("id, full_name, phone_e164, sex, date_of_birth, preferred_language, created_at")
+        .eq("id", req.params.patientId)
+        .eq("clinic_id", req.params.id)
+        .single(),
+      dbAdmin
+        .from("appointments")
+        .select("id, starts_at, status, source, token_number, doctors(full_name)")
+        .eq("patient_id", req.params.patientId)
+        .eq("clinic_id", req.params.id)
+        .order("starts_at", { ascending: false })
+        .limit(20),
+    ]);
+    res.json({ ...unwrap(patient, "patient"), appointments: appts.data ?? [], grant: grant.data });
   }),
 );
 

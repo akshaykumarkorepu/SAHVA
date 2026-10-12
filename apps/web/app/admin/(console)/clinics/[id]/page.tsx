@@ -4,14 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { post } from "@/lib/api";
+import { get, post } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useAdminSession } from "@/lib/admin/session";
 import { inr } from "@/lib/pricing";
 import { STAGE, clinicStage } from "@/lib/clinicStage";
 import { STATUS_LABEL, type VerificationStatus } from "@/lib/verification";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { Badge, Button, Card, ErrorState, Field, Input, LoadingRows, PageHeader, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Card, ErrorState, Field, Input, LoadingRows, Modal, PageHeader, Select, Textarea } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 
@@ -25,6 +25,9 @@ type Detail = {
   patients: { total: number; new_30d: number };
   notes: { id: string; body: string; created_at: string; platform_admins: { full_name: string } | null }[];
   history: { id: string; action: string; reason: string | null; created_at: string; platform_admins: { full_name: string } | null }[];
+  emails?: { id: string; kind: string; to_email: string; status: string; attempts: number; last_error: string | null; created_at: string; sent_at: string | null }[];
+  invoices?: { id: string; kind: "invoice" | "credit_note"; number: string; payment_id: string; total_paise: number; issued_at: string }[];
+  support_access?: { id: string; reason: string; created_at: string; expires_at: string } | null;
 };
 
 const SOURCE: Record<string, string> = { ai_call: "AI call", staff_manual: "Staff", walk_in: "Walk-in", whatsapp: "WhatsApp", web: "Online" };
@@ -88,6 +91,11 @@ export default function ClinicDetail({ params }: { params: { id: string } }) {
                         {p.status === "created" ? "Not completed" : p.status}
                       </Badge>
                       <span className="block font-mono text-[11px] text-ink-subtle">{p.razorpay_payment_id ?? p.razorpay_order_id}</span>
+                      {(d.invoices ?? []).filter((i) => i.payment_id === p.id).map((i) => (
+                        <Link key={i.id} href={`/admin/invoices/${i.id}`} className="block text-xs font-medium text-brand-700 hover:underline">
+                          {i.kind === "credit_note" ? "Credit note" : "Invoice"} {i.number}
+                        </Link>
+                      ))}
                     </span>
                   </li>
                 ))}
@@ -107,7 +115,11 @@ export default function ClinicDetail({ params }: { params: { id: string } }) {
             </ul>
           </Card>
 
+          <SupportAccess clinicId={d.clinic.id} grant={d.support_access ?? null} />
+
           <Notes clinicId={d.clinic.id} notes={d.notes} />
+
+          <Emails emails={d.emails ?? []} />
 
           <Card className="p-5">
             <h2 className="text-sm font-semibold text-ink">History</h2>
@@ -231,6 +243,151 @@ function Notes({ clinicId, notes }: { clinicId: string; notes: Detail["notes"] }
         <Input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a note for the team" aria-label="New note" />
         <Button variant="secondary" loading={busy} onClick={() => void add()}>Add</Button>
       </div>
+    </Card>
+  );
+}
+
+const EMAIL_LABEL: Record<string, string> = {
+  "application.received": "Application received",
+  "application.needs_info": "More information needed",
+  "application.approved": "Approved",
+  "application.rejected": "Rejected",
+  "clinic.suspended": "Suspended",
+  "clinic.reinstated": "Reinstated",
+  "trial.ending": "Trial ending",
+  "subscription.ending": "Plan ending",
+  "subscription.lapsed": "Plan lapsed",
+  "payment.received": "Payment received",
+  "payment.failed": "Payment failed",
+  "refund.processed": "Refund processed",
+};
+
+/** What SAHVA has emailed this clinic's owner, and whether it got there. */
+function Emails({ emails }: { emails: NonNullable<Detail["emails"]> }) {
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink">Emails to the owner</h2>
+      {emails.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-muted">None yet.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-line text-sm">
+          {emails.map((e) => (
+            <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
+              <span>
+                {EMAIL_LABEL[e.kind] ?? e.kind}
+                <span className="block text-xs text-ink-subtle">{e.to_email} · {formatDateTime(e.sent_at ?? e.created_at)}</span>
+              </span>
+              <span className="text-right">
+                <Badge tone={e.status === "sent" ? "good" : e.status === "failed" ? "bad" : "neutral"}>
+                  {e.status === "queued" ? "Waiting to send" : e.status}
+                </Badge>
+                {e.status === "failed" && e.last_error && <span className="block text-xs text-ink-subtle">{e.last_error}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+type FoundPatient = { id: string; full_name: string; phone_e164: string };
+type PatientView = FoundPatient & {
+  sex: string | null;
+  date_of_birth: string | null;
+  preferred_language: string | null;
+  created_at: string;
+  appointments: { id: string; starts_at: string; status: string; source: string; token_number: number | null; doctors: { full_name: string } | null }[];
+};
+
+/**
+ * Break-glass, as the clinic allowed it. Shown only while the owner has
+ * access open; every search and every patient opened is logged, and the
+ * owner sees each patient opened in that patient's access log.
+ */
+function SupportAccess({ clinicId, grant }: { clinicId: string; grant: Detail["support_access"] | null }) {
+  const { me } = useAdminSession();
+  const allowed = me?.role === "super_admin" || me?.role === "support";
+  const [q, setQ] = React.useState("");
+  const [found, setFound] = React.useState<FoundPatient[] | null>(null);
+  const [open, setOpen] = React.useState<PatientView | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function search() {
+    if (q.trim().length < 2) return;
+    setBusy(true);
+    try {
+      setFound(await get<FoundPatient[]>(`/admin/clinics/${clinicId}/support/patients?q=${encodeURIComponent(q.trim())}`));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Search failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function view(id: string) {
+    try {
+      setOpen(await get<PatientView>(`/admin/clinics/${clinicId}/support/patients/${id}`));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open the record.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink">Support access</h2>
+      {!grant ? (
+        <p className="mt-2 text-sm text-ink-muted">
+          Closed. Patients are visible only if the clinic owner opens access from Settings → Support access.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-ink" role="status">
+            <Badge tone="warn">Open until {formatDateTime(grant.expires_at)}</Badge>
+            <span className="mt-1 block">The clinic asked: “{grant.reason}”</span>
+            <span className="block text-xs text-ink-subtle">Every search and record you open is logged and shown to the owner.</span>
+          </p>
+          {allowed ? (
+            <>
+              <div className="mt-3 flex gap-2">
+                <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void search()} placeholder="Patient name or phone" aria-label="Find a patient" />
+                <Button variant="secondary" loading={busy} onClick={() => void search()}>Find</Button>
+              </div>
+              {found && (
+                <ul className="mt-2 divide-y divide-line text-sm">
+                  {found.length === 0 && <li className="py-2 text-ink-muted">No match.</li>}
+                  {found.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-3 py-2">
+                      <span>{p.full_name}<span className="block text-xs text-ink-subtle">{p.phone_e164}</span></span>
+                      <Button size="sm" variant="ghost" onClick={() => void view(p.id)}>Open</Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-ink-subtle">Only support admins can look up patients.</p>
+          )}
+        </>
+      )}
+      {open && (
+        <Modal open onClose={() => setOpen(null)} title={open.full_name} description={`${open.phone_e164} · patient since ${formatDate(open.created_at)}`}>
+          <dl className="grid grid-cols-2 gap-2 text-sm">
+            <dt className="text-ink-subtle">Sex</dt><dd className="capitalize">{open.sex ?? "—"}</dd>
+            <dt className="text-ink-subtle">Born</dt><dd>{open.date_of_birth ? formatDate(open.date_of_birth) : "—"}</dd>
+            <dt className="text-ink-subtle">Language</dt><dd className="uppercase">{open.preferred_language ?? "—"}</dd>
+          </dl>
+          <h3 className="mt-4 text-xs font-semibold uppercase tracking-wider text-ink-subtle">Appointments</h3>
+          <ul className="mt-1 divide-y divide-line pb-4 text-sm">
+            {open.appointments.length === 0 && <li className="py-2 text-ink-muted">None.</li>}
+            {open.appointments.map((a) => (
+              <li key={a.id} className="flex justify-between gap-3 py-2">
+                <span>{formatDateTime(a.starts_at)}<span className="block text-xs text-ink-subtle">{a.doctors?.full_name ?? "—"} · {a.source.replace("_", " ")}{a.token_number ? ` · token ${a.token_number}` : ""}</span></span>
+                <span className="capitalize text-ink-muted">{a.status.replace("_", " ")}</span>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
     </Card>
   );
 }

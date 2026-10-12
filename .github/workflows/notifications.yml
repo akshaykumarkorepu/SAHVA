@@ -1,0 +1,36 @@
+name: Notifications
+
+# Every 15 minutes: queues reminders that time made due (trial/plan ending,
+# lapse, the admins' daily digest), issues any GST invoices still owed, and
+# sends queued emails through Resend. See apps/api/src/lib/notifications.ts.
+#
+# Uses the same repository secrets as payment reconciliation:
+#   SAHVA_API_URL, SAHVA_WORKER_KEY (the API's VOICE_API_KEY)
+# Until both are set, the job reports that and exits without failing.
+# GitHub may delay scheduled runs by a few minutes; nothing here is that urgent.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: notifications
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send notifications
+        env:
+          API: ${{ secrets.SAHVA_API_URL }}
+          KEY: ${{ secrets.SAHVA_WORKER_KEY }}
+        run: |
+          if [ -z "$API" ] || [ -z "$KEY" ]; then
+            echo "::notice::SAHVA_API_URL / SAHVA_WORKER_KEY not set — skipping."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST "$API/api/internal/notifications/run" \
+            -H "x-sahva-key: $KEY" -H "content-type: application/json"

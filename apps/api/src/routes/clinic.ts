@@ -5,7 +5,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
 import { isoDate, uuid, validate } from "../middleware/validate.js";
-import { badRequest, unwrap } from "../lib/errors.js";
+import { badRequest, fromPostgrest, unwrap } from "../lib/errors.js";
 
 export const clinic = Router();
 
@@ -296,5 +296,79 @@ clinic.post(
       "document",
     );
     res.status(201).json(row);
+  }),
+);
+
+// --- Support access (break-glass) ---------------------------------------------------------
+/**
+ * The owner can let SAHVA support see patient details for a few hours, to
+ * fix a problem. Owners and managers see the history; only the owner opens
+ * or closes it. Every record support opens shows in the patient's access log.
+ */
+clinic.get(
+  "/support-access",
+  requireRole("owner", "manager"),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const rows = unwrap(
+      await db
+        .from("support_access_grants")
+        .select("id, reason, created_at, expires_at, revoked_at, staff_profiles!support_access_grants_granted_by_fkey(full_name)")
+        .eq("clinic_id", clinicId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      "support access",
+    );
+    // Who at SAHVA looked, from the clinic's own access log.
+    const since = rows.at(-1)?.created_at ?? new Date().toISOString();
+    const looks = await dbAdmin
+      .from("record_access_log")
+      .select("actor_user_id, accessed_at")
+      .eq("clinic_id", clinicId)
+      .eq("actor_type", "support")
+      .gte("accessed_at", since);
+    const now = Date.now();
+    res.json(
+      rows.map((g) => ({
+        id: g.id,
+        reason: g.reason,
+        created_at: g.created_at,
+        expires_at: g.expires_at,
+        revoked_at: g.revoked_at,
+        granted_by: (g.staff_profiles as { full_name: string } | null)?.full_name ?? null,
+        active: !g.revoked_at && new Date(g.expires_at).getTime() > now,
+        records_opened: (looks.data ?? []).filter(
+          (l) => l.accessed_at >= g.created_at && l.accessed_at <= (g.revoked_at ?? g.expires_at),
+        ).length,
+      })),
+    );
+  }),
+);
+
+clinic.post(
+  "/support-access",
+  requireRole("owner"),
+  validate({ body: z.object({ hours: z.number().int().min(1).max(72), reason: z.string().trim().min(3).max(500) }) }),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const b = req.body as { hours: number; reason: string };
+    const { data, error } = await db.rpc("grant_support_access", { p_clinic: clinicId, p_hours: b.hours, p_reason: b.reason });
+    if (error) {
+      if (error.code === "23505") throw badRequest("ALREADY_OPEN", "Support access is already open. Close it first.");
+      throw fromPostgrest(error, "opening support access");
+    }
+    res.status(201).json(data);
+  }),
+);
+
+clinic.post(
+  "/support-access/:id/revoke",
+  requireRole("owner"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    const { data, error } = await db.rpc("revoke_support_access", { p_grant: req.params.id });
+    if (error) throw fromPostgrest(error, "closing support access");
+    res.json(data);
   }),
 );

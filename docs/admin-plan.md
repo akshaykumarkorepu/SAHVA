@@ -262,8 +262,7 @@ rest of the repo.
 4. **Host:** admin console on its own subdomain; `/admin` returns 404 on the
    clinic domain.
 
-Still open: ABDM integrator registration (automatic HFR checks), refund
-two-person threshold, break-glass on or off.
+Still open: ABDM integrator registration (automatic HFR checks).
 
 ---
 
@@ -310,7 +309,7 @@ ledger with refunds, exceptions queue, webhook event log, reconciliation.
 
 - Razorpay → Webhooks → `https://<api-host>/api/webhooks/razorpay`, secret in
   `RAZORPAY_WEBHOOK_SECRET`, events: `payment.captured`, `refund.processed`,
-  `refund.failed`, `payment.dispute.created`, `payment.dispute.won`,
+  `refund.failed`, `payment.failed`, `payment.dispute.created`, `payment.dispute.won`,
   `payment.dispute.lost`, `payment.dispute.closed`.
 - Razorpay → Account & Settings → Payment capture: **automatic**. Held
   (authorised-only) payments otherwise wait in the exceptions queue.
@@ -328,5 +327,36 @@ Clinic health (`apps/api/src/lib/health.ts`) scores live clinics 0–100 from
 not scored. The overview's MRR and paying-clinic count now come from the
 ledger too, so a clinic marked active that never paid is no longer counted.
 
-Next: step 6 — notifications to clinics (approval, trial ending, payment
-failed), GST invoices, two-person approval for large refunds.
+**Step 6 done (2026-10-12):** hardening (migrations `001300`–`001700`).
+
+- **Notifications.** An email outbox (`notifications`) filled by triggers in
+  the same transaction as the change: owners hear about their application,
+  suspension/reinstatement, trial or plan ending (3 days, 1 day), lapse into
+  grace, payments received or failed, refunds; admins hear about new
+  applications, payment exceptions (disputes marked urgent), refunds waiting
+  for approval, support access opened, and a daily digest after 09:00 IST.
+  `.github/workflows/notifications.yml` calls `/api/internal/notifications/run`
+  every 15 minutes; emails go through Resend (`RESEND_API_KEY`, `EMAIL_FROM`),
+  five tries with backoff, idempotent per row; anything older than 7 days is
+  dropped rather than sent late. No patient data is ever in a notification.
+- **GST invoices.** One invoice per paid payment and a credit note per
+  processed refund, numbered gap-free per financial year (`INV/26-27/00001`,
+  `CN/26-27/00001`), immutable, with both parties snapshotted. Prices are
+  GST-inclusive: with a GSTIN in Admin → Settings the invoice splits CGST +
+  SGST (same state) or IGST; without one it is a bill of supply. Nothing is
+  issued until the legal name and address are filled in; then everything
+  owed is issued. Owners print them from Billing; admins from the ledger.
+- **Two-person refunds.** Above `refund_second_approval_paise` (₹2,000 —
+  so any yearly refund) a refund becomes a request that a *different*
+  finance admin approves; the database refuses a large refund without one,
+  and a claim step stops two approvers refunding twice.
+- **Break-glass, opened by the clinic.** The owner opens support access from
+  Settings → Support access for 1–72 hours with a reason, and can close it.
+  While open, support admins can search the clinic's patients and open a
+  profile and appointments (never medical records). Each search is in the
+  admin audit log; each record opened is also in the patient's own access log
+  as "SAHVA support — name". Admins cannot open access themselves.
+- Razorpay `payment.failed` is now handled (owner emailed once per order).
+
+Decisions taken (were open in §9): refund threshold ₹2,000; break-glass on,
+but only when the clinic owner grants it; prices include GST.

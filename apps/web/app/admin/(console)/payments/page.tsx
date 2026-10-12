@@ -19,7 +19,25 @@ type Payment = RefundablePayment & {
   razorpay_order_id: string;
   razorpay_payment_id: string | null;
   created_at: string;
+  invoice_id?: string | null;
   clinics: { name: string; city: string } | null;
+};
+type RefundRequest = {
+  id: string;
+  clinic_id: string;
+  payment_id: string;
+  amount_paise: number;
+  revoke_period: boolean;
+  reason: string;
+  status: "pending" | "approving" | "approved" | "declined" | "cancelled";
+  requested_by: string;
+  requested_at: string;
+  decided_at: string | null;
+  decision_note: string | null;
+  clinics: { name: string } | null;
+  subscription_payments: { razorpay_payment_id: string | null; billing_cycle: string; amount_paise: number } | null;
+  requester: { full_name: string } | null;
+  decider: { full_name: string } | null;
 };
 type Exception = {
   id: string;
@@ -59,8 +77,10 @@ const KIND: Record<string, { label: string; fix: string; activate?: boolean }> =
 const STATUS_TONE: Record<string, "good" | "warn" | "neutral" | "bad"> = { paid: "good", created: "neutral", expired: "neutral", failed: "bad" };
 
 export default function Payments() {
-  const [tab, setTab] = React.useState<"ledger" | "exceptions" | "events">("ledger");
+  const [tab, setTab] = React.useState<"ledger" | "approvals" | "exceptions" | "events">("ledger");
   const open = useApi<Exception[]>("/admin/payments/exceptions?status=open");
+  const requests = useApi<RefundRequest[]>("/admin/payments/refund-requests");
+  const pendingCount = (requests.data ?? []).filter((r) => r.status === "pending").length;
   const { me } = useAdminSession();
   const finance = me?.role === "super_admin" || me?.role === "finance";
   const client = useQueryClient();
@@ -99,12 +119,13 @@ export default function Payments() {
           onChange={setTab}
           options={[
             { value: "ledger", label: "Ledger" },
+            { value: "approvals", label: `Refund approvals${pendingCount ? ` ${pendingCount}` : ""}` },
             { value: "exceptions", label: `Exceptions${openCount ? ` ${openCount}` : ""}` },
             { value: "events", label: "Webhook events" },
           ]}
         />
       </div>
-      {tab === "ledger" ? <Ledger finance={finance} /> : tab === "exceptions" ? <Exceptions finance={finance} /> : <Events />}
+      {tab === "ledger" ? <Ledger finance={finance} /> : tab === "approvals" ? <Approvals finance={finance} myId={me?.user_id ?? null} /> : tab === "exceptions" ? <Exceptions finance={finance} /> : <Events />}
     </>
   );
 }
@@ -147,7 +168,14 @@ function Ledger({ finance }: { finance: boolean }) {
                 <td className="px-4 py-3">
                   <Badge tone={STATUS_TONE[p.status] ?? "neutral"}>{p.status === "created" ? "Not completed" : p.status}</Badge>
                 </td>
-                <td className="px-4 py-3 font-mono text-[11px] text-ink-subtle">{p.razorpay_payment_id ?? p.razorpay_order_id}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-ink-subtle">
+                  {p.razorpay_payment_id ?? p.razorpay_order_id}
+                  {p.invoice_id && (
+                    <Link href={`/admin/invoices/${p.invoice_id}`} className="block font-sans text-xs font-medium text-brand-700 hover:underline">
+                      Invoice
+                    </Link>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-ink-muted">{formatDateTime(p.paid_at ?? p.created_at)}</td>
                 <td className="px-4 py-3 text-right">
                   {finance && p.status === "paid" && p.refunded_paise < (p.captured_paise ?? p.amount_paise) && (
@@ -171,6 +199,7 @@ function Ledger({ finance }: { finance: boolean }) {
  */
 function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => void }) {
   const client = useQueryClient();
+  const settings = useApi<{ refund_second_approval_paise: number }>("/admin/settings");
   const suggestion = policyRefund(payment);
   const max = (payment.captured_paise ?? payment.amount_paise) - payment.refunded_paise;
   const [rupees, setRupees] = React.useState(String(suggestion.paise / 100));
@@ -179,12 +208,18 @@ function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => v
   const [busy, setBusy] = React.useState(false);
   const paise = Math.round(Number(rupees) * 100);
   const valid = Number.isFinite(paise) && paise > 0 && paise <= max && reason.trim().length >= 3;
+  const limit = settings.data?.refund_second_approval_paise ?? null;
+  const needsApproval = limit !== null && paise > limit;
 
   async function submit() {
     setBusy(true);
     try {
-      await post(`/admin/payments/${payment.id}/refund`, { amount_paise: paise, revoke_period: revoke, reason: reason.trim() });
-      toast.success(`Refunded ${inr(paise)} through Razorpay.`);
+      const r = await post<{ needs_approval?: boolean }>(`/admin/payments/${payment.id}/refund`, { amount_paise: paise, revoke_period: revoke, reason: reason.trim() });
+      toast.success(
+        r?.needs_approval
+          ? `Asked for approval: another finance admin must approve ${inr(paise)}.`
+          : `Refunded ${inr(paise)} through Razorpay.`,
+      );
       void client.invalidateQueries({ queryKey: ["api"] });
       onClose();
     } catch (e) {
@@ -203,8 +238,8 @@ function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => v
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="danger" loading={busy} disabled={!valid} onClick={() => void submit()}>
-            Refund {Number.isFinite(paise) && paise > 0 ? inr(paise) : ""}
+          <Button variant="danger" loading={busy} disabled={!valid || limit === null} onClick={() => void submit()}>
+            {needsApproval ? "Ask for approval" : `Refund ${Number.isFinite(paise) && paise > 0 ? inr(paise) : ""}`}
           </Button>
         </>
       }
@@ -213,6 +248,11 @@ function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => v
         <p className="rounded-xl bg-surface-sunken p-3 text-sm text-ink">
           Policy suggests <strong>{inr(suggestion.paise)}</strong>. {suggestion.why}
         </p>
+        {needsApproval && (
+          <p className="rounded-xl border border-line p-3 text-sm text-ink" role="note">
+            Above {inr(limit!)} a second finance admin must approve. Nothing is refunded until they do.
+          </p>
+        )}
         <Field label="Amount (₹)" hint={`At most ${inr(max)}.`}>
           <Input value={rupees} onChange={(e) => setRupees(e.target.value.replace(/[^\d.]/g, ""))} inputMode="decimal" />
         </Field>
@@ -225,6 +265,96 @@ function RefundDialog({ payment, onClose }: { payment: Payment; onClose: () => v
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Large refunds wait here for a second finance admin. The requester can
+ * withdraw theirs; anyone else can approve (which refunds through Razorpay)
+ * or decline with a reason.
+ */
+function Approvals({ finance, myId }: { finance: boolean; myId: string | null }) {
+  const q = useApi<RefundRequest[]>("/admin/payments/refund-requests");
+  const client = useQueryClient();
+  const [notes, setNotes] = React.useState<Record<string, string>>({});
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  async function act(r: RefundRequest, action: "approve" | "decline" | "cancel") {
+    const note = (notes[r.id] ?? "").trim();
+    if (action === "decline" && note.length < 3) return toast.error("Say why it is declined.");
+    setBusy(r.id + action);
+    try {
+      await post(`/admin/payments/refund-requests/${r.id}/${action}`, action === "approve" ? undefined : { note });
+      toast.success(action === "approve" ? `Approved and refunded ${inr(r.amount_paise)}.` : action === "decline" ? "Declined." : "Withdrawn.");
+      void client.invalidateQueries({ queryKey: ["api"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "That did not work.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (q.loading) return <LoadingRows rows={3} />;
+  if (q.error) return <ErrorState error={q.error} onRetry={q.reload} />;
+  const rows = q.data ?? [];
+  if (rows.length === 0)
+    return <EmptyState icon="success" tone="good" title="No refunds waiting" body="Refunds above the approval limit appear here for a second finance admin." />;
+
+  const TONE = { pending: "warn", approving: "warn", approved: "good", declined: "bad", cancelled: "neutral" } as const;
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => {
+        const mine = r.requested_by === myId;
+        return (
+          <Card key={r.id} className="p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <Badge tone={TONE[r.status]}>{r.status === "pending" ? "Waiting for approval" : r.status}</Badge>
+                <p className="mt-2 font-medium text-ink">
+                  {r.clinics?.name ?? "—"} <span className="ml-1 text-ink-muted">{inr(r.amount_paise)}</span>
+                </p>
+                <p className="text-xs text-ink-subtle">
+                  Asked by {r.requester?.full_name ?? "—"} · {formatDateTime(r.requested_at)} ·{" "}
+                  <span className="font-mono">{r.subscription_payments?.razorpay_payment_id}</span>
+                  {r.revoke_period ? " · takes back the unused period" : ""}
+                </p>
+                <p className="mt-1 text-sm text-ink">“{r.reason}”</p>
+                {r.decider && r.status !== "pending" && (
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {r.status === "approved" ? "Approved" : r.status === "declined" ? "Declined" : "Handled"} by {r.decider.full_name}
+                    {r.decision_note ? ` — “${r.decision_note}”` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+            {finance && r.status === "pending" && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                {mine ? (
+                  <>
+                    <span className="flex-1 text-sm text-ink-muted">You asked for this; another finance admin must approve it.</span>
+                    <Button size="sm" variant="ghost" loading={busy === r.id + "cancel"} onClick={() => void act(r, "cancel")}>Withdraw</Button>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      value={notes[r.id] ?? ""}
+                      onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))}
+                      placeholder="Reason, if declining"
+                      aria-label="Reason, if declining"
+                      className="min-w-[220px] flex-1"
+                    />
+                    <Button size="sm" variant="danger" loading={busy === r.id + "approve"} onClick={() => void act(r, "approve")}>
+                      Approve and refund {inr(r.amount_paise)}
+                    </Button>
+                    <Button size="sm" variant="secondary" loading={busy === r.id + "decline"} onClick={() => void act(r, "decline")}>Decline</Button>
+                  </>
+                )}
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 

@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin/payments", label: "Payments", icon: "rupee" },
   { href: "/admin/analytics", label: "Analytics", icon: "analytics" },
   { href: "/admin/audit", label: "Audit log", icon: "inbox" },
+  { href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
 
 /**
@@ -45,7 +46,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="flex min-h-dvh bg-surface">
-      <aside className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface-inverse px-3 py-5 text-white lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface-inverse px-3 py-5 text-white lg:flex print:!hidden">
         <div className="flex items-center gap-2 px-2">
           <Icon name="shield" className="h-5 w-5" />
           <span className="font-display font-semibold">SAHVA Admin</span>
@@ -88,7 +89,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="flex flex-col gap-2 border-b border-line px-5 py-3 lg:hidden">
+        <header className="flex flex-col gap-2 border-b border-line px-5 py-3 lg:hidden print:hidden">
           <span className="font-display font-semibold text-ink">SAHVA Admin</span>
           <nav className="no-scrollbar -mx-5 flex gap-4 overflow-x-auto whitespace-nowrap px-5 text-sm">
             {NAV.filter((n) => !n.soon).map((n) => (

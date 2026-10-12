@@ -1,5 +1,9 @@
 import {
   LayoutGrid,
+  Printer,
+  FileText,
+  Mail,
+  LifeBuoy,
   Flag,
   CalendarDays,
   Phone,
@@ -83,6 +87,10 @@ export const ICONS = {
   inbox: Inbox,
   eye: Eye,
   eyeOff: EyeOff,
+  printer: Printer,
+  invoice: FileText,
+  mail: Mail,
+  support: LifeBuoy,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

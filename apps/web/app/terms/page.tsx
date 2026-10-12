@@ -21,8 +21,8 @@ export default function Terms() {
       <ul>
         <li>New clinics get a {PRICE.trialDays}-day free trial. No card is needed to start it.</li>
         <li>
-          After the trial the price is {inr(PRICE.monthlyPaise)} per month or {inr(PRICE.yearlyPaise)} per year, plus
-          applicable taxes, paid in advance through Razorpay.
+          After the trial the price is {inr(PRICE.monthlyPaise)} per month or {inr(PRICE.yearlyPaise)} per year, inclusive
+          of GST where it applies, paid in advance through Razorpay. A GST invoice is issued for every payment.
         </li>
         <li>Each payment covers one period. Payments are not renewed or debited automatically.</li>
         <li>We will give at least 30 days&rsquo; notice of any price change; it applies from your next payment.</li>

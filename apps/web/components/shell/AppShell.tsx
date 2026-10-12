@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] bg-surface">
       {/* ---------------- Desktop rail ---------------- */}
-      <aside className="sticky top-0 hidden h-[100dvh] w-[248px] shrink-0 flex-col border-r border-line bg-surface-raised px-3 py-5 lg:flex">
+      <aside className="sticky top-0 hidden h-[100dvh] w-[248px] shrink-0 flex-col border-r border-line bg-surface-raised px-3 py-5 lg:flex print:!hidden">
         <div className="px-2">
           <Logo subtitle={clinic?.name} />
         </div>
@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* ---------------- Top bar ---------------- */}
-        <header className="sticky top-0 z-30 border-b border-line bg-surface-raised/60 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-line bg-surface-raised/60 backdrop-blur-xl print:hidden">
           <div className="flex items-center gap-3 px-4 py-3 md:px-7">
             <div className="lg:hidden">
               <Logo compact />
@@ -81,8 +81,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <VerificationBanner />
-        <TrialBanner />
+        <div className="print:hidden">
+          <VerificationBanner />
+          <TrialBanner />
+        </div>
 
         {/* pb-28 keeps content clear of the mobile tab bar */}
         <main className="min-w-0 flex-1 px-4 pb-28 pt-6 md:px-7 lg:pb-10">
@@ -93,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ---------------- Mobile tab bar ---------------- */}
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-raised/60 backdrop-blur-xl pb-safe lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface-raised/60 backdrop-blur-xl pb-safe lg:hidden print:hidden"
       >
         <div className="mx-auto flex max-w-lg items-stretch justify-around px-1 pt-1.5">
           {primaryNav(role).map((item) => (

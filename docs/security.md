@@ -124,6 +124,27 @@ and managers see the last reads in the patient quick view.
 Portal links do not reach clinical tables at all (`test/portal-scope.test.ts`),
 so they are not in this log; their use is counted on `patient_access_tokens`.
 
+## SAHVA support and patient records (break-glass)
+
+Platform admins see counts, never patients. The one exception is opened by
+the clinic, not by us: the owner grants support access from Settings for
+1–72 hours with a reason, and can close it at any time
+(`grant_support_access` checks the owner role from the session). While it is
+open, admins with the support or super-admin role can search that clinic's
+patients and open a profile and appointment list — not medical records.
+`admin_log_support_access` refuses without an open grant and writes, before
+anything is served, an `admin_audit_log` row (with the clinic's reason) and,
+for each patient opened, a `record_access_log` row with actor `support`, which
+the owner sees in that patient's access log. Tested in
+`supabase/tests/34_refund_approvals_and_support.sql`.
+
+## Money controls
+
+Refunds above `platform_settings.refund_second_approval_paise` need two
+finance admins (asker ≠ approver), enforced in `admin_record_refund`; a claim
+step makes concurrent approvals refund once. Invoices and credit notes are
+immutable and numbered without gaps per financial year.
+
 ## Not yet addressed
 
 - **Audit of patient-profile reads beyond `GET /patients/:id`.** Clinical

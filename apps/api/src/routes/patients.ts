@@ -87,10 +87,20 @@ patients.get(
       ? unwrap(await db.from("staff_profiles").select("id, full_name").in("id", staffIds), "staff")
       : [];
     const byId = new Map(names.map((n) => [n.id, n.full_name]));
+    // SAHVA support, opened by the owner: named, so the owner sees who looked.
+    // platform_admins is invisible to clinic sessions, hence the service role.
+    const supportIds = [...new Set(rows.filter((r) => r.actor_type === "support").map((r) => r.actor_user_id))];
+    if (supportIds.length) {
+      const { data } = await dbAdmin.from("platform_admins").select("user_id, full_name").in("user_id", supportIds);
+      for (const a of data ?? []) byId.set(a.user_id, `SAHVA support — ${a.full_name}`);
+    }
     res.json(
       rows.map((r) => ({
         ...r,
-        actor_name: r.actor_type === "patient" ? "The patient" : byId.get(r.actor_user_id) ?? "A staff member",
+        actor_name:
+          r.actor_type === "patient"
+            ? "The patient"
+            : byId.get(r.actor_user_id) ?? (r.actor_type === "support" ? "SAHVA support" : "A staff member"),
       })),
     );
   }),

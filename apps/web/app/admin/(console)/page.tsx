@@ -22,6 +22,7 @@ type Overview = {
   payingFromLedger: number;
   openPaymentExceptions: number;
   applicationsWaiting: number;
+  refundApprovalsWaiting?: number;
 };
 
 /** The business at a glance. Figures come from /api/admin/overview. */
@@ -42,8 +43,8 @@ export default function AdminOverview() {
         </div>
       ) : (
         <div className="space-y-8">
-          {(o.applicationsWaiting > 0 || o.openPaymentExceptions > 0) && (
-            <section className="grid gap-3 sm:grid-cols-2">
+          {(o.applicationsWaiting > 0 || o.openPaymentExceptions > 0 || (o.refundApprovalsWaiting ?? 0) > 0) && (
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {o.applicationsWaiting > 0 && (
                 <Link href="/admin/applications" className="rounded-2xl border border-accent-sky/30 bg-accent-sky/[0.06] p-4 text-sm text-ink hover:bg-accent-sky/10">
                   <strong>{o.applicationsWaiting}</strong> clinic{o.applicationsWaiting === 1 ? "" : "s"} waiting for verification →
@@ -52,6 +53,11 @@ export default function AdminOverview() {
               {o.openPaymentExceptions > 0 && (
                 <Link href="/admin/payments" className="rounded-2xl border border-accent-amber/30 bg-accent-amber/[0.08] p-4 text-sm text-ink hover:bg-accent-amber/15">
                   <strong>{o.openPaymentExceptions}</strong> payment problem{o.openPaymentExceptions === 1 ? "" : "s"} to look at →
+                </Link>
+              )}
+              {(o.refundApprovalsWaiting ?? 0) > 0 && (
+                <Link href="/admin/payments" className="rounded-2xl border border-accent-amber/30 bg-accent-amber/[0.08] p-4 text-sm text-ink hover:bg-accent-amber/15">
+                  <strong>{o.refundApprovalsWaiting}</strong> refund{o.refundApprovalsWaiting === 1 ? "" : "s"} waiting for a second approval →
                 </Link>
               )}
             </section>

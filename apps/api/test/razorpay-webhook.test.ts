@@ -64,6 +64,26 @@ test("a correctly signed event we do not handle is acknowledged, not acted on", 
   }
 });
 
+test("a failed payment marks only an order still waiting as failed", async () => {
+  const srv = await serve();
+  try {
+    const body = JSON.stringify({ event: "payment.failed", payload: { payment: { entity: { id: "pay_f", order_id: "order_f", amount: 199900 } } } });
+    const r = await fetch(srv.url, {
+      method: "POST",
+      body,
+      headers: { "content-type": "application/json", "x-razorpay-signature": sign(body) },
+    });
+    assert.equal(r.status, 200);
+    const patch = stub.state.requests.find((q) => q.method === "PATCH" && q.url.startsWith("/rest/v1/subscription_payments"));
+    assert.ok(patch, "updates the payment");
+    assert.match(patch!.url, /razorpay_order_id=eq\.order_f/);
+    // A paid order is never turned back into a failed one.
+    assert.match(patch!.url, /status=eq\.created/);
+  } finally {
+    await srv.close();
+  }
+});
+
 test.after(async () => {
   await stub.close();
 });

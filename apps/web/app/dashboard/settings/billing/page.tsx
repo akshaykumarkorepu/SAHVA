@@ -8,6 +8,7 @@ import { useSession } from "@/lib/session";
 import { pay, type BillingStatus } from "@/lib/billing";
 import { daysLeft, inr, perMonthOnYearly, subscriptionState, yearlySaving } from "@/lib/pricing";
 import { formatDate } from "@/lib/format";
+import Link from "next/link";
 import { Badge, Button, Card, ErrorState, LoadingRows, cn } from "@/components/ui";
 import { Icon } from "@/components/icons";
 
@@ -26,6 +27,8 @@ export default function BillingPage() {
   if (q.error || !q.data) return <ErrorState error={q.error ?? new Error("No billing data")} onRetry={q.reload} />;
 
   const { plan, subscription: sub, payments, payments_enabled } = q.data;
+  const invoices = q.data.invoices ?? [];
+  const invoiceFor = (paymentId: string) => invoices.filter((i) => i.payment_id === paymentId);
   const state = subscriptionState(sub);
   const yearly = plan.yearly_price_paise ?? 0;
   const saving = yearlySaving(plan.monthly_price_paise, yearly);
@@ -94,8 +97,8 @@ export default function BillingPage() {
           )}
         </div>
         <p className="mt-3 text-xs text-ink-subtle">
-          Paid securely through Razorpay — UPI, cards or netbanking. Prices include everything in {plan.name}; taxes as
-          applicable.
+          Paid securely through Razorpay — UPI, cards or netbanking. Prices include everything in {plan.name}, and GST
+          where it applies. A GST invoice is issued for every payment.
         </p>
       </section>
 
@@ -116,8 +119,20 @@ export default function BillingPage() {
                     {formatDate(p.paid_at, tz)}
                   </span>
                 </span>
-                <span className="font-mono text-xs text-ink-subtle" title="Quote this reference for any billing question">
-                  {p.razorpay_payment_id}
+                <span className="flex flex-col items-end gap-1">
+                  <span className="font-mono text-xs text-ink-subtle" title="Quote this reference for any billing question">
+                    {p.razorpay_payment_id}
+                  </span>
+                  {invoiceFor(p.id).length === 0 ? (
+                    <span className="text-xs text-ink-subtle">Invoice on its way</span>
+                  ) : (
+                    invoiceFor(p.id).map((i) => (
+                      <Link key={i.id} href={`/dashboard/invoices/${i.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
+                        <Icon name="invoice" className="h-3.5 w-3.5" />
+                        {i.kind === "credit_note" ? "Credit note" : "Invoice"} {i.number}
+                      </Link>
+                    ))
+                  )}
                 </span>
               </div>
             ))}

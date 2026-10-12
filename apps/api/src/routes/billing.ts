@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
-import { validate } from "../middleware/validate.js";
+import { uuid, validate } from "../middleware/validate.js";
 import { AppError, badRequest, fromPostgrest, notFound, unwrap } from "../lib/errors.js";
 import { dbAdmin } from "../lib/supabase.js";
 import { createOrder, fetchPayment, razorpayConfig, verifyPaymentSignature } from "../lib/razorpay.js";
@@ -14,7 +14,7 @@ billing.get(
   "/",
   asyncRoute(async (req, res) => {
     const { db, clinicId } = req.auth!;
-    const [plan, sub, payments] = await Promise.all([
+    const [plan, sub, payments, invoices] = await Promise.all([
       db.from("plans").select("code, name, monthly_price_paise, yearly_price_paise").eq("code", "starter").single(),
       db
         .from("subscriptions")
@@ -30,6 +30,12 @@ billing.get(
         .eq("status", "paid")
         .order("paid_at", { ascending: false })
         .limit(24),
+      db
+        .from("invoices")
+        .select("id, kind, number, payment_id, total_paise, issued_at")
+        .eq("clinic_id", clinicId)
+        .order("issued_at", { ascending: false })
+        .limit(60),
     ]);
 
     let paymentsEnabled = true;
@@ -43,6 +49,7 @@ billing.get(
       plan: unwrap(plan, "plan"),
       subscription: sub.data,
       payments: payments.data ?? [],
+      invoices: invoices.data ?? [],
       payments_enabled: paymentsEnabled,
     });
   }),
@@ -179,5 +186,16 @@ billing.post(
     }
     req.log.info({ orderId: b.razorpay_order_id, paymentId: b.razorpay_payment_id }, "subscription payment verified");
     res.json(data);
+  }),
+);
+
+/** One invoice or credit note, for printing. Owners and managers (RLS). */
+billing.get(
+  "/invoices/:id",
+  requireRole("owner", "manager"),
+  validate({ params: z.object({ id: uuid }) }),
+  asyncRoute(async (req, res) => {
+    const { db } = req.auth!;
+    res.json(unwrap(await db.from("invoices").select("*").eq("id", req.params.id).single(), "invoice"));
   }),
 );

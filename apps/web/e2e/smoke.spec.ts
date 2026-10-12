@@ -573,3 +573,104 @@ test("admin analytics: monthly charts, the table view, and clinics that need a c
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("billing: a payment gets a GST invoice, printable, with the total in words", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/settings/billing");
+  await page.getByRole("button", { name: "Pay ₹9,999" }).click({ timeout: 15_000 });
+  await expect(page.getByText("Your plan is active", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: /Invoice INV\/26-27\/00001/ }).click();
+  const inv = page.getByRole("article", { name: /Tax invoice INV\/26-27\/00001/ });
+  await expect(inv).toBeVisible();
+  await expect(inv).toContainText("CGST @ 9%");
+  await expect(inv).toContainText("SGST @ 9%");
+  await expect(inv).toContainText("₹9,999.00");
+  await expect(inv).toContainText("Rupees Nine Thousand Nine Hundred Ninety Nine Only");
+  await expect(inv).toContainText("GSTIN: 36AAACS1234A1Z1");
+  await expect(page.getByRole("button", { name: "Print or save as PDF" })).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("support access: the owner opens it for a few hours with a reason, and closes it", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/settings/support");
+  await expect(page.getByText("Support has never had access to this clinic.")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Open access for support" }).click();
+  await expect(page.getByText("Say what SAHVA support should look at.")).toBeVisible();
+  await page.getByLabel("What should support look at?").fill("Lakshmi's booking shows twice");
+  await page.getByLabel("For how long").selectOption("4");
+  await page.getByRole("button", { name: "Open access for support" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /Open until/ })).toContainText("Lakshmi's booking shows twice");
+  await page.getByRole("button", { name: "Close access now" }).click();
+  await expect(page.getByText("Support access closed.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open access for support" })).toBeVisible();
+  await expect(page.locator("main")).toContainText(/closed/);
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("support access: a manager sees the history but cannot open it", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sahva.mock.role", "manager"));
+  await page.goto("/dashboard/settings/support");
+  await expect(page.getByText("Only the clinic owner can open access for SAHVA support.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Open access for support" })).toHaveCount(0);
+});
+
+test("admin: a refund above ₹2,000 needs a second admin, who approves it", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/payments");
+  await expect(page.locator("table")).toContainText("Sri Sai Clinic", { timeout: 15_000 });
+  await page.locator("tr", { hasText: "pay_mock_y1" }).getByRole("button", { name: "Refund" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Amount (₹)").fill("9999");
+  await expect(dialog.getByRole("note")).toContainText("a second finance admin must approve");
+  await expect(dialog.getByRole("button", { name: "Ask for approval" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await page.getByRole("tab", { name: /Refund approvals 1/ }).click();
+  await expect(page.getByText("Asked by Finance Two")).toBeVisible();
+  await page.getByRole("button", { name: "Approve and refund ₹8,332" }).click();
+  await expect(page.getByText("Approved and refunded ₹8,332.")).toBeVisible();
+  await expect(page.locator("main")).toContainText("Approved by Ops Admin");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("admin: the ledger links each paid payment to its invoice", async ({ page }) => {
+  await page.goto("/admin/payments");
+  await page.locator("tr", { hasText: "pay_mock_m1" }).getByRole("link", { name: "Invoice" }).click({ timeout: 15_000 });
+  await expect(page.getByRole("article", { name: /Tax invoice INV\/26-27/ })).toContainText("Krishna Clinic");
+});
+
+test("admin settings: invoicing status, and the refund approval limit", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/settings");
+  await expect(page.getByText(/Invoicing on/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel("Legal name")).toHaveValue("SAHVA Health Technologies Pvt Ltd");
+  await page.getByLabel("Second approval above (₹)").fill("5000");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText(/^Saved\./)).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("admin support: patients only while the clinic has access open, and emails sent to the owner", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/clinics/a0000000-0000-4000-8000-000000000001");
+  await expect(page.getByText("The clinic asked: “A patient's booking shows twice — please check”")).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel("Find a patient").fill("Lak");
+  await page.getByRole("button", { name: "Find" }).click();
+  await page.getByRole("button", { name: "Open" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Lakshmi Devi");
+  await expect(dialog).toContainText("token 7");
+  await dialog.getByRole("button", { name: /close/i }).first().click();
+  await expect(page.locator("main")).toContainText("Payment received");
+
+  await page.goto("/admin/clinics/a0000000-0000-4000-8000-000000000002");
+  await expect(page.getByText(/Closed\. Patients are visible only if the clinic owner opens access/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel("Find a patient")).toHaveCount(0);
+  await settle(page);
+  expect(errors).toEqual([]);
+});

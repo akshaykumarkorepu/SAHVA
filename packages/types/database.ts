@@ -1583,6 +1583,128 @@ export type Database = {
           },
         ];
       };
+      invoice_counters: {
+        Row: {
+          series: string;
+          fy: string;
+          last: number;
+        };
+        Insert: {
+          series: string;
+          fy: string;
+          last?: number;
+        };
+        Update: {
+          series?: string;
+          fy?: string;
+          last?: number;
+        };
+        Relationships: [];
+      };
+      invoices: {
+        Row: {
+          id: string;
+          kind: string;
+          number: string;
+          fy: string;
+          clinic_id: string;
+          payment_id: string;
+          refund_id: string | null;
+          original_invoice_id: string | null;
+          issued_at: string;
+          seller: Json;
+          buyer: Json;
+          description: string;
+          sac_code: string;
+          period_start: string | null;
+          period_end: string | null;
+          is_tax_invoice: boolean;
+          gst_rate_bps: number;
+          taxable_paise: number;
+          cgst_paise: number;
+          sgst_paise: number;
+          igst_paise: number;
+          total_paise: number;
+        };
+        Insert: {
+          id?: string;
+          kind: string;
+          number: string;
+          fy: string;
+          clinic_id: string;
+          payment_id: string;
+          refund_id?: string | null;
+          original_invoice_id?: string | null;
+          issued_at?: string;
+          seller: Json;
+          buyer: Json;
+          description: string;
+          sac_code: string;
+          period_start?: string | null;
+          period_end?: string | null;
+          is_tax_invoice: boolean;
+          gst_rate_bps: number;
+          taxable_paise: number;
+          cgst_paise?: number;
+          sgst_paise?: number;
+          igst_paise?: number;
+          total_paise: number;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          number?: string;
+          fy?: string;
+          clinic_id?: string;
+          payment_id?: string;
+          refund_id?: string | null;
+          original_invoice_id?: string | null;
+          issued_at?: string;
+          seller?: Json;
+          buyer?: Json;
+          description?: string;
+          sac_code?: string;
+          period_start?: string | null;
+          period_end?: string | null;
+          is_tax_invoice?: boolean;
+          gst_rate_bps?: number;
+          taxable_paise?: number;
+          cgst_paise?: number;
+          sgst_paise?: number;
+          igst_paise?: number;
+          total_paise?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invoices_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_original_invoice_id_fkey";
+            columns: ["original_invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: true;
+            referencedRelation: "subscription_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_refund_id_fkey";
+            columns: ["refund_id"];
+            isOneToOne: true;
+            referencedRelation: "refunds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       message_templates: {
         Row: {
           id: string;
@@ -1739,6 +1861,68 @@ export type Database = {
             columns: ["patient_id"];
             isOneToOne: false;
             referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          clinic_id: string | null;
+          audience: string;
+          kind: string;
+          to_email: string;
+          to_name: string | null;
+          payload: Json;
+          dedupe_key: string;
+          status: string;
+          attempts: number;
+          last_error: string | null;
+          provider_message_id: string | null;
+          send_after: string;
+          created_at: string;
+          sent_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clinic_id?: string | null;
+          audience: string;
+          kind: string;
+          to_email: string;
+          to_name?: string | null;
+          payload?: Json;
+          dedupe_key: string;
+          status?: string;
+          attempts?: number;
+          last_error?: string | null;
+          provider_message_id?: string | null;
+          send_after?: string;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string | null;
+          audience?: string;
+          kind?: string;
+          to_email?: string;
+          to_name?: string | null;
+          payload?: Json;
+          dedupe_key?: string;
+          status?: string;
+          attempts?: number;
+          last_error?: string | null;
+          provider_message_id?: string | null;
+          send_after?: string;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
             referencedColumns: ["id"];
           },
         ];
@@ -2357,6 +2541,65 @@ export type Database = {
           },
         ];
       };
+      platform_settings: {
+        Row: {
+          id: boolean;
+          legal_name: string;
+          address: string;
+          state: string;
+          state_code: string;
+          gstin: string | null;
+          pan: string | null;
+          email: string;
+          phone: string;
+          sac_code: string;
+          gst_rate_bps: number;
+          refund_second_approval_paise: number;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: boolean;
+          legal_name?: string;
+          address?: string;
+          state?: string;
+          state_code?: string;
+          gstin?: string | null;
+          pan?: string | null;
+          email?: string;
+          phone?: string;
+          sac_code?: string;
+          gst_rate_bps?: number;
+          refund_second_approval_paise?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: boolean;
+          legal_name?: string;
+          address?: string;
+          state?: string;
+          state_code?: string;
+          gstin?: string | null;
+          pan?: string | null;
+          email?: string;
+          phone?: string;
+          sac_code?: string;
+          gst_rate_bps?: number;
+          refund_second_approval_paise?: number;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "platform_settings_updated_by_fkey";
+            columns: ["updated_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+        ];
+      };
       prescription_items: {
         Row: {
           id: string;
@@ -2517,6 +2760,90 @@ export type Database = {
           },
         ];
       };
+      refund_requests: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          payment_id: string;
+          amount_paise: number;
+          revoke_period: boolean;
+          reason: string;
+          requested_by: string;
+          requested_at: string;
+          status: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          refund_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          payment_id: string;
+          amount_paise: number;
+          revoke_period: boolean;
+          reason: string;
+          requested_by: string;
+          requested_at?: string;
+          status?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          refund_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          payment_id?: string;
+          amount_paise?: number;
+          revoke_period?: boolean;
+          reason?: string;
+          requested_by?: string;
+          requested_at?: string;
+          status?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          refund_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "refund_requests_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_requests_decided_by_fkey";
+            columns: ["decided_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+          {
+            foreignKeyName: "refund_requests_payment_id_fkey";
+            columns: ["payment_id"];
+            isOneToOne: true;
+            referencedRelation: "subscription_payments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_requests_refund_id_fkey";
+            columns: ["refund_id"];
+            isOneToOne: true;
+            referencedRelation: "refunds";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "refund_requests_requested_by_fkey";
+            columns: ["requested_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+        ];
+      };
       refunds: {
         Row: {
           id: string;
@@ -2530,6 +2857,7 @@ export type Database = {
           requested_by: string;
           created_at: string;
           processed_at: string | null;
+          approved_by: string | null;
         };
         Insert: {
           id?: string;
@@ -2543,6 +2871,7 @@ export type Database = {
           requested_by: string;
           created_at?: string;
           processed_at?: string | null;
+          approved_by?: string | null;
         };
         Update: {
           id?: string;
@@ -2556,8 +2885,16 @@ export type Database = {
           requested_by?: string;
           created_at?: string;
           processed_at?: string | null;
+          approved_by?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "refunds_approved_by_fkey";
+            columns: ["approved_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
           {
             foreignKeyName: "refunds_clinic_id_fkey";
             columns: ["clinic_id"];
@@ -3014,6 +3351,61 @@ export type Database = {
           },
         ];
       };
+      support_access_grants: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          granted_by: string;
+          reason: string;
+          created_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          granted_by: string;
+          reason: string;
+          created_at?: string;
+          expires_at: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          granted_by?: string;
+          reason?: string;
+          created_at?: string;
+          expires_at?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "support_access_grants_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_grants_granted_by_fkey";
+            columns: ["granted_by"];
+            isOneToOne: false;
+            referencedRelation: "staff_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "support_access_grants_revoked_by_fkey";
+            columns: ["revoked_by"];
+            isOneToOne: false;
+            referencedRelation: "staff_profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       usage_events: {
         Row: {
           id: string;
@@ -3299,6 +3691,26 @@ export type Database = {
         Args: Record<string, never>;
         Returns: { id: string; name: string; city: string; verification_status: Database["public"]["Enums"]["clinic_verification_status"]; created_at: string; subscription_status: Database["public"]["Enums"]["subscription_status"]; billing_cycle: string; current_period_end: string; is_live: boolean; staff: number; patients: number; appointments_30d: number; ai_bookings_30d: number; last_appointment_at: string; paid_total_paise: number }[];
       };
+      admin_decide_refund_request: {
+        Args: {
+          p_request: string;
+          p_action: string;
+          p_note: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["refund_requests"]["Row"];
+      };
+      admin_log_support_access: {
+        Args: {
+          p_admin_id: string;
+          p_clinic: string;
+          p_patient: string;
+          p_query: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["support_access_grants"]["Row"];
+      };
       admin_monthly_metrics: {
         Args: {
           p_months?: number;
@@ -3315,8 +3727,20 @@ export type Database = {
           p_reason: string;
           p_admin_id: string;
           p_request_id?: string;
+          p_refund_request?: string;
         };
         Returns: Database["public"]["Tables"]["refunds"]["Row"];
+      };
+      admin_request_refund: {
+        Args: {
+          p_payment_id: string;
+          p_amount: number;
+          p_revoke_period: boolean;
+          p_reason: string;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["refund_requests"]["Row"];
       };
       admin_resolve_payment_exception: {
         Args: {
@@ -3337,6 +3761,14 @@ export type Database = {
           p_request_id?: string;
         };
         Returns: Database["public"]["Tables"]["clinics"]["Row"];
+      };
+      admin_update_platform_settings: {
+        Args: {
+          p_changes: Json;
+          p_admin_id: string;
+          p_request_id?: string;
+        };
+        Returns: Database["public"]["Tables"]["platform_settings"]["Row"];
       };
       book_appointment: {
         Args: {
@@ -3361,6 +3793,12 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["appointments"]["Row"];
       };
+      claim_notifications: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: Database["public"]["Tables"]["notifications"]["Row"][];
+      };
       claim_patient_account: {
         Args: {
           p_patient_id: string;
@@ -3376,12 +3814,37 @@ export type Database = {
         };
         Returns: string;
       };
+      enqueue_scheduled_notifications: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      finish_notification: {
+        Args: {
+          p_id: string;
+          p_ok: boolean;
+          p_message_id: string;
+          p_error: string;
+        };
+        Returns: undefined;
+      };
       get_available_slots: {
         Args: {
           p_doctor_id: string;
           p_date: string;
         };
         Returns: { slot_start: string; slot_end: string; remaining: number }[];
+      };
+      grant_support_access: {
+        Args: {
+          p_clinic: string;
+          p_hours: number;
+          p_reason: string;
+        };
+        Returns: Database["public"]["Tables"]["support_access_grants"]["Row"];
+      };
+      issue_missing_invoices: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       log_record_access: {
         Args: {
@@ -3417,6 +3880,12 @@ export type Database = {
           p_token_hash: string;
         };
         Returns: { patient_id: string; clinic_id: string; token_id: string }[];
+      };
+      revoke_support_access: {
+        Args: {
+          p_grant: string;
+        };
+        Returns: Database["public"]["Tables"]["support_access_grants"]["Row"];
       };
       set_appointment_status: {
         Args: {
@@ -3457,7 +3926,7 @@ export type Database = {
       action_severity: "low" | "normal" | "high" | "urgent";
       action_status: "open" | "in_progress" | "resolved" | "dismissed";
       action_type: "reschedule_needed" | "unrecognised_caller" | "ai_escalation" | "low_confidence_call" | "failed_message" | "booking_conflict" | "missed_call_followup";
-      actor_type: "ai" | "staff" | "patient" | "doctor" | "system";
+      actor_type: "ai" | "staff" | "patient" | "doctor" | "system" | "support";
       appointment_event: "created" | "confirmed" | "rescheduled" | "cancelled" | "checked_in" | "completed" | "no_show" | "flagged_for_reschedule" | "reminder_sent";
       appointment_status: "booked" | "confirmed" | "checked_in" | "completed" | "cancelled" | "no_show" | "needs_reschedule";
       batch_item_status: "pending" | "notified" | "rebooked" | "cancelled" | "unreachable";

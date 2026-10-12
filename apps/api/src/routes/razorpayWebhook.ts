@@ -9,8 +9,8 @@ type Event = {
 };
 
 /**
- * Razorpay webhooks: payment.captured, refund.processed, refund.failed and
- * payment.dispute.*. Every request is stored in payment_events — unverified
+ * Razorpay webhooks: payment.captured, payment.failed, refund.processed,
+ * refund.failed and payment.dispute.*. Every request is stored in payment_events — unverified
  * ones too, without their body, because a run of them is worth knowing
  * about. Each event is acted on once: Razorpay's event id is unique.
  *
@@ -87,6 +87,19 @@ async function handle(type: string, payment?: Entity, refund?: Entity, dispute?:
       return "error: activation failed";
     }
     return data?.status === "paid" ? "activated" : "held: amount mismatch";
+  }
+
+  if (type === "payment.failed" && payment?.order_id) {
+    // Only an order still waiting is marked failed: Checkout lets the clinic
+    // retry on the same order, and a later capture still activates it. The
+    // owner is emailed once per order (see the notifications trigger).
+    const { data } = await dbAdmin
+      .from("subscription_payments")
+      .update({ status: "failed" })
+      .eq("razorpay_order_id", payment.order_id)
+      .eq("status", "created")
+      .select("id");
+    return data?.length ? "marked failed" : "ignored: not waiting";
   }
 
   if ((type === "refund.processed" || type === "refund.failed") && refund?.id) {

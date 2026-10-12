@@ -26,6 +26,7 @@ import { requirePlatformAdmin } from "./middleware/admin.js";
 import { billing } from "./routes/billing.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { reconcile } from "./lib/reconcile.js";
+import { runNotifications } from "./lib/notifications.js";
 import { patientAccount } from "./routes/patientAccount.js";
 import {
   apiLimiter,
@@ -81,6 +82,17 @@ app.post("/api/internal/reconcile-payments", machineLimiter(), requireServiceKey
   try {
     const summary = await reconcile();
     req.log.info({ summary }, "payment reconciliation");
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Every 15 minutes: reminders that time made due, invoices owed, emails to send.
+app.post("/api/internal/notifications/run", machineLimiter(), requireServiceKey("worker"), async (req, res, next) => {
+  try {
+    const summary = await runNotifications();
+    req.log.info({ summary }, "notifications run");
     res.json(summary);
   } catch (err) {
     next(err);
