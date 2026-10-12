@@ -14,10 +14,17 @@ staff.get(
   "/",
   asyncRoute(async (req, res) => {
     const { db, clinicId } = req.auth!;
+    // The foreign key must be named. clinic_members reaches staff_profiles
+    // twice — once as staff_id, once as invited_by — so a bare
+    // `staff_profiles(...)` is ambiguous and PostgREST refuses the whole query
+    // with a 500 rather than picking one. We want the member, not the inviter.
     const rows = unwrap(
       await db
         .from("clinic_members")
-        .select("clinic_id, staff_id, role, status, invited_at, joined_at, staff_profiles(id, full_name, phone_e164, locale)")
+        .select(
+          "clinic_id, staff_id, role, status, invited_at, joined_at, " +
+            "staff_profiles!clinic_members_staff_id_fkey(id, full_name, phone_e164, locale)",
+        )
         .eq("clinic_id", clinicId)
         .order("role"),
       "staff",
