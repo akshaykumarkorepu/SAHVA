@@ -57,6 +57,9 @@ const nextConfig = {
       { source: "/p/:path*", headers: patient },
       { source: "/me/:path*", headers: patient },
       { source: "/me", headers: patient },
+      // The admin console: never indexed, never sends a Referer.
+      { source: "/admin/:path*", headers: patient },
+      { source: "/admin", headers: patient },
     ];
   },
   // The API enforces auth itself; this rewrite only saves a CORS hop in dev.

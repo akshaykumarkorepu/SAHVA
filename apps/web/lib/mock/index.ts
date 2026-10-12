@@ -411,6 +411,23 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     return d.analyticsCosts(Number(query.get("days") ?? 30));
   }
 
+  // ---- platform admin ------------------------------------------------------
+  if (method === "GET" && pathname === "/admin/me") return { email: "ops@sahva.example", role: "super_admin", full_name: "Ops Admin" };
+  if (method === "POST" && pathname === "/admin/sessions") return { ok: true };
+  if (method === "GET" && pathname === "/admin/overview") {
+    return {
+      clinics: 14, newClinicsThisMonth: 3, trialing: 5, trialsEndingIn3Days: 2, paying: 7,
+      payingMonthly: 4, payingYearly: 3, lapsed: 2,
+      mrrPaise: 4 * 199900 + Math.round((3 * 999900) / 12), arrPaise: (4 * 199900 + Math.round((3 * 999900) / 12)) * 12,
+      collectedThisMonthPaise: 2 * 199900 + 999900, paymentsThisMonth: 3,
+    };
+  }
+  if (method === "GET" && pathname === "/admin/audit") {
+    return [
+      { id: "aa1", action: "admin.sign_in", target_type: null, target_id: null, reason: null, created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } },
+    ];
+  }
+
   // ---- billing -------------------------------------------------------------
   // Mirrors routes/billing.ts. A trial with 11 days left; "paying" goes
   // through the same verify endpoint and activate rules as the real API.

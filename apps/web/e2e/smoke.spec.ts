@@ -423,3 +423,28 @@ test("billing: trial shown, pay yearly, plan becomes active and the banner goes"
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("admin console: overview figures and the audit log render", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin");
+  await expect(page.getByText("MRR", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("main")).toContainText("Paying clinics");
+  await page.goto("/admin/audit");
+  await expect(page.locator("main")).toContainText("admin.sign_in");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("admin sign-in is its own page, and nothing on the public site links to the console", async ({ page }) => {
+  await page.goto("/admin/signin");
+  await expect(page.getByText("SAHVA Admin")).toBeVisible({ timeout: 15_000 });
+  for (const path of ["/", "/signin", "/terms", "/contact"]) {
+    await page.goto(path);
+    await expect(page.locator('a[href^="/admin"]')).toHaveCount(0);
+  }
+});
+
+test("the admin console is never indexed", async ({ request }) => {
+  const r = await request.get("/admin/signin");
+  expect(r.headers()["x-robots-tag"]).toContain("noindex");
+});

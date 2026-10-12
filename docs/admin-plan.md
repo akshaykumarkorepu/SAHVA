@@ -264,3 +264,31 @@ rest of the repo.
 
 Still open: ABDM integrator registration (automatic HFR checks), refund
 two-person threshold, break-glass on or off.
+
+---
+
+## Status
+
+**Step 1 done (2026-10-12):** platform admins (migration `000800`), the
+2FA-gated `/api/admin`, the append-only admin audit log, the admin-only host,
+`/admin/signin` (password + authenticator code, set up on first sign-in), and
+a console with Overview and Audit log.
+
+### Making the first admin
+
+1. Supabase → Authentication → **Add user**: email + password.
+2. Supabase → SQL editor:
+   `select sahva.grant_platform_admin('you@example.com', 'super_admin', 'Your Name');`
+3. Open `/admin/signin` (locally `http://localhost:3000/admin/signin`), sign
+   in, scan the QR with an authenticator app, enter the code.
+
+MFA (TOTP) must be enabled in Supabase → Authentication → Multi-factor (it is
+on by default for new projects).
+
+### Production
+
+- `ADMIN_HOST=admin.<your-domain>` on the web app, and point that subdomain
+  at the same deployment.
+- Add `https://admin.<your-domain>` to the API's `CORS_ORIGINS`.
+
+Next: step 2, clinic verification.
