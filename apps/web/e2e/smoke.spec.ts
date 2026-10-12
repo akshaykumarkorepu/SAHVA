@@ -217,3 +217,14 @@ test("diary: cancelling asks first", async ({ page }) => {
   await confirm.getByRole("button", { name: "Keep it" }).click();
   await expect(confirm).toBeHidden();
 });
+
+test("action list: filter by group, and reschedules have no manual Done", async ({ page }) => {
+  await page.goto("/dashboard/actions");
+  await expect(page.getByRole("heading", { name: "Action Required" })).toBeVisible({ timeout: 15_000 });
+  const reschedule = page.locator("div", { hasText: "Dr Anitha is unavailable" }).filter({ has: page.getByRole("button", { name: /Review/ }) }).last();
+  await expect(reschedule.getByRole("button", { name: "Done" })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: /AI quality/ }).or(page.getByRole("button", { name: /AI quality/ })).first().click();
+  await expect(page.getByText("Dr Anitha is unavailable")).toHaveCount(0);
+  await expect(page.getByText("Booking made from poorly-heard speech")).toBeVisible();
+});
