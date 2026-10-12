@@ -30,6 +30,45 @@ for real.
 
 ---
 
+## Joining a project someone else already set up
+
+The common case: the database exists, you just need to run against it.
+
+```bash
+git clone https://github.com/akshaykumarkorepu/SAHVA.git
+cd SAHVA && git checkout saikirans-version
+npm install
+```
+
+Then you need a `.env` at the repo root. It is gitignored, so it does not
+arrive with the clone — someone has to hand it to you. Two ways:
+
+**Share the existing project.** Whoever set it up sends their `.env`. You are
+then pointed at the same database, seeing and changing the same rows. Fastest,
+and right for two people building one thing.
+
+Be deliberate about it: that file contains `SUPABASE_SERVICE_ROLE_KEY`, which
+**bypasses row-level security entirely** — it can read and write every clinic's
+records regardless of what the policies say. Fine for a teammate on a project
+whose data is seeded and fictional. Not something to paste into a group chat,
+and not something to hand out once a real clinic's patients are in there.
+
+**Or run your own.** Create a Supabase project on your own account and run
+`./scripts/bootstrap-supabase.sh` (see below). You get an isolated database
+with the same schema and seed, and nothing you break is shared. Slower to set
+up, better once more than two people are working.
+
+Either way:
+
+```bash
+npm run dev
+```
+
+Nothing else is machine-specific. PostgreSQL 16 is needed only for
+`npm run test:db`; the app itself talks to hosted Supabase.
+
+---
+
 ## The short path
 
 Steps 1–6 below are automated. Create a Personal Access Token at
