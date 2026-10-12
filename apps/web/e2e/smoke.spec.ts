@@ -339,3 +339,15 @@ test("waiting-room screen shows tokens per doctor and never a patient's name", a
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("patient record: the dosage chart reads the prescription, and keeps the doctor's words", async ({ page }) => {
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  const metformin = page.locator("div", { hasText: /^Metformin/ }).filter({ has: page.getByRole("list", { name: "When to take" }) }).first();
+  const chart = metformin.getByRole("list", { name: "When to take" });
+  await expect(chart.getByLabel("Morning: yes")).toBeVisible();
+  await expect(chart.getByLabel("Afternoon: no")).toBeVisible();
+  await expect(chart.getByLabel("Night: yes")).toBeVisible();
+  await expect(metformin).toContainText("After food");
+  await expect(metformin).toContainText("Take after breakfast and after dinner.");
+});

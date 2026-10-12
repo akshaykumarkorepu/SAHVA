@@ -2,6 +2,7 @@ import { type Lang, patientDate } from "@/lib/portal/i18n";
 import { Badge, Card, EmptyState, cn } from "@/components/ui";
 import type { Prescription, RxItem } from "./types";
 import { isActiveRx } from "./logic";
+import { DosageVisualizer } from "./DosageVisualizer";
 
 export function PrescriptionHistory({
   prescriptions,
@@ -96,6 +97,8 @@ export function MedicineCard({
       <p className="mt-1.5 text-xs text-ink-muted">
         {[item.dosage, item.frequency].filter(Boolean).join(" · ")}
       </p>
+
+      <DosageVisualizer frequency={item.frequency} instructions={item.instructions_en} L={L} />
 
       {instruction && (
         <p className="mt-2 border-t border-line pt-2 text-[13px] leading-relaxed text-ink-muted">
