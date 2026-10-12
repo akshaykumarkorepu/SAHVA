@@ -81,6 +81,61 @@ function takeSwitch(): boolean {
   }
 }
 
+/**
+ * The clinic's verification, approved like the fixture clinic unless
+ * localStorage "sahva.mock.verification" names another status — so the
+ * pending and needs-info screens can be seen and tested.
+ */
+let verificationOverride: Record<string, unknown> | null = null;
+
+/** Clinics waiting for review, for the admin console. */
+const applications = [
+  {
+    id: "c1000000-0000-4000-8000-000000000001", name: "Padma Children's Clinic", city: "Karimnagar", address_line: "1-2-3 Main Road",
+    pincode: "505001", phone_e164: "+918712000111", verification_status: "submitted", hfr_id: "IN3610000099",
+    establishment_reg_no: null, registration_state: null, owner_reg_no: "TSMC/12345", owner_council: "Telangana State Medical Council",
+    gstin: null, submitted_at: new Date(Date.now() - 2 * 864e5).toISOString(), reviewed_at: null, review_note: null as string | null,
+    owner_name: "Dr Padma",
+    docs: [{ id: "d1", kind: "facility_registration", file_name: "hfr-certificate.pdf", url: "about:blank", uploaded_at: new Date().toISOString() }],
+  },
+  {
+    id: "c1000000-0000-4000-8000-000000000002", name: "Anand Clinic", city: "Warangal", address_line: null,
+    pincode: "506002", phone_e164: "+918712100002", verification_status: "under_review", hfr_id: null,
+    establishment_reg_no: "TS/CE/2024/0457", registration_state: "Telangana", owner_reg_no: "TSMC/12345", owner_council: "Telangana State Medical Council",
+    gstin: "36ABCDE1234F1Z5", submitted_at: new Date(Date.now() - 864e5).toISOString(), reviewed_at: null, review_note: null as string | null,
+    owner_name: "Dr Anand", docs: [] as { id: string; kind: string; file_name: string; url: string; uploaded_at: string }[],
+  },
+  {
+    id: "c1000000-0000-4000-8000-000000000003", name: "Lotus Clinic", city: "Nizamabad", address_line: null,
+    pincode: null, phone_e164: "+918712100009", verification_status: "needs_info", hfr_id: "IN3610000777",
+    establishment_reg_no: null, registration_state: null, owner_reg_no: "APMC/9", owner_council: "Andhra Pradesh Medical Council",
+    gstin: null, submitted_at: new Date(Date.now() - 4 * 864e5).toISOString(), reviewed_at: null,
+    review_note: "Certificate photo is unreadable" as string | null, owner_name: "Dr Latha", docs: [],
+  },
+];
+const applicationHistory: { id: string; target_id: string; action: string; reason: string | null; created_at: string; platform_admins: { full_name: string } }[] = [];
+const clinicDocuments: Record<string, unknown>[] = [];
+function mockVerification(): Record<string, unknown> {
+  if (verificationOverride) return verificationOverride;
+  let status = "approved";
+  try {
+    status = localStorage.getItem("sahva.mock.verification") ?? "approved";
+  } catch {
+    /* default */
+  }
+  return {
+    verification_status: status,
+    review_note: status === "needs_info" ? "The registration certificate photo is unreadable — please upload a clearer copy." : null,
+    hfr_id: null,
+    establishment_reg_no: "TS/CE/2019/1182",
+    registration_state: "Telangana",
+    owner_reg_no: "TSMC/48213",
+    owner_council: "Telangana State Medical Council",
+    gstin: null,
+    submitted_at: new Date(Date.now() - 864e5).toISOString(),
+  };
+}
+
 /** Mirrors sahva.sync_batch_progress: counts come from the items. */
 function syncBatch() {
   const told = batch.items.filter((it) => it.status === "notified" || it.status === "rebooked").length;
@@ -99,7 +154,24 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   const b = (body ?? {}) as Record<string, unknown>;
 
   // ---- clinic ------------------------------------------------------------
-  if (method === "GET" && pathname === "/clinic") return { ...d.clinic, settings };
+  if (method === "GET" && pathname === "/clinic") return { ...d.clinic, settings, ...mockVerification() };
+  if (method === "PATCH" && pathname === "/clinic/application") {
+    verificationOverride = { ...mockVerification(), ...b, verification_status: "submitted", review_note: null };
+    return { ...d.clinic, ...verificationOverride };
+  }
+  if (method === "GET" && pathname === "/clinic/documents") return clinicDocuments;
+  if (method === "POST" && pathname === "/clinic/documents") {
+    const row = {
+      id: crypto.randomUUID(),
+      kind: query.get("kind") ?? "other",
+      file_name: query.get("name") ?? "document",
+      content_type: "application/pdf",
+      size_bytes: 1,
+      uploaded_at: new Date().toISOString(),
+    };
+    clinicDocuments.unshift(row);
+    return row;
+  }
   if (method === "GET" && pathname === "/clinic/me") return { ...d.me, role: mockRole() };
   if (method === "PATCH" && pathname === "/clinic/settings") {
     settings = { ...settings, ...b };
@@ -428,6 +500,48 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     ];
   }
 
+  if (method === "GET" && pathname === "/admin/applications") {
+    const groups: Record<string, string[]> = {
+      waiting: ["submitted", "under_review"], needs_info: ["needs_info"], approved: ["approved"],
+      rejected: ["rejected"], suspended: ["suspended"],
+    };
+    const g = groups[query.get("status") ?? "waiting"] ?? groups.waiting;
+    const counts = Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, applications.filter((a) => v.includes(a.verification_status)).length]));
+    return { rows: applications.filter((a) => g.includes(a.verification_status)), counts };
+  }
+  if (method === "GET" && seg[0] === "admin" && seg[1] === "applications" && seg[2]) {
+    const c = applications.find((a) => a.id === seg[2]);
+    if (!c) throw new MockNotFound(pathname);
+    return {
+      clinic: c,
+      owner: { full_name: c.owner_name, phone: "+919848000111", email: "owner@example.in" },
+      documents: c.docs,
+      possible_duplicates: applications
+        .filter((o) => o.id !== c.id && (o.owner_reg_no === c.owner_reg_no || (o.name === c.name && o.city === c.city)))
+        .map((o) => ({ id: o.id, name: o.name, city: o.city, verification_status: o.verification_status, owner_reg_no: o.owner_reg_no })),
+      history: applicationHistory.filter((h) => h.target_id === c.id),
+    };
+  }
+  if (method === "POST" && seg[0] === "admin" && seg[1] === "applications" && seg[3] === "decision") {
+    // Mirrors admin_review_clinic(): allowed transitions, reasons where required.
+    const c = applications.find((a) => a.id === seg[2]);
+    if (!c) throw new MockNotFound(pathname);
+    const rules: Record<string, [string, string[]]> = {
+      start_review: ["under_review", ["submitted"]], approve: ["approved", ["submitted", "under_review"]],
+      needs_info: ["needs_info", ["submitted", "under_review"]], reject: ["rejected", ["submitted", "under_review", "needs_info"]],
+      suspend: ["suspended", ["approved"]], reinstate: ["approved", ["suspended"]],
+    };
+    const [to, from] = rules[String(b.decision)];
+    if (!from.includes(c.verification_status)) throw new ApiError(409, "INVALID_STATE", `Cannot ${b.decision} a clinic that is ${c.verification_status}`);
+    if (["needs_info", "reject", "suspend"].includes(String(b.decision)) && !String(b.note ?? "").trim()) {
+      throw new ApiError(409, "INVALID_STATE", "A reason is required");
+    }
+    c.verification_status = to;
+    c.review_note = (b.note as string) ?? null;
+    applicationHistory.unshift({ id: crypto.randomUUID(), target_id: c.id, action: `clinic.${b.decision}`, reason: (b.note as string) ?? null, created_at: new Date().toISOString(), platform_admins: { full_name: "Ops Admin" } });
+    return c;
+  }
+
   // ---- billing -------------------------------------------------------------
   // Mirrors routes/billing.ts. A trial with 11 days left; "paying" goes
   // through the same verify endpoint and activate rules as the real API.
@@ -534,7 +648,13 @@ export async function mockApi<T>(path: string, init: RequestInit = {}): Promise<
   const [rawPath, rawQuery = ""] = path.split("?");
   const query = new URLSearchParams(rawQuery);
   const method = (init.method ?? "GET").toUpperCase();
-  const body = init.body ? JSON.parse(String(init.body)) : undefined;
+  // A file upload is not JSON; only parse what is.
+  let body: unknown;
+  try {
+    body = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+  } catch {
+    body = undefined;
+  }
 
   await new Promise((r) => setTimeout(r, LATENCY_MS));
 

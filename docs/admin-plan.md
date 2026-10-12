@@ -291,4 +291,10 @@ on by default for new projects).
   at the same deployment.
 - Add `https://admin.<your-domain>` to the API's `CORS_ORIGINS`.
 
-Next: step 2, clinic verification.
+**Step 2 done (2026-10-12):** clinic verification (migration `000900`, live on
+the hosted project). Owners register with an HFR ID or state registration and
+the doctor's council registration, upload certificates on
+`/dashboard/verification`, and set up while waiting; nothing reaches patients
+and no trial starts until a reviewer approves in `/admin/applications`.
+
+Next: step 3, clinics list and detail, subscription actions.

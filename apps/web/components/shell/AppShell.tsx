@@ -10,6 +10,7 @@ import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./
 import { Logo } from "./Logo";
 import { ClinicSetup } from "./ClinicSetup";
 import { TrialBanner } from "./TrialBanner";
+import { VerificationBanner } from "./VerificationBanner";
 import { Icon } from "@/components/icons";
 import { Button, Spinner, cn } from "@/components/ui";
 
@@ -80,6 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        <VerificationBanner />
         <TrialBanner />
 
         {/* pb-28 keeps content clear of the mobile tab bar */}

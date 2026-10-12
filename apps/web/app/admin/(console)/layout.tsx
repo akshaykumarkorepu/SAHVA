@@ -8,7 +8,7 @@ import { Icon, type IconName } from "@/components/icons";
 
 const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin", label: "Overview", icon: "overview" },
-  { href: "/admin/applications", label: "Applications", icon: "shield", soon: true },
+  { href: "/admin/applications", label: "Applications", icon: "shield" },
   { href: "/admin/clinics", label: "Clinics", icon: "patients", soon: true },
   { href: "/admin/payments", label: "Payments", icon: "rupee", soon: true },
   { href: "/admin/audit", label: "Audit log", icon: "inbox" },
@@ -61,10 +61,12 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
               <Link
                 key={n.href}
                 href={n.href}
-                aria-current={pathname === n.href ? "page" : undefined}
+                aria-current={(n.href === "/admin" ? pathname === n.href : pathname.startsWith(n.href)) ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
-                  pathname === n.href ? "bg-white/15 font-semibold" : "text-white/75 hover:bg-white/10",
+                  (n.href === "/admin" ? pathname === n.href : pathname.startsWith(n.href))
+                    ? "bg-white/15 font-semibold"
+                    : "text-white/75 hover:bg-white/10",
                 )}
               >
                 <Icon name={n.icon} className="h-4 w-4" />

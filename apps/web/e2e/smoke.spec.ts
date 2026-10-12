@@ -448,3 +448,45 @@ test("the admin console is never indexed", async ({ request }) => {
   const r = await request.get("/admin/signin");
   expect(r.headers()["x-robots-tag"]).toContain("noindex");
 });
+
+test("admin: review an application — checks gate approval, reasons are required, decisions are recorded", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/applications");
+  await expect(page.getByText("Padma Children's Clinic")).toBeVisible({ timeout: 15_000 });
+  await page.getByText("Padma Children's Clinic").click();
+
+  // Same doctor registration as another applicant.
+  await expect(page.getByRole("alert").filter({ hasText: "Possible duplicates" })).toContainText("same doctor");
+
+  const approve = page.getByRole("button", { name: /Approve/ });
+  await expect(approve).toBeDisabled();
+
+  // Asking for information without a reason is refused on the page.
+  await page.getByRole("button", { name: "Ask for more information" }).click();
+  await expect(page.getByText(/Write the reason first/)).toBeVisible();
+
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
+  await expect(approve).toBeEnabled();
+  await approve.click();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toContainText("clinic.approve");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("clinic under review: banner, and the verification page shows the reviewer's note", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sahva.mock.verification", "needs_info"));
+  await page.goto("/dashboard");
+  const banner = page.getByRole("status").filter({ hasText: "SAHVA needs a little more information" });
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  await banner.getByRole("link").click();
+  await expect(page.locator("main")).toContainText("certificate photo is unreadable");
+  await expect(page.getByRole("button", { name: "Upload PDF or photo" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save and send for review" })).toBeVisible();
+});
+
+test("an approved clinic shows no verification banner", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Your clinic is being verified")).toHaveCount(0);
+});

@@ -15,6 +15,16 @@ export type ClinicContext = {
   timezone: string;
   default_language: Enums<"language_code">;
   settings: { ai_enabled: boolean; ai_may_cancel: boolean } | null;
+  /** SAHVA's review of the clinic. Nothing reaches patients until approved. */
+  verification_status: Enums<"clinic_verification_status">;
+  review_note: string | null;
+  hfr_id: string | null;
+  establishment_reg_no: string | null;
+  registration_state: string | null;
+  owner_reg_no: string | null;
+  owner_council: string | null;
+  gstin: string | null;
+  submitted_at: string | null;
 };
 
 type SessionState = {
