@@ -16,9 +16,10 @@
     "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web",
     "gen:types": "python3 scripts/gen-types.py > packages/types/database.ts",
     "test:db": "./supabase/tests/run.sh",
-    "test": "npm run test -w apps/api",
+    "test": "npm run test -w apps/api && npm run test -w apps/web",
     "test:api": "npm run test -w apps/api",
-    "lint": "npm run lint -w apps/web"
+    "lint": "npm run lint -w apps/web",
+    "test:web": "npm run test -w apps/web"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
