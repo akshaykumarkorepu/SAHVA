@@ -146,6 +146,29 @@ Builds on `action_items`, `reschedule_batches` and `reschedule_batch_items`.
 **Exit:** two browsers signed into the same clinic see a booking appear within
 seconds without refresh; the doctor-leave flow is covered by a Playwright test.
 
+**Status (2026-10-12): mostly done.**
+
+- 2a done. React Query under the existing `useApi`; cache wiped when the
+  signed-in user changes; Realtime on appointments, action items and messages
+  (migration `20261012000200`, RLS-checked, publication asserted in the DB
+  suite). Not yet exercised against a live project.
+- 2b done. Overview rebuilt around today, with an appointment side panel.
+- 2c core done. The reschedule flow is honest end to end: Approve (not
+  "Send"), call each patient, rebook from live slots, the batch closes itself
+  (migration `20261012000400`, DB suite 24). Open: grouping the action list
+  by category.
+- 2d partly done. Lost-slot handling, cancel confirmation, failed writes
+  reported. Open: day/week timeline per doctor, patient quick-view.
+
+Found and fixed on the way, each with a test:
+- Staff status changes never reached the audit log (`20261012000300`).
+- `reschedule_appointment` would rebook a finished appointment, so a
+  double-click booked a patient twice.
+- 122 colour classes from an old palette rendered as nothing.
+- `Card` swallowed callers' flex/grid layout.
+
+Migrations `000200`–`000400` are not yet applied to the hosted project.
+
 ---
 
 ## Phase 3 · Telugu-first patient experience and the OPD queue — ~1.5 weeks
