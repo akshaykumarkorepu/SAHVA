@@ -1,0 +1,43 @@
+# Render blueprint for the API.
+#
+# The web app goes to Vercel (see vercel.json) — this is only apps/api.
+# Render redeploys on every push to the branch this blueprint is read from,
+# which is what makes the deployed state track the repo.
+#
+# Secrets are deliberately `sync: false`: they are set once in the Render
+# dashboard and never committed. SUPABASE_SERVICE_ROLE_KEY bypasses RLS
+# completely, so it lives here and never in anything the browser can reach.
+services:
+  - type: web
+    name: sahva-api
+    runtime: node
+    plan: free
+    region: singapore # closest Render region to ap-south-1
+    branch: saikirans-version
+    buildCommand: npm install && npm run build -w apps/api
+    startCommand: npm run start -w apps/api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Render injects PORT itself; the API reads it. Do not pin it here.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VOICE_API_KEY
+        sync: false
+      # The Vercel URL of the web app. Without it the browser is blocked by CORS.
+      - key: CORS_ORIGINS
+        sync: false
+      # Optional. Without it rate-limit counters are per-instance and reset on
+      # restart — fine on one free dyno, wrong the moment there are two.
+      - key: REDIS_URL
+        sync: false
+      # Optional. Only the voice route uses it.
+      - key: ANTHROPIC_API_KEY
+        sync: false

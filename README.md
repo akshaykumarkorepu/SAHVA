@@ -354,6 +354,23 @@ drifted from the schema.
 
 ---
 
+## Deploying
+
+GitHub does not host this — it is two Node servers. GitHub is what the hosts
+watch.
+
+| Piece | Host | Config in repo |
+|---|---|---|
+| `apps/web` | Vercel | `vercel.json` |
+| `apps/api` | Render | `render.yaml` |
+| Database | Supabase | `supabase/migrations/` |
+
+Both redeploy on every push to `saikirans-version`. Full walkthrough, including
+the environment variables and what is still not production-ready:
+[`docs/deploy.md`](docs/deploy.md).
+
+---
+
 ## Status and next steps
 
 **Done:** the data layer (schema, RLS, scheduling logic, seed, tests), the API
