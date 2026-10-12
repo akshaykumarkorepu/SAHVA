@@ -95,25 +95,28 @@ begin
   insert into public.doctors (clinic_id, full_name, spoken_name, specialty, qualifications,
                               languages, consult_duration_min, consult_fee_paise, followup_fee_paise,
                               colour_hex, sort_order)
-  values (v_clinic,'Dr. Anitha Reddy','Dr Anitha','General Physician','MBBS, MD',
-          '{te,en}', 15, 30000, 15000, '#2F6BFF', 1)
-  on conflict do nothing;
+  select v_clinic,'Dr. Anitha Reddy','Dr Anitha','General Physician','MBBS, MD',
+          '{te,en}', 15, 30000, 15000, '#2F6BFF', 1
+   where not exists (select 1 from public.doctors
+                      where clinic_id = v_clinic and spoken_name = 'Dr Anitha');
   select id into v_anitha from public.doctors where clinic_id = v_clinic and spoken_name = 'Dr Anitha';
 
   insert into public.doctors (clinic_id, full_name, spoken_name, specialty, qualifications,
                               languages, consult_duration_min, consult_fee_paise, followup_fee_paise,
                               colour_hex, sort_order)
-  values (v_clinic,'Dr. Ramesh Babu','Dr Ramesh','Paediatrician','MBBS, DCH',
-          '{te,en,hi}', 20, 35000, 20000, '#12B886', 2)
-  on conflict do nothing;
+  select v_clinic,'Dr. Ramesh Babu','Dr Ramesh','Paediatrician','MBBS, DCH',
+          '{te,en,hi}', 20, 35000, 20000, '#12B886', 2
+   where not exists (select 1 from public.doctors
+                      where clinic_id = v_clinic and spoken_name = 'Dr Ramesh');
   select id into v_ramesh from public.doctors where clinic_id = v_clinic and spoken_name = 'Dr Ramesh';
 
   insert into public.doctors (clinic_id, full_name, spoken_name, specialty, qualifications,
                               languages, consult_duration_min, consult_fee_paise, followup_fee_paise,
                               colour_hex, sort_order)
-  values (v_clinic,'Dr. Kavitha Rao','Dr Kavitha','Dentist','BDS, MDS',
-          '{te,en}', 30, 40000, 25000, '#F08C00', 3)
-  on conflict do nothing;
+  select v_clinic,'Dr. Kavitha Rao','Dr Kavitha','Dentist','BDS, MDS',
+          '{te,en}', 30, 40000, 25000, '#F08C00', 3
+   where not exists (select 1 from public.doctors
+                      where clinic_id = v_clinic and spoken_name = 'Dr Kavitha');
   select id into v_kavitha from public.doctors where clinic_id = v_clinic and spoken_name = 'Dr Kavitha';
 
   -- Weekly sessions. Anitha: Mon-Sat both shifts. Ramesh: Mon-Sat mornings.
@@ -142,25 +145,27 @@ begin
     (v_clinic,'Blood pressure check','రక్తపోటు తనిఖీ',10000,10,'diagnostics',4)
   on conflict (clinic_id, lower(name_en)) do nothing;
 
-  insert into public.clinic_faqs (clinic_id, question_en, question_te, answer_en, answer_te, category, keywords, priority)
-  values
-    (v_clinic,'What are the consultation fees?','సంప్రదింపు ఫీజు ఎంత?',
-     'General consultation is Rs 300. Paediatric consultation is Rs 350. Dental consultation is Rs 400.',
-     'సాధారణ సంప్రదింపు రూ.300. పిల్లల వైద్యం రూ.350. దంత వైద్యం రూ.400.',
-     'fees','{fee,fees,charge,cost,ఫీజు,ఖర్చు}',10),
-    (v_clinic,'What are your timings?','మీ సమయాలు ఏమిటి?',
-     'We are open Monday to Saturday, 9 AM to 1 PM and 5 PM to 8 PM. Closed on Sunday.',
-     'సోమవారం నుండి శనివారం వరకు ఉదయం 9 నుండి 1 వరకు, సాయంత్రం 5 నుండి 8 వరకు. ఆదివారం సెలవు.',
-     'timings','{timing,hours,open,close,సమయం,తెరిచి}',9),
-    (v_clinic,'Where are you located?','మీరు ఎక్కడ ఉన్నారు?',
-     'We are at 2-4-118 Station Road, opposite the Hanamkonda bus stand, Warangal.',
-     'హనుమకొండ బస్ స్టాండ్ ఎదురుగా, స్టేషన్ రోడ్, వరంగల్.',
-     'location','{where,address,location,ఎక్కడ,చిరునామా}',8),
-    (v_clinic,'Do I need an appointment?','అపాయింట్‌మెంట్ అవసరమా?',
-     'Walk-ins are welcome but an appointment avoids waiting. I can book one for you now.',
-     'నేరుగా రావచ్చు, కానీ అపాయింట్‌మెంట్ ఉంటే వేచి ఉండాల్సిన అవసరం లేదు. ఇప్పుడే బుక్ చేయగలను.',
-     'services','{appointment,booking,walk in,అపాయింట్‌మెంట్}',7)
-  on conflict do nothing;
+  if not exists (select 1 from public.clinic_faqs where clinic_id = v_clinic) then
+    insert into public.clinic_faqs (clinic_id, question_en, question_te, answer_en, answer_te, category, keywords, priority)
+    values
+      (v_clinic,'What are the consultation fees?','సంప్రదింపు ఫీజు ఎంత?',
+       'General consultation is Rs 300. Paediatric consultation is Rs 350. Dental consultation is Rs 400.',
+       'సాధారణ సంప్రదింపు రూ.300. పిల్లల వైద్యం రూ.350. దంత వైద్యం రూ.400.',
+       'fees','{fee,fees,charge,cost,ఫీజు,ఖర్చు}',10),
+      (v_clinic,'What are your timings?','మీ సమయాలు ఏమిటి?',
+       'We are open Monday to Saturday, 9 AM to 1 PM and 5 PM to 8 PM. Closed on Sunday.',
+       'సోమవారం నుండి శనివారం వరకు ఉదయం 9 నుండి 1 వరకు, సాయంత్రం 5 నుండి 8 వరకు. ఆదివారం సెలవు.',
+       'timings','{timing,hours,open,close,సమయం,తెరిచి}',9),
+      (v_clinic,'Where are you located?','మీరు ఎక్కడ ఉన్నారు?',
+       'We are at 2-4-118 Station Road, opposite the Hanamkonda bus stand, Warangal.',
+       'హనుమకొండ బస్ స్టాండ్ ఎదురుగా, స్టేషన్ రోడ్, వరంగల్.',
+       'location','{where,address,location,ఎక్కడ,చిరునామా}',8),
+      (v_clinic,'Do I need an appointment?','అపాయింట్‌మెంట్ అవసరమా?',
+       'Walk-ins are welcome but an appointment avoids waiting. I can book one for you now.',
+       'నేరుగా రావచ్చు, కానీ అపాయింట్‌మెంట్ ఉంటే వేచి ఉండాల్సిన అవసరం లేదు. ఇప్పుడే బుక్ చేయగలను.',
+       'services','{appointment,booking,walk in,అపాయింట్‌మెంట్}',7)
+    on conflict do nothing;
+  end if;
 
   -- Subscription ------------------------------------------------------------
   insert into public.subscriptions (clinic_id, plan_code, status, current_period_start, current_period_end, billing_email)
@@ -190,28 +195,32 @@ begin
     -- Anitha, morning
     select id into v_p from public.patients where clinic_id = v_clinic and full_name = 'Srinivas Rao';
     insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at, duration_min, status, source, reason)
-    values (v_clinic, v_anitha, v_p, (v_day + time '10:00') at time zone tz,
-            ((v_day + time '10:00') at time zone tz) + interval '15 min', 15, 'confirmed','ai_call','BP follow-up')
-    on conflict do nothing;
+    select v_clinic, v_anitha, v_p, (v_day + time '10:00') at time zone tz,
+            ((v_day + time '10:00') at time zone tz) + interval '15 min', 15, 'confirmed','ai_call','BP follow-up'
+     where not exists (select 1 from public.appointments
+                        where doctor_id = v_anitha and starts_at = ((v_day + time '10:00')) at time zone tz);
 
     select id into v_p from public.patients where clinic_id = v_clinic and full_name = 'Priya Sharma';
     insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at, duration_min, status, source, reason)
-    values (v_clinic, v_anitha, v_p, (v_day + time '10:30') at time zone tz,
-            ((v_day + time '10:30') at time zone tz) + interval '15 min', 15, 'booked','ai_call','Fever and cold')
-    on conflict do nothing;
+    select v_clinic, v_anitha, v_p, (v_day + time '10:30') at time zone tz,
+            ((v_day + time '10:30') at time zone tz) + interval '15 min', 15, 'booked','ai_call','Fever and cold'
+     where not exists (select 1 from public.appointments
+                        where doctor_id = v_anitha and starts_at = ((v_day + time '10:30')) at time zone tz);
 
     -- Ramesh, paediatrics
     select id into v_p from public.patients where clinic_id = v_clinic and full_name = 'Aarav';
     insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at, duration_min, status, source, reason)
-    values (v_clinic, v_ramesh, v_p, (v_day + time '10:00') at time zone tz,
-            ((v_day + time '10:00') at time zone tz) + interval '20 min', 20, 'booked','ai_call','Pentavalent dose 2')
-    on conflict do nothing;
+    select v_clinic, v_ramesh, v_p, (v_day + time '10:00') at time zone tz,
+            ((v_day + time '10:00') at time zone tz) + interval '20 min', 20, 'booked','ai_call','Pentavalent dose 2'
+     where not exists (select 1 from public.appointments
+                        where doctor_id = v_ramesh and starts_at = ((v_day + time '10:00')) at time zone tz);
 
     select id into v_p from public.patients where clinic_id = v_clinic and full_name = 'Mohan Kumar';
     insert into public.appointments (clinic_id, doctor_id, patient_id, starts_at, ends_at, duration_min, status, source, reason)
-    values (v_clinic, v_ramesh, v_p, (v_day + time '11:00') at time zone tz,
-            ((v_day + time '11:00') at time zone tz) + interval '20 min', 20, 'confirmed','walk_in','Child cough')
-    on conflict do nothing;
+    select v_clinic, v_ramesh, v_p, (v_day + time '11:00') at time zone tz,
+            ((v_day + time '11:00') at time zone tz) + interval '20 min', 20, 'confirmed','walk_in','Child cough'
+     where not exists (select 1 from public.appointments
+                        where doctor_id = v_ramesh and starts_at = ((v_day + time '11:00')) at time zone tz);
   end;
 
   -- Calls: 30 days of history, weighted toward after-hours recovery ---------

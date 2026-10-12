@@ -8,8 +8,8 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
-    "dev:api": "npm run dev -w apps/api",
+    "dev": "concurrently -n api,web -c blue,green \"PORT=4000 npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "dev:api": "PORT=4000 npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -w apps/api && npm run build -w apps/web",
     "start:api": "npm run start -w apps/api",
