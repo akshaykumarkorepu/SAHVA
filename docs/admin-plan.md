@@ -318,5 +318,15 @@ ledger with refunds, exceptions queue, webhook event log, reconciliation.
   repository secrets `SAHVA_API_URL` and `SAHVA_WORKER_KEY` (the API's
   `VOICE_API_KEY`). It skips quietly until they exist.
 
-Next: step 5, analytics (business, per clinic, patient aggregates) and a
-health score.
+**Step 5 done (2026-10-12):** `/admin/analytics` (migration `001200`, live).
+Monthly series from `admin_monthly_metrics`: MRR at month end computed from the
+payment ledger (paid periods covering the month's last day, yearly ÷ 12,
+refunds removed), collections, refunds, new/approved clinics, first payments,
+new patients, bookings, AI share, no-show rate — as two bar charts and a table.
+Clinic health (`apps/api/src/lib/health.ts`) scores live clinics 0–100 from
+`admin_clinic_signals`, every lost point with a reason; clinics in review are
+not scored. The overview's MRR and paying-clinic count now come from the
+ledger too, so a clinic marked active that never paid is no longer counted.
+
+Next: step 6 — notifications to clinics (approval, trial ending, payment
+failed), GST invoices, two-person approval for large refunds.

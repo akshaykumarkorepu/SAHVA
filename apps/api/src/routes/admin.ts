@@ -6,6 +6,7 @@ import { requireAdminRole } from "../middleware/admin.js";
 import { AppError, fromPostgrest, unwrap } from "../lib/errors.js";
 import { createRefund, fetchPayment, razorpayConfig } from "../lib/razorpay.js";
 import { reconcile } from "../lib/reconcile.js";
+import { health } from "../lib/health.js";
 import { dbAdmin } from "../lib/supabase.js";
 import { logAdminAction } from "../lib/adminAudit.js";
 import { overview } from "../lib/adminMetrics.js";
@@ -37,14 +38,20 @@ admin.post(
 admin.get(
   "/overview",
   asyncRoute(async (_req, res) => {
-    const [clinics, subs, payments, plan, exceptions, queue] = await Promise.all([
+    const [clinics, subs, payments, plan, exceptions, queue, ledgerMonth] = await Promise.all([
       dbAdmin.from("clinics").select("created_at"),
       dbAdmin.from("subscriptions").select("clinic_id, status, billing_cycle, current_period_end, trial_ends_at"),
       dbAdmin.from("subscription_payments").select("amount_paise, paid_at, status"),
       dbAdmin.from("plans").select("monthly_price_paise, yearly_price_paise").eq("code", "starter").single(),
       dbAdmin.from("payment_exceptions").select("id", { count: "exact", head: true }).eq("status", "open"),
       dbAdmin.from("clinics").select("id", { count: "exact", head: true }).in("verification_status", ["submitted", "under_review"]),
+      dbAdmin.rpc("admin_monthly_metrics", { p_months: 1 }),
     ]);
+    // MRR from the payment ledger, as Analytics computes it: what has
+    // actually been paid for, not what subscriptions claim. A seeded or
+    // comped "active" subscription with no payment is not revenue.
+    const ledger = (ledgerMonth.data ?? [])[0];
+    const mrrPaise = Number(ledger?.mrr_paise ?? 0);
     res.json({
       ...overview({
         clinics: unwrap(clinics, "clinics"),
@@ -52,6 +59,9 @@ admin.get(
         payments: unwrap(payments, "payments"),
         price: unwrap(plan, "plan"),
       }),
+      mrrPaise,
+      arrPaise: mrrPaise * 12,
+      payingFromLedger: Number(ledger?.paying_clinics ?? 0),
       openPaymentExceptions: exceptions.count ?? 0,
       applicationsWaiting: queue.count ?? 0,
     });
@@ -509,5 +519,28 @@ admin.post(
     const summary = await reconcile();
     await logAdminAction(req, { action: "payment.reconcile", after: summary });
     res.json(summary);
+  }),
+);
+
+// --- Analytics -------------------------------------------------------------------------------
+
+/** Months of growth, money and platform-wide activity, plus every clinic's health. */
+admin.get(
+  "/analytics",
+  validate({ query: z.object({ months: z.coerce.number().int().min(3).max(24).default(6) }) }),
+  asyncRoute(async (req, res) => {
+    const { months } = req.query as unknown as { months: number };
+    const [series, signals] = await Promise.all([
+      dbAdmin.rpc("admin_monthly_metrics", { p_months: months }),
+      dbAdmin.rpc("admin_clinic_signals"),
+    ]);
+    if (series.error) throw fromPostgrest(series.error, "loading metrics");
+    if (signals.error) throw fromPostgrest(signals.error, "loading clinic signals");
+    const now = new Date();
+    const clinics = (signals.data ?? [])
+      .map((s) => ({ id: s.id, name: s.name, city: s.city, health: health(s, now) }))
+      .filter((c) => c.health !== null)
+      .sort((a, b) => a.health!.score - b.health!.score);
+    res.json({ months: series.data ?? [], clinics });
   }),
 );

@@ -3291,9 +3291,19 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
       };
+      admin_clinic_signals: {
+        Args: Record<string, never>;
+        Returns: { id: string; name: string; city: string; verification_status: Database["public"]["Enums"]["clinic_verification_status"]; subscription_status: Database["public"]["Enums"]["subscription_status"]; current_period_end: string; ever_paid: boolean; bookings_14d: number; bookings_prev_14d: number; open_actions: number; oldest_action_at: string; last_staff_sign_in: string; created_at: string }[];
+      };
       admin_clinic_summaries: {
         Args: Record<string, never>;
         Returns: { id: string; name: string; city: string; verification_status: Database["public"]["Enums"]["clinic_verification_status"]; created_at: string; subscription_status: Database["public"]["Enums"]["subscription_status"]; billing_cycle: string; current_period_end: string; is_live: boolean; staff: number; patients: number; appointments_30d: number; ai_bookings_30d: number; last_appointment_at: string; paid_total_paise: number }[];
+      };
+      admin_monthly_metrics: {
+        Args: {
+          p_months?: number;
+        };
+        Returns: { month: string; new_clinics: number; approved: number; first_payments: number; collected_paise: number; refunded_paise: number; mrr_paise: number; paying_clinics: number; new_patients: number; appointments: number; ai_bookings: number; completed: number; no_shows: number }[];
       };
       admin_record_refund: {
         Args: {

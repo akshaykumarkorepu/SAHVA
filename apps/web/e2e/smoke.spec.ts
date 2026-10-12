@@ -559,3 +559,17 @@ test("admin overview points at waiting applications and payment problems", async
   await expect(page.getByRole("link", { name: /waiting for verification/ })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("link", { name: /payment problem/ })).toBeVisible();
 });
+
+test("admin analytics: monthly charts, the table view, and clinics that need a call", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/analytics");
+  await expect(page.getByRole("img", { name: "MRR by month" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("img", { name: "Bookings by month" })).toBeVisible();
+  await expect(page.locator("tbody tr")).toHaveCount(6);
+  await expect(page.getByText("1 of 3 live clinics healthy")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Lotus Clinic/ })).toHaveAttribute("href", "/admin/clinics/a0000000-0000-4000-8000-000000000003");
+  await page.getByRole("tab", { name: "12 months" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(12);
+  await settle(page);
+  expect(errors).toEqual([]);
+});

@@ -19,6 +19,7 @@ type Overview = {
   arrPaise: number;
   collectedThisMonthPaise: number;
   paymentsThisMonth: number;
+  payingFromLedger: number;
   openPaymentExceptions: number;
   applicationsWaiting: number;
 };
@@ -58,10 +59,10 @@ export default function AdminOverview() {
           <section>
             <h2 className="mb-3 text-sm font-semibold text-ink">Revenue</h2>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              <KpiCard label="MRR" value={inr(o.mrrPaise)} sub="Monthly + yearly ÷ 12" icon="rupee" tone="brand" />
+              <KpiCard label="MRR" value={inr(o.mrrPaise)} sub="From the payment ledger" icon="rupee" tone="brand" />
               <KpiCard label="ARR" value={inr(o.arrPaise)} sub="MRR × 12" icon="analytics" />
               <KpiCard label="Collected this month" value={inr(o.collectedThisMonthPaise)} sub={`${o.paymentsThisMonth} payment${o.paymentsThisMonth === 1 ? "" : "s"}`} icon="success" />
-              <KpiCard label="Paying clinics" value={o.paying} sub={`${o.payingMonthly} monthly · ${o.payingYearly} yearly`} icon="check" />
+              <KpiCard label="Paying clinics" value={o.payingFromLedger} sub="Paid for the current period" icon="check" />
             </div>
           </section>
           <section>

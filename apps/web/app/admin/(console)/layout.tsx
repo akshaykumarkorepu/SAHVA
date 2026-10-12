@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin/applications", label: "Applications", icon: "shield" },
   { href: "/admin/clinics", label: "Clinics", icon: "patients" },
   { href: "/admin/payments", label: "Payments", icon: "rupee" },
+  { href: "/admin/analytics", label: "Analytics", icon: "analytics" },
   { href: "/admin/audit", label: "Audit log", icon: "inbox" },
 ];
 
@@ -87,9 +88,9 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-between border-b border-line px-5 py-3 lg:hidden">
+        <header className="flex flex-col gap-2 border-b border-line px-5 py-3 lg:hidden">
           <span className="font-display font-semibold text-ink">SAHVA Admin</span>
-          <nav className="flex gap-3 text-sm">
+          <nav className="no-scrollbar -mx-5 flex gap-4 overflow-x-auto whitespace-nowrap px-5 text-sm">
             {NAV.filter((n) => !n.soon).map((n) => (
               <Link key={n.href} href={n.href} className={pathname === n.href ? "font-semibold text-ink" : "text-ink-muted"}>
                 {n.label}

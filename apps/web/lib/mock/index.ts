@@ -522,6 +522,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       payingMonthly: 4, payingYearly: 3, lapsed: 2,
       mrrPaise: 4 * 199900 + Math.round((3 * 999900) / 12), arrPaise: (4 * 199900 + Math.round((3 * 999900) / 12)) * 12,
       collectedThisMonthPaise: 2 * 199900 + 999900, paymentsThisMonth: 3,
+      payingFromLedger: 2,
       openPaymentExceptions: paymentExceptions.filter((e) => e.status === "open").length,
       applicationsWaiting: applications.filter((a) => ["submitted", "under_review"].includes(a.verification_status)).length,
     };
@@ -631,6 +632,30 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     p.refunded_paise += Number(b.amount_paise);
     paymentEvents.unshift({ id: crypto.randomUUID(), event_type: "refund.processed", signature_ok: true, razorpay_payment_id: p.razorpay_payment_id, razorpay_order_id: null, amount_paise: Number(b.amount_paise), outcome: "refund processed", received_at: new Date().toISOString() });
     return { id: crypto.randomUUID(), amount_paise: b.amount_paise };
+  }
+
+  if (method === "GET" && pathname === "/admin/analytics") {
+    // Six (or twelve) months of a small platform growing, as admin_monthly_metrics returns.
+    const n = Number(query.get("months") ?? 6);
+    const now = new Date();
+    const months = Array.from({ length: n }, (_, i) => {
+      const k = n - 1 - i;
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1));
+      const g = Math.max(0, n - k);
+      return {
+        month: d.toISOString().slice(0, 10), new_clinics: Math.max(1, Math.round(g / 2)), approved: Math.round(g / 2), first_payments: Math.max(0, Math.round(g / 3)),
+        collected_paise: g * 199900, refunded_paise: k === 0 ? 199900 : 0, mrr_paise: g * 2 * 199900, paying_clinics: g * 2,
+        new_patients: g * 21, appointments: g * 120, ai_bookings: g * 63, completed: g * 100, no_shows: g * 7,
+      };
+    });
+    return {
+      months,
+      clinics: [
+        { id: "a0000000-0000-4000-8000-000000000003", name: "Lotus Clinic", city: "Nizamabad", health: { score: 5, band: "at_risk", reasons: ["Not live: trial or plan ended more than 3 days ago", "No bookings in two weeks", "No staff sign-in for 12 days"] } },
+        { id: "a0000000-0000-4000-8000-000000000002", name: "Krishna Clinic", city: "Karimnagar", health: { score: 60, band: "watch", reasons: ["Plan ended — patient features stop within 3 days", "No staff sign-in for 8 days"] } },
+        { id: "a0000000-0000-4000-8000-000000000001", name: "Sri Sai Clinic", city: "Warangal", health: { score: 100, band: "healthy", reasons: [] } },
+      ],
+    };
   }
 
   // ---- billing -------------------------------------------------------------
