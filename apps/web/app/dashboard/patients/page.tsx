@@ -18,9 +18,11 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { formatDate, formatPhone, LANGUAGE_LABEL } from "@/lib/format";
+import { PatientQuickView } from "@/components/patients/PatientQuickView";
 
 export default function PatientsPage() {
   const [linkFor, setLinkFor] = React.useState<Patient | null>(null);
+  const [viewing, setViewing] = React.useState<{ id: string; family: Patient[] } | null>(null);
   const [q, setQ] = React.useState("");
   const [debounced, setDebounced] = React.useState("");
 
@@ -87,7 +89,13 @@ export default function PatientsPage() {
                   )}>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-ink">{p.full_name}</p>
+                        <button
+                          type="button"
+                          onClick={() => setViewing({ id: p.id, family: people })}
+                          className="truncate text-left text-sm font-semibold text-ink hover:text-brand-700 hover:underline"
+                        >
+                          {p.full_name}
+                        </button>
                         {p.is_blocked && <Badge tone="bad" className="text-[10px] py-0 px-1.5">Blocked</Badge>}
                       </div>
                       <p className="truncate text-xs text-ink-subtle">
@@ -111,6 +119,15 @@ export default function PatientsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {viewing && !linkFor && (
+        <PatientQuickView
+          patientId={viewing.id}
+          family={viewing.family}
+          onClose={() => setViewing(null)}
+          onSendLink={(p) => setLinkFor(p)}
+        />
       )}
 
       {linkFor && <PortalLinkModal patient={linkFor} onClose={() => setLinkFor(null)} />}

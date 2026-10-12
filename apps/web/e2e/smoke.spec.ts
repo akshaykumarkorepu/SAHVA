@@ -254,3 +254,16 @@ test("diary by doctor: leave is shaded, and a block opens the panel with a confi
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("patients: a name opens the quick view, and family on the same phone is shown", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/patients");
+  await page.getByRole("button", { name: "Lakshmi Devi", exact: true }).click({ timeout: 15_000 });
+  const panel = page.getByRole("dialog", { name: "Lakshmi Devi" });
+  await expect(panel).toContainText("Coming up");
+  await expect(panel).toContainText("Same phone number");
+  await panel.getByRole("button", { name: "Send appointment link" }).click();
+  await expect(page.getByRole("dialog", { name: "Send appointment link" })).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});

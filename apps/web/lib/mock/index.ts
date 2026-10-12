@@ -293,6 +293,12 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       : d.patients;
     return paged(rows, query);
   }
+  if (method === "GET" && seg[0] === "patients" && seg.length === 2 && seg[1] !== "by-phone") {
+    // Same shape as GET /patients/:id: the patient plus their appointments.
+    const p = d.patients.find((x) => x.id === seg[1]);
+    if (!p) throw new MockNotFound(pathname);
+    return { ...p, appointments: appointments.filter((a) => a.patient_id === seg[1]) };
+  }
   if (method === "POST" && seg[0] === "patients" && seg[2] === "portal-link") {
     return { url: `${location.origin}/p/mock-portal-token`, expires_at: new Date(Date.now() + 864e5).toISOString() };
   }
