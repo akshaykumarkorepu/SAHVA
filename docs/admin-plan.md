@@ -250,3 +250,17 @@ rest of the repo.
 6. **Admin host:** a subdomain (recommended) or a path on the same host?
 7. **Patient data in admin:** aggregates only (recommended), with break-glass?
 8. **Refund policy and approval threshold** for two-person sign-off.
+
+### Decided (2026-10-12)
+
+1. **ID:** HFR ID *or* state clinical-establishment registration, plus the
+   owner doctor's medical council registration.
+2. **Pending clinics:** may set up doctors, hours and FAQs; nothing
+   patient-facing and no payments until approved.
+3. **Expiry:** 3-day grace with a warning, then read-only (data visible,
+   nothing patient-facing) until paid.
+4. **Host:** admin console on its own subdomain; `/admin` returns 404 on the
+   clinic domain.
+
+Still open: ABDM integrator registration (automatic HFR checks), refund
+two-person threshold, break-glass on or off.
