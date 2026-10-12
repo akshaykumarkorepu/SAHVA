@@ -2799,6 +2799,13 @@ export type Database = {
         };
         Returns: { patient_id: string; clinic_id: string; token_id: string }[];
       };
+      set_appointment_status: {
+        Args: {
+          p_appointment_id: string;
+          p_status: Database["public"]["Enums"]["appointment_status"];
+        };
+        Returns: Database["public"]["Tables"]["appointments"]["Row"];
+      };
     };
     Enums: {
       action_severity: "low" | "normal" | "high" | "urgent";

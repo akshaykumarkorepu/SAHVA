@@ -63,6 +63,10 @@ export function fromPostgrest(e: PostgrestError, context: string): AppError {
       return notFound(context);
     case "PGRST116": // PostgREST: .single() matched no rows
       return notFound(context);
+    case "22023": // invalid_parameter_value — a scheduling RPC refusing a state change
+      // e.g. "Appointment … is already completed". The row is fine; the
+      // request no longer applies. The message is the RPC's own and safe.
+      return conflict("INVALID_STATE", e.message || "That change no longer applies.");
     case "22P02": // invalid_text_representation
       return badRequest("INVALID_INPUT", "A value was not in the expected format.", e.details);
     default:

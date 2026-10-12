@@ -23,6 +23,15 @@ test("a cross-tenant foreign key is a conflict, not a server error", () => {
   assert.match(e.message, /another clinic/i);
 });
 
+test("an RPC refusing a state change is a 409 with its reason, not a 500", () => {
+  // cancel_appointment and set_appointment_status raise 22023 for "already
+  // completed/cancelled". As a 500 that read as an outage.
+  const e = fromPostgrest(pgError("22023", { message: "Appointment x is already completed" }), "updating");
+  assert.equal(e.status, 409);
+  assert.equal(e.code, "INVALID_STATE");
+  assert.equal(e.message, "Appointment x is already completed");
+});
+
 test("RLS refusal maps to 403, not 500", () => {
   const e = fromPostgrest(pgError("42501", { message: "AI cancellation is disabled" }), "cancel");
   assert.equal(e.status, 403);

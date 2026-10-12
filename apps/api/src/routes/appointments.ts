@@ -3,7 +3,6 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { isoDate, paginationQuery, phoneE164, uuid, validate } from "../middleware/validate.js";
 import { fromPostgrest, unwrap } from "../lib/errors.js";
-import type { TablesUpdate } from "@sahva/types";
 
 export const appointments = Router();
 
@@ -182,13 +181,14 @@ appointments.post(
   }),
 );
 
-const STATUS_TIMESTAMP = {
-  confirmed: "confirmed_at",
-  checked_in: "checked_in_at",
-  completed: "completed_at",
-} as const;
-
-/** Front-desk day flow: confirm, check in, complete, or mark a no-show. */
+/**
+ * Front-desk day flow: confirm, check in, complete, or mark a no-show.
+ *
+ * Goes through set_appointment_status so the change and its audit event are
+ * one transaction. This route used to insert the event itself through the
+ * caller's RLS-scoped client — which staff are not allowed to do — and ignored
+ * the refusal, so none of these changes ever reached appointment_events.
+ */
 appointments.post(
   "/:id/status",
   validate({
@@ -196,25 +196,12 @@ appointments.post(
     body: z.object({ status: z.enum(["confirmed", "checked_in", "completed", "no_show"]) }),
   }),
   asyncRoute(async (req, res) => {
-    const { db, clinicId, userId } = req.auth!;
-    const { status } = req.body as { status: keyof typeof STATUS_TIMESTAMP | "no_show" };
-
-    const patch: TablesUpdate<"appointments"> = { status };
-    if (status !== "no_show") patch[STATUS_TIMESTAMP[status]] = new Date().toISOString();
-
-    const row = unwrap(
-      await db.from("appointments").update(patch).eq("id", req.params.id).select().single(),
-      "appointment",
-    );
-
-    await db.from("appointment_events").insert({
-      clinic_id: clinicId,
-      appointment_id: row.id,
-      event: status === "no_show" ? "no_show" : status,
-      actor_type: "staff",
-      actor_staff_id: userId,
+    const { db } = req.auth!;
+    const { data, error } = await db.rpc("set_appointment_status", {
+      p_appointment_id: req.params.id,
+      p_status: (req.body as { status: "confirmed" | "checked_in" | "completed" | "no_show" }).status,
     });
-
-    res.json(row);
+    if (error) throw fromPostgrest(error, "updating the appointment");
+    res.json(data);
   }),
 );
