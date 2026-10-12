@@ -31,3 +31,7 @@ supabase/.branches/
 
 # local editor/agent tooling
 .claude/
+
+# playwright
+test-results/
+playwright-report/
