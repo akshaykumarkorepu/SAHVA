@@ -998,7 +998,9 @@ export const patientMe = {
   upcoming: [
     {
       id: "66666666-6666-4666-8666-666666666621",
-      starts_at: at(NEXT_WORKDAY, "09:30"),
+      // After Dr Anitha's 09:00–13:00 leave, so she is not one of the patients
+      // that leave would have flagged.
+      starts_at: at(NEXT_WORKDAY, "15:30"),
       status: "confirmed",
       reason: "BP follow-up",
       doctor_name: "Dr Anitha",
@@ -1139,7 +1141,7 @@ export const portalData = {
       starts_at: at(NEXT_WORKDAY, "10:00"),
       ends_at: at(NEXT_WORKDAY, "10:15"),
       duration_min: 15,
-      status: "confirmed",
+      status: "needs_reschedule",
       reason: "BP follow-up",
       token_number: 4,
       confirmed_at: at(-1, "18:40"),

@@ -19,6 +19,7 @@ import {
 import { Icon } from "@/components/icons";
 import { Button, Field, Input, Modal, Spinner, Skeleton, cn } from "@/components/ui";
 import Link from "next/link";
+import { aheadText, portalError, shareText } from "@/lib/portal/text";
 
 /**
  * Patient portal.
@@ -110,6 +111,7 @@ export default function PatientPortalPage({ params }: { params: { token: string 
               <AppointmentCard
                 key={a.id}
                 appointment={a}
+                patientName={data.patient.full_name}
                 clinic={data.clinic}
                 permissions={data.permissions}
                 token={token}
@@ -159,6 +161,7 @@ export default function PatientPortalPage({ params }: { params: { token: string 
 
 function AppointmentCard({
   appointment: a,
+  patientName,
   clinic,
   permissions,
   token,
@@ -167,6 +170,7 @@ function AppointmentCard({
   onChanged,
 }: {
   appointment: PortalAppointment;
+  patientName: string;
   clinic: PortalData["clinic"];
   permissions: PortalData["permissions"];
   token: string;
@@ -193,11 +197,22 @@ function AppointmentCard({
       setCancelOpen(false);
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(portalError(e, t));
     } finally {
       setBusy(null);
     }
   };
+
+  const share = `https://wa.me/?text=${encodeURIComponent(
+    shareText(t, {
+      name: patientName,
+      when: patientDateTime(a.starts_at, a.timezone, lang),
+      doctor: a.doctor_name,
+      clinic: clinic.name,
+      place: [clinic.landmark, clinic.address_line, clinic.city].filter(Boolean).join(", "),
+      phone: clinic.phone_e164,
+    }),
+  )}`;
 
   return (
     <article
@@ -224,6 +239,18 @@ function AppointmentCard({
               {a.consult_fee_paise !== null && (
                 <p className="mt-1 text-sm text-ink-subtle">
                   {t.fee}: ₹{(a.consult_fee_paise / 100).toFixed(0)}
+                </p>
+              )}
+              {(a.token_number != null || a.patients_ahead != null) && !needsReschedule && (
+                <p className="mt-3 flex flex-wrap items-center gap-2">
+                  {a.token_number != null && (
+                    <span className="rounded-lg bg-brand-600 px-2.5 py-1 font-display text-sm font-bold text-on-brand">
+                      {t.token} {a.token_number}
+                    </span>
+                  )}
+                  {a.patients_ahead != null && (
+                    <span className="text-sm font-medium text-ink">{aheadText(a.patients_ahead, t)}</span>
+                  )}
                 </p>
               )}
             </div>
@@ -280,6 +307,12 @@ function AppointmentCard({
             </Button>
           </a>
         </div>
+
+        <a href={share} target="_blank" rel="noopener noreferrer" className="block">
+          <Button variant="ghost" size="lg" icon="message" className="w-full">
+            {t.tellFamily}
+          </Button>
+        </a>
 
         {permissions.may_cancel && !needsReschedule && (
           <Button variant="ghost" size="lg" className="w-full" onClick={() => setCancelOpen(true)}>
@@ -347,6 +380,7 @@ function RescheduleSheet({
   const [picked, setPicked] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [refresh, setRefresh] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -354,11 +388,11 @@ function RescheduleSheet({
     setPicked(null);
     portalFetch<PortalSlot[]>(token, `/appointments/${a.id}/slots?date=${date}`)
       .then((s) => !cancelled && setSlots(s))
-      .catch((e) => !cancelled && setErr(e instanceof Error ? e.message : String(e)));
+      .catch((e) => !cancelled && setErr(portalError(e, t)));
     return () => {
       cancelled = true;
     };
-  }, [token, a.id, date]);
+  }, [token, a.id, date, refresh, t]);
 
   const save = async () => {
     if (!picked) return;
@@ -371,7 +405,9 @@ function RescheduleSheet({
       });
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(portalError(e, t));
+      // The time went to someone else: show what is actually free now.
+      if (e instanceof ApiError && e.isSlotTaken) setRefresh((n) => n + 1);
     } finally {
       setSaving(false);
     }
@@ -499,7 +535,7 @@ function ExpiredLink({
           <Icon name="warning" className="h-5 w-5" />
         </span>
         <h1 className="mt-4 font-display text-lg font-semibold tracking-tight text-ink">
-          {expired ? t.linkExpired : error.message}
+          {expired ? t.linkExpired : portalError(error, t)}
         </h1>
         <p className="mt-2 text-sm text-ink-muted">{expired ? t.linkExpiredBody : ""}</p>
       </div>

@@ -60,6 +60,8 @@ export type PortalAppointment = {
   status: Enums<"appointment_status">;
   reason: string | null;
   token_number: number | null;
+  /** Today only: live appointments with the same doctor ahead of this one. Counts, never names. */
+  patients_ahead?: number | null;
   confirmed_at: string | null;
   doctor_name: string;
   doctor_specialty: string;

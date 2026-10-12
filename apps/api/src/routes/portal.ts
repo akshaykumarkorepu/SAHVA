@@ -5,6 +5,7 @@ import { requirePortalToken } from "../middleware/portalAuth.js";
 import { isoDate, uuid, validate } from "../middleware/validate.js";
 import { badRequest, forbidden, fromPostgrest, notFound, unwrap } from "../lib/errors.js";
 import { dbAdmin } from "../lib/supabase.js";
+import { isCurrent, localDay, patientsAhead } from "../lib/queue.js";
 
 export const portal = Router();
 
@@ -69,7 +70,12 @@ portal.get(
     ]);
 
     const rows = appointments.data ?? [];
-    const now = Date.now();
+    const nowDate = new Date();
+    const tz = unwrap(clinic, "clinic").timezone;
+    const current = rows
+      .filter((a) => isCurrent(a, nowDate, tz))
+      .sort((a, b) => new Date(a.starts_at!).getTime() - new Date(b.starts_at!).getTime());
+    const queue = await queueFor(current, clinicId, nowDate, tz);
 
     res.json({
       patient: unwrap(patient, "patient"),
@@ -78,21 +84,47 @@ portal.get(
         may_reschedule: settings.patient_may_reschedule,
         may_cancel: settings.patient_may_cancel,
       },
-      upcoming: rows
-        .filter(
-          (a) =>
-            new Date(a.starts_at!).getTime() >= now &&
-            ["booked", "confirmed", "checked_in", "needs_reschedule"].includes(a.status!),
-        )
-        .sort((a, b) => new Date(a.starts_at!).getTime() - new Date(b.starts_at!).getTime()),
-      past: rows.filter(
-        (a) =>
-          new Date(a.starts_at!).getTime() < now ||
-          ["completed", "cancelled", "no_show"].includes(a.status!),
-      ),
+      // A checked-in patient whose slot time has passed is still waiting —
+      // it used to fall into "past visits" at the moment it mattered most.
+      upcoming: current.map((a) => ({ ...a, patients_ahead: queue.get(a.id!) ?? null })),
+      past: rows.filter((a) => !isCurrent(a, nowDate, tz)),
     });
   }),
 );
+
+/**
+ * For each of the patient's appointments today, how many live appointments
+ * with the same doctor start before it. Counts only — never who.
+ */
+async function queueFor(
+  current: { id: string | null; starts_at: string | null }[],
+  clinicId: string,
+  now: Date,
+  tz: string,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const today = localDay(now.toISOString(), tz);
+  const todays = current.filter((a) => a.starts_at && localDay(a.starts_at, tz) === today);
+  if (todays.length === 0) return out;
+
+  const mine = await dbAdmin
+    .from("appointments")
+    .select("id, doctor_id, starts_at, status")
+    .in("id", todays.map((a) => a.id!));
+  const doctorIds = [...new Set((mine.data ?? []).map((a) => a.doctor_id))];
+  // A day either side, then filtered by the clinic's own calendar.
+  const day = await dbAdmin
+    .from("appointments")
+    .select("id, doctor_id, starts_at, status")
+    .eq("clinic_id", clinicId)
+    .in("doctor_id", doctorIds)
+    .gte("starts_at", new Date(now.getTime() - 86_400_000).toISOString())
+    .lte("starts_at", new Date(now.getTime() + 86_400_000).toISOString());
+  const sameDay = (day.data ?? []).filter((a) => localDay(a.starts_at, tz) === today);
+
+  for (const a of mine.data ?? []) out.set(a.id, patientsAhead(a, sameDay));
+  return out;
+}
 
 /** Clinic hours, so the portal can answer "are you open?" without a call. */
 portal.get(

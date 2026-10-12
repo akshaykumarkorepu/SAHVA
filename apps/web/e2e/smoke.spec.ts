@@ -278,3 +278,13 @@ test("patient pages send no referrer, are not indexed, and are not cached", asyn
   const portal = await request.get("/p/mock-portal-token");
   expect(portal.headers()["cache-control"]).toContain("no-store");
 });
+
+test("portal: the family share carries the appointment, never the link", async ({ page }) => {
+  await page.goto("/p/mock-portal-token");
+  const share = page.locator('a[href^="https://wa.me/?text="]').first();
+  await expect(share).toBeVisible({ timeout: 15_000 });
+  const text = decodeURIComponent((await share.getAttribute("href"))!.split("text=")[1]);
+  expect(text).toContain("Dr Anitha");
+  expect(text).not.toContain("mock-portal-token");
+  expect(text).not.toMatch(/https?:|\/p\//);
+});

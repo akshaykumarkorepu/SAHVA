@@ -61,6 +61,23 @@ export type Strings = {
   passwordHint: string;
   accountCreated: string;
   accountCreatedBody: string;
+  /** "Token 14". */
+  token: string;
+  aheadNone: string;
+  aheadOne: string;
+  /** {n} is replaced with the count. */
+  aheadMany: string;
+  tellFamily: string;
+  /**
+   * WhatsApp text for a family member. Placeholders: {name} {when} {doctor}
+   * {clinic} {place} {phone}. Never the portal link — that is a credential.
+   */
+  shareTemplate: string;
+  errSlotTaken: string;
+  errNoLonger: string;
+  errTooMany: string;
+  errNetwork: string;
+  errGeneric: string;
 };
 
 export const STRINGS: Record<Lang, Strings> = {
@@ -117,6 +134,18 @@ export const STRINGS: Record<Lang, Strings> = {
     passwordHint: "At least 10 characters. A short phrase is easier to remember than a jumble.",
     accountCreated: "Account created",
     accountCreatedBody: "You can now sign in any time to see your full health record.",
+    token: "Token",
+    aheadNone: "Nobody before you",
+    aheadOne: "1 patient before you",
+    aheadMany: "{n} patients before you",
+    tellFamily: "Tell family on WhatsApp",
+    shareTemplate:
+      "{name}'s appointment: {when} with {doctor} at {clinic}, {place}. Clinic phone: {phone}",
+    errSlotTaken: "Someone just took that time. Please pick another.",
+    errNoLonger: "This appointment can no longer be changed here. Please call the clinic.",
+    errTooMany: "Too many tries. Please wait a few minutes.",
+    errNetwork: "No internet connection. Check your signal and try again.",
+    errGeneric: "That did not work. Please try again, or call the clinic.",
   },
   te: {
     yourAppointment: "మీ అపాయింట్‌మెంట్",
@@ -171,6 +200,18 @@ export const STRINGS: Record<Lang, Strings> = {
     passwordHint: "కనీసం 10 అక్షరాలు. గుర్తుంచుకోవడానికి ఒక చిన్న వాక్యం సులభం.",
     accountCreated: "ఖాతా సృష్టించబడింది",
     accountCreatedBody: "ఇప్పుడు మీరు ఎప్పుడైనా సైన్ ఇన్ చేసి మీ పూర్తి ఆరోగ్య రికార్డు చూడవచ్చు.",
+    token: "టోకెన్",
+    aheadNone: "మీ ముందు ఎవరూ లేరు",
+    aheadOne: "మీ ముందు 1 వ్యక్తి ఉన్నారు",
+    aheadMany: "మీ ముందు {n} మంది ఉన్నారు",
+    tellFamily: "కుటుంబానికి WhatsAppలో చెప్పండి",
+    shareTemplate:
+      "{name} అపాయింట్‌మెంట్: {when}, {doctor} వద్ద, {clinic}, {place}. క్లినిక్ ఫోన్: {phone}",
+    errSlotTaken: "ఆ సమయాన్ని ఇప్పుడే వేరొకరు తీసుకున్నారు. దయచేసి వేరే సమయం ఎంచుకోండి.",
+    errNoLonger: "ఈ అపాయింట్‌మెంట్‌ను ఇక్కడ మార్చలేరు. దయచేసి క్లినిక్‌కి కాల్ చేయండి.",
+    errTooMany: "చాలా ప్రయత్నాలు జరిగాయి. కొన్ని నిమిషాలు ఆగండి.",
+    errNetwork: "ఇంటర్నెట్ లేదు. సిగ్నల్ చూసి మళ్లీ ప్రయత్నించండి.",
+    errGeneric: "అది జరగలేదు. మళ్లీ ప్రయత్నించండి, లేదా క్లినిక్‌కి కాల్ చేయండి.",
   },
 };
 
