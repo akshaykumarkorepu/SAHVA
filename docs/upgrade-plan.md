@@ -80,6 +80,15 @@ Roadmap §1–3, plus the refactor that unlocks everything after it.
 **Exit:** `npm run typecheck`, `npm run test:db`, `npm run test:api`,
 `npm run build -w apps/web` and the four Playwright flows all green in CI.
 
+**Status (2026-10-12): done, with one gap.** One white theme, toasts, ESLint,
+error and 404 pages, clinic-local action times, lockout message, Google behind
+a flag, the patient record split with 11 unit tests, and 42 Playwright smoke
+tests (every screen, desktop and mobile, plus the receptionist's view) — all
+in CI and green. The gap: the four *database-backed* flows (real sign-in,
+double-booking, dispatch) need a seeded Supabase in CI, which does not exist
+yet. Migration `20261012000100` is committed but not yet applied to the
+hosted project.
+
 ---
 
 ## Phase 2 · Command Center and Trust Center — ~2 weeks
