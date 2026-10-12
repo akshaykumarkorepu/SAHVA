@@ -19,7 +19,6 @@ import {
 import { Icon } from "@/components/icons";
 import { Button, Field, Input, Modal, Spinner, Skeleton, cn } from "@/components/ui";
 import Link from "next/link";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
  * Patient portal.
@@ -85,7 +84,6 @@ export default function PatientPortalPage({ params }: { params: { token: string 
           >
             {t.language}
           </button>
-          <ThemeToggle />
         </div>
       </header>
 

@@ -5,83 +5,57 @@
 /* ---------------------------------------------------------------------------
    Design tokens.
 
-   One token set, two themes. Values are space-separated RGB channels so
-   Tailwind's `<alpha-value>` works (`bg-surface/60`, `text-ink/70`).
+   One theme. Values are space-separated RGB channels so Tailwind's
+   `<alpha-value>` works (`bg-surface/60`, `text-ink/70`).
+
+   Every text/background pair listed below was measured, not eyeballed. This
+   is read on mid-range Android screens in daylight, so WCAG AA (4.5:1) is a
+   product requirement here, not a preference.
    --------------------------------------------------------------------------- */
 @layer base {
   :root {
-    --brand-50: 237 248 244;
-    --brand-100: 200 235 228;
-    --brand-200: 150 215 208;
-    --brand-400: 85 185 180;
-    --brand-500: 21 155 148;
-    --brand-600: 21 125 120;
-    --brand-700: 16 95 90;
-    --brand-900: 16 55 50;
+    --brand-50: 240 250 248;
+    --brand-100: 204 236 230;
+    --brand-200: 153 216 207;
+    --brand-400: 56 178 166;
+    /* Decorative fills only — white on 500 is 3.74:1. Buttons use 600. */
+    --brand-500: 20 148 136;
+    /* White label on a 600 fill: 5.47:1. 600 as text on white: 5.47:1. */
+    --brand-600: 15 118 110;
+    --brand-700: 17 94 89;
+    /* Pressed state for primary buttons. Was referenced but never defined. */
+    --brand-800: 17 75 71;
+    --brand-900: 19 52 50;
 
-    /* Soft Mint healthcare background, shifting away from warm sand. */
-    --surface: 237 248 244;
-    --surface-raised: 252 255 253;
-    --surface-sunken: 225 238 233;
-    --surface-inverse: 16 55 50;
+    /* Pure white pages and cards. The old mint wash stopped cards separating
+       from the page; elevation now comes from the shadow, not the fill. */
+    --surface: 255 255 255;
+    --surface-raised: 255 255 255;
+    --surface-sunken: 248 250 252;
+    --surface-inverse: 19 52 50;
 
-    /* Deep Navy for strong typography and trust. */
-    --ink: 16 53 68;
-    --ink-muted: 70 92 100;
-    /* 4.6:1 on --surface. Same hue, enough luminance to clear WCAG AA —
-       this is read on mid-range Android screens in daylight, so AA is a
-       product requirement here, not a preference. Was 3.71:1. */
-    --ink-subtle: 97 114 119;
-    --ink-inverse: 237 248 244;
-    /* Label on a filled brand button. White clears AA on the light fill
-       (4.96:1). In dark the fill is a light tint, so the label flips dark —
-       white on it measured 2.55:1, well under AA. */
+    /* Deep navy for strong typography and trust. */
+    --ink: 16 53 68; /* 13.0:1 on white */
+    --ink-muted: 70 92 100; /* 7.1:1 on white */
+    /* 5.5:1 on --surface-sunken, 5.5:1 on brand-50 — the two tinted
+       backgrounds it most often sits on. */
+    --ink-subtle: 88 104 110;
+    --ink-inverse: 255 255 255;
     --on-brand: 255 255 255;
 
-    --line: 210 225 220;
-    --line-strong: 180 200 195;
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
 
     --accent-amber: 217 119 6;
     --accent-rose: 225 29 72;
     --accent-sky: 2 132 199;
     --accent-violet: 124 58 237;
 
-    --shadow: 16 53 68;
+    /* Shadows carry the slate ink for the edge and the brand hue for the
+       glow, so elevation reads as SAHVA rather than as generic grey. */
+    --shadow: 15 23 42;
+    --shadow-tint: 20 148 136;
     color-scheme: light;
-  }
-
-  .dark {
-    --brand-50: 16 55 50;
-    --brand-100: 20 70 65;
-    --brand-200: 30 90 85;
-    --brand-400: 85 185 180;
-    --brand-500: 45 196 178;
-    --brand-600: 94 214 198;
-    --brand-700: 85 185 180;
-    --brand-900: 200 235 228;
-
-    --surface: 14 19 24;
-    --surface-raised: 30 39 48;
-    --surface-sunken: 9 12 16;
-    --surface-inverse: 237 248 244;
-
-    --ink: 233 239 245;
-    --ink-muted: 150 164 178;
-    /* 4.6:1 on the dark --surface. Was 4.44:1, just under AA. */
-    --ink-subtle: 129 145 159;
-    --on-brand: 8 28 30;
-    --ink-inverse: 16 53 68;
-
-    --line: 42 53 64;
-    --line-strong: 64 78 92;
-
-    --accent-amber: 251 191 36;
-    --accent-rose: 251 113 133;
-    --accent-sky: 56 189 248;
-    --accent-violet: 167 139 250;
-
-    --shadow: 0 0 0;
-    color-scheme: dark;
   }
 
   * {
@@ -98,7 +72,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* One focus treatment everywhere, visible in both themes. */
+  /* One focus treatment everywhere. */
   :focus-visible {
     @apply outline-none ring-2 ring-brand-500/70 ring-offset-2 ring-offset-surface;
   }
@@ -146,7 +120,7 @@
   }
 }
 
-/* Scrollbars that do not break the dark theme. */
+/* Thin scrollbars for dense panels. */
 @layer utilities {
   .scrollbar-slim {
     scrollbar-width: thin;

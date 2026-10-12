@@ -17,7 +17,6 @@ import {
   type Tone,
 } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /* -------------------------------------------------------------------------- */
 /* Types — the shapes the API returns                                          */
@@ -384,7 +383,6 @@ function PatientHeader({
         >
           {languageLabel}
         </button>
-        <ThemeToggle />
         <button
           onClick={onSignOut}
           title={signOutLabel}

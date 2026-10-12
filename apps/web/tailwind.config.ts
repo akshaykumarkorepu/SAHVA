@@ -3,12 +3,10 @@ import type { Config } from "tailwindcss";
 /**
  * SAHVA design system.
  *
- * Colours are CSS variables so light and dark are one token set rather than two
- * parallel palettes. Anything that reads `surface` / `ink` / `line` flips
- * automatically; nothing needs a `dark:` variant except genuine exceptions.
+ * One light theme. Colours are CSS variables (see globals.css) so a palette
+ * change is a token edit, never a find-and-replace across components.
  */
 const config: Config = {
-  darkMode: "class",
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
@@ -21,9 +19,9 @@ const config: Config = {
           500: "rgb(var(--brand-500) / <alpha-value>)",
           600: "rgb(var(--brand-600) / <alpha-value>)",
           700: "rgb(var(--brand-700) / <alpha-value>)",
+          800: "rgb(var(--brand-800) / <alpha-value>)",
           900: "rgb(var(--brand-900) / <alpha-value>)",
         },
-        // Warm sand neutrals rather than cold slate — reads human, not clinical.
         surface: {
           DEFAULT: "rgb(var(--surface) / <alpha-value>)",
           raised: "rgb(var(--surface-raised) / <alpha-value>)",
@@ -68,8 +66,8 @@ const config: Config = {
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgb(var(--shadow) / 0.05)",
-        card: "0 1px 2px rgb(var(--shadow) / 0.04), 0 4px 12px -2px rgb(var(--shadow) / 0.06)",
-        lift: "0 2px 4px rgb(var(--shadow) / 0.04), 0 12px 32px -8px rgb(var(--shadow) / 0.14)",
+        card: "0 1px 3px rgb(var(--shadow) / 0.04), 0 4px 14px -2px rgb(var(--shadow-tint) / 0.06)",
+        lift: "0 2px 4px rgb(var(--shadow) / 0.04), 0 14px 36px -8px rgb(var(--shadow-tint) / 0.14)",
         glow: "0 8px 28px -6px rgb(var(--brand-600) / 0.42)",
         inset: "inset 0 1px 0 0 rgb(255 255 255 / 0.06)",
       },

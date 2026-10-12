@@ -6,7 +6,6 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { isMockMode } from "@/lib/mock/flag";
 import { Button, Field, Input } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
  * Password reset request.
@@ -40,10 +39,6 @@ export default function ForgotPasswordPage() {
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(40rem_24rem_at_15%_-10%,rgb(var(--brand-500)/0.12),transparent_60%)]"
       />
-
-      <div className="absolute right-4 top-4 z-30">
-        <ThemeToggle />
-      </div>
       <Link
         href="/signin"
         className="absolute left-4 top-4 z-30 inline-flex items-center gap-2 text-sm font-medium text-ink-muted transition hover:text-ink"

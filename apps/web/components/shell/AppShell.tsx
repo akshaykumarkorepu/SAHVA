@@ -9,7 +9,6 @@ import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./
 import { Logo } from "./Logo";
 import { Icon } from "@/components/icons";
 import { Button, Spinner, cn } from "@/components/ui";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
  * Application shell.
@@ -73,7 +72,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <AiStatus enabled={clinic?.settings?.ai_enabled !== false} />
-            <ThemeToggle />
           </div>
         </header>
 

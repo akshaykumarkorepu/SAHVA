@@ -7,7 +7,6 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { isMockMode } from "@/lib/mock/flag";
 import { Button, Field, Input, Segmented, Spinner, cn } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 /**
  * One door for everyone.
@@ -70,10 +69,6 @@ function AuthScreen() {
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(42rem_26rem_at_12%_-8%,rgb(var(--brand-500)/0.12),transparent_60%),radial-gradient(34rem_22rem_at_94%_104%,rgb(var(--accent-amber)/0.08),transparent_60%)]"
       />
-
-      <div className="absolute right-4 top-4 z-30">
-        <ThemeToggle />
-      </div>
 
       <Link
         href="/"

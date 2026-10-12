@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { ThemeProvider, THEME_SCRIPT } from "@/components/theme/ThemeProvider";
+import { Toaster } from "sonner";
 
 /**
  * Fonts are vendored, not fetched.
@@ -38,21 +38,15 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fcfbf9" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0e0d" },
-  ],
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${display.variable} ${sans.variable}`}>
-      <head>
-        {/* Sets the theme class before first paint, so there is no light flash. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
+    <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body className="font-sans">
-        <ThemeProvider>{children}</ThemeProvider>
+        {children}
+        <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
   );
