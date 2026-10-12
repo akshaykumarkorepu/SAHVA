@@ -29,6 +29,8 @@ const hours = [...d.clinicHours];
 const closures = [...d.clinicClosures];
 const careTasks = d.patientCareTasks.map((t) => ({ ...t }));
 let batch = { ...d.rescheduleBatch };
+let billing = d.billingStatus();
+const pendingOrders = new Map<string, { cycle: "monthly" | "yearly"; amount: number }>();
 let settings = { ...d.clinic.settings };
 
 function paged<T>(rows: T[], query: URLSearchParams) {
@@ -407,6 +409,45 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   }
   if (method === "GET" && pathname === "/analytics/costs") {
     return d.analyticsCosts(Number(query.get("days") ?? 30));
+  }
+
+  // ---- billing -------------------------------------------------------------
+  // Mirrors routes/billing.ts. A trial with 11 days left; "paying" goes
+  // through the same verify endpoint and activate rules as the real API.
+  if (method === "GET" && pathname === "/billing") return billing;
+  if (method === "POST" && pathname === "/billing/orders") {
+    const cycle = b.cycle === "yearly" ? "yearly" : "monthly";
+    const amount = cycle === "yearly" ? billing.plan.yearly_price_paise : billing.plan.monthly_price_paise;
+    const order_id = `order_mock_${Date.now()}`;
+    pendingOrders.set(order_id, { cycle, amount });
+    return { order_id, amount, currency: "INR", key_id: "rzp_test_mock", description: `SAHVA for Clinics — ${cycle}`, prefill_email: d.me.email };
+  }
+  if (method === "POST" && pathname === "/billing/verify") {
+    const order = pendingOrders.get(String(b.razorpay_order_id));
+    if (!order) throw new MockNotFound(pathname);
+    pendingOrders.delete(String(b.razorpay_order_id));
+    // Paid time starts when the current period ends (keeps trial days).
+    const start = new Date(Math.max(Date.now(), new Date(billing.subscription.current_period_end).getTime()));
+    const end = new Date(start);
+    if (order.cycle === "yearly") end.setFullYear(end.getFullYear() + 1);
+    else end.setMonth(end.getMonth() + 1);
+    billing = {
+      ...billing,
+      subscription: { ...billing.subscription, status: "active", billing_cycle: order.cycle, current_period_end: end.toISOString() },
+      payments: [
+        {
+          id: crypto.randomUUID(),
+          billing_cycle: order.cycle,
+          amount_paise: order.amount,
+          period_start: start.toISOString(),
+          period_end: end.toISOString(),
+          paid_at: new Date().toISOString(),
+          razorpay_payment_id: String(b.razorpay_payment_id),
+        },
+        ...billing.payments,
+      ],
+    };
+    return { status: "paid" };
   }
 
   // ---- patient portal ----------------------------------------------------

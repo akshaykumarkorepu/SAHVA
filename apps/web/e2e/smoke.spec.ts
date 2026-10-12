@@ -382,3 +382,44 @@ test("as a receptionist, the record access log is not shown", async ({ page }) =
   await expect(panel).toContainText("Coming up");
   await expect(panel).not.toContainText("Who opened this record");
 });
+
+test("landing: real prices with a monthly/yearly switch, and no dead phone number", async ({ page }) => {
+  await page.goto("/");
+  const price = page.locator("#pricing [aria-live]");
+  await expect(price).toContainText("₹9,999", { timeout: 15_000 });
+  await page.getByRole("tab", { name: "Monthly" }).click();
+  await expect(price).toContainText("₹1,999");
+  await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Start 14-day free trial/ }).first()).toHaveAttribute(
+    "href",
+    "/signin?mode=signup&role=staff",
+  );
+});
+
+test("signup as a clinic starts a free trial", async ({ page }) => {
+  await page.goto("/signin?mode=signup&role=staff");
+  await expect(page.getByRole("heading", { name: "Start your 14-day free trial" })).toBeVisible({ timeout: 15_000 });
+});
+
+for (const path of ["/terms", "/privacy", "/refund-policy", "/contact"]) {
+  test(`${path} renders, and does not invent business details`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
+    // Until lib/site.ts is filled in, the page must say so visibly.
+    if (path !== "/refund-policy") await expect(page.locator("main")).toContainText("set in apps/web/lib/site.ts");
+  });
+}
+
+test("billing: trial shown, pay yearly, plan becomes active and the banner goes", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/settings/billing");
+  await expect(page.getByText(/days left in your free trial/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("status").filter({ hasText: "Free trial" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Pay ₹9,999" }).click();
+  await expect(page.getByText("Your plan is active", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toContainText("pay_mock_");
+  await expect(page.getByRole("status").filter({ hasText: "Free trial" })).toHaveCount(0);
+  await settle(page);
+  expect(errors).toEqual([]);
+});

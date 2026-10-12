@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { isMockMode } from "@/lib/mock/flag";
 import { Button, Field, Input, Segmented, Spinner, cn } from "@/components/ui";
+import { PRICE } from "@/lib/pricing";
+import { toIndianE164 } from "@/lib/phone";
 import { Icon } from "@/components/icons";
 
 /**
@@ -494,15 +496,27 @@ function SignUpForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!avail.ok) return router.replace(next);
+    if (!avail.ok) return router.replace(staff ? "/dashboard" : next);
+    // The staff profile stores E.164 and refuses anything else — which would
+    // surface as Supabase's opaque "Database error saving new user".
+    const e164 = staff ? toIndianE164(phone) : phone;
+    if (staff && !e164) {
+      setError("Enter a 10-digit mobile number, like 98765 43210.");
+      return;
+    }
     setPending(true);
     setError(null);
     const { error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, phone_e164: phone },
-        emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        // account_type "staff" is what makes the database create a staff
+        // profile; a clinic owner then sets up their clinic after confirming.
+        // Patients never send it, so they never acquire a staff identity.
+        data: staff
+          ? { full_name: fullName, phone: e164, account_type: "staff" }
+          : { full_name: fullName, phone_e164: phone },
+        emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(staff ? "/dashboard" : next)}`,
       },
     });
     setPending(false);
@@ -520,30 +534,21 @@ function SignUpForm({
   return (
     <div className="mx-auto my-auto w-full max-w-sm">
       <Brand
-        title={staff ? "Staff accounts are invited" : "Create your account"}
-        subtitle={staff ? "Not self-service, by design." : "See your records in Telugu or English."}
+        title={staff ? `Start your ${PRICE.trialDays}-day free trial` : "Create your account"}
+        subtitle={staff ? "For clinic owners. No card needed." : "See your records in Telugu or English."}
       />
       <RoleToggle role={role} setRole={setRole} />
 
-      {staff ? (
-        <>
-          <Alert tone="info">
-            A clinic&rsquo;s staff list is not something a stranger can add themselves to, so
-            self-signup is switched off. Ask the clinic owner to invite you from{" "}
-            <strong>Settings → Staff</strong>; the invitation arrives by email.
-          </Alert>
-          <Button
-            variant="secondary"
-            size="lg"
-            className="mt-5 w-full"
-            onClick={() => setRole("patient")}
-          >
-            I&rsquo;m a patient instead
-          </Button>
-        </>
-      ) : sent ? (
+      {staff && !sent && (
+        <p className="mb-4 rounded-xl bg-surface-sunken px-3 py-2 text-[13px] text-ink-muted">
+          Joining an existing clinic? Ask its owner to invite you from <strong>Settings → Staff</strong> instead.
+        </p>
+      )}
+
+      {sent ? (
         <Alert tone="info">
-          Check <strong>{email}</strong> for a confirmation link. You can close this page.
+          Check <strong>{email}</strong> for a confirmation link.
+          {staff ? " After confirming, you will set up your clinic and your trial starts." : " You can close this page."}
         </Alert>
       ) : (
         <>
@@ -555,7 +560,9 @@ function SignUpForm({
               </>
             )
           ) : avail.reason === "mock" ? (
-            <Alert tone="info">Mock mode — fixtures only. Continue to the patient record.</Alert>
+            <Alert tone="info">
+              Mock mode — fixtures only. Continue to the {staff ? "dashboard" : "patient record"}.
+            </Alert>
           ) : (
             <Alert tone="error">Supabase is not configured — see docs/setup.md.</Alert>
           )}
@@ -571,7 +578,7 @@ function SignUpForm({
               />
             </Field>
 
-            <Field label="Mobile number" hint="The number the clinic has on file" required>
+            <Field label="Mobile number" hint={staff ? "Yours, not the clinic's" : "The number the clinic has on file"} required>
               <Input
                 type="tel"
                 required
@@ -620,7 +627,7 @@ function SignUpForm({
             {error && <Alert tone="error">{error}</Alert>}
 
             <Button type="submit" size="lg" className="w-full" loading={pending}>
-              {avail.ok ? "Create account" : "Continue"}
+              {avail.ok ? (staff ? "Start free trial" : "Create account") : "Continue"}
             </Button>
           </form>
         </>

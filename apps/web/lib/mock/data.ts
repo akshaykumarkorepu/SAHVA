@@ -1258,3 +1258,28 @@ export const patientInvoices = [
     items: [{ description: "General consultation", quantity: 1, unit_price_paise: 30000 }],
   },
 ];
+
+/** Billing: a clinic on day 3 of its 14-day trial. */
+export function billingStatus() {
+  const trialEnd = new Date(Date.now() + 11 * 86_400_000).toISOString();
+  return {
+    plan: { code: "starter", name: "SAHVA for Clinics", monthly_price_paise: 199900, yearly_price_paise: 999900 },
+    subscription: {
+      id: "77777777-7777-4777-8777-777777777701",
+      status: "trialing",
+      billing_cycle: null as "monthly" | "yearly" | null,
+      trial_ends_at: trialEnd,
+      current_period_end: trialEnd,
+    },
+    payments: [] as {
+      id: string;
+      billing_cycle: "monthly" | "yearly";
+      amount_paise: number;
+      period_start: string;
+      period_end: string;
+      paid_at: string;
+      razorpay_payment_id: string;
+    }[],
+    payments_enabled: true,
+  };
+}

@@ -8,6 +8,8 @@ import { useActionCount } from "@/lib/hooks";
 import { useLiveClinic, type LiveStatus } from "@/lib/live";
 import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./nav";
 import { Logo } from "./Logo";
+import { ClinicSetup } from "./ClinicSetup";
+import { TrialBanner } from "./TrialBanner";
 import { Icon } from "@/components/icons";
 import { Button, Spinner, cn } from "@/components/ui";
 
@@ -31,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (status === "unconfigured") return <SetupNeeded />;
   if (status === "loading" || status === "signed-out") return <BootScreen />;
-  if (status === "no-clinic") return <NoClinic email={email} onSignOut={signOut} />;
+  if (status === "no-clinic") return <ClinicSetup email={email} onSignOut={signOut} />;
 
   return (
     <div className="flex min-h-[100dvh] bg-surface">
@@ -77,6 +79,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <AiStatus enabled={clinic?.settings?.ai_enabled !== false} />
           </div>
         </header>
+
+        <TrialBanner />
 
         {/* pb-28 keeps content clear of the mobile tab bar */}
         <main className="min-w-0 flex-1 px-4 pb-28 pt-6 md:px-7 lg:pb-10">
@@ -331,31 +335,6 @@ function BootScreen() {
   return (
     <div className="grid min-h-[100dvh] place-items-center bg-surface">
       <Spinner />
-    </div>
-  );
-}
-
-function NoClinic({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
-  return (
-    <div className="grid min-h-[100dvh] place-items-center bg-surface px-4">
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-line bg-surface-raised p-8 text-center shadow-card animate-scale-in">
-        <div className="pointer-events-none absolute inset-0 aurora" aria-hidden />
-        <div className="relative">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-amber/12 text-accent-amber ring-1 ring-inset ring-accent-amber/20">
-            <Icon name="shield" className="h-5 w-5" />
-          </span>
-          <h1 className="mt-4 font-display text-lg font-semibold tracking-tight text-ink">
-            No clinic yet
-          </h1>
-          <p className="mt-2 text-sm text-ink-muted">
-            <span className="font-medium text-ink">{email}</span> is signed in, but is not an active
-            member of any clinic. An owner needs to invite this account before it can see any data.
-          </p>
-          <Button variant="secondary" onClick={onSignOut} className="mt-6" icon="signOut">
-            Sign out
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }
