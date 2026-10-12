@@ -144,6 +144,53 @@ export type Database = {
           },
         ];
       };
+      admin_audit_log: {
+        Row: {
+          id: string;
+          admin_user_id: string;
+          action: string;
+          target_type: string | null;
+          target_id: string | null;
+          reason: string | null;
+          before: Json | null;
+          after: Json | null;
+          request_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_user_id: string;
+          action: string;
+          target_type?: string | null;
+          target_id?: string | null;
+          reason?: string | null;
+          before?: Json | null;
+          after?: Json | null;
+          request_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          admin_user_id?: string;
+          action?: string;
+          target_type?: string | null;
+          target_id?: string | null;
+          reason?: string | null;
+          before?: Json | null;
+          after?: Json | null;
+          request_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_admin_user_id_fkey";
+            columns: ["admin_user_id"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+        ];
+      };
       appointment_events: {
         Row: {
           id: string;
@@ -2025,6 +2072,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_admins: {
+        Row: {
+          user_id: string;
+          role: Database["public"]["Enums"]["platform_admin_role"];
+          full_name: string;
+          created_at: string;
+          created_by: string | null;
+          disabled_at: string | null;
+        };
+        Insert: {
+          user_id: string;
+          role: Database["public"]["Enums"]["platform_admin_role"];
+          full_name: string;
+          created_at?: string;
+          created_by?: string | null;
+          disabled_at?: string | null;
+        };
+        Update: {
+          user_id?: string;
+          role?: Database["public"]["Enums"]["platform_admin_role"];
+          full_name?: string;
+          created_at?: string;
+          created_by?: string | null;
+          disabled_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "platform_admins_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "platform_admins";
+            referencedColumns: ["user_id"];
+          },
+          {
+            foreignKeyName: "platform_admins_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       prescription_items: {
         Row: {
           id: string;
@@ -2981,6 +3070,7 @@ export type Database = {
       note_status: "draft" | "finalised";
       payment_mode: "cash" | "upi" | "card" | "netbanking" | "other";
       plan_code: "starter" | "growth" | "multi_branch";
+      platform_admin_role: "super_admin" | "reviewer" | "finance" | "support" | "analyst";
       sex: "male" | "female" | "other" | "unknown";
       staff_role: "owner" | "manager" | "receptionist" | "doctor";
       subscription_status: "trialing" | "active" | "past_due" | "paused" | "cancelled";

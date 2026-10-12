@@ -16,6 +16,8 @@ export type StubState = {
   members: Map<string, { clinic_id: string; role: string }>;
   /** token hash -> patient, or absent for unknown/expired/revoked. */
   portalTokens: Map<string, { patient_id: string; clinic_id: string; token_id: string }>;
+  /** user_id -> platform admin row, or absent for "not an admin". */
+  platformAdmins: Map<string, { role: string; full_name: string; disabled_at: string | null }>;
   requests: { method: string; url: string }[];
 };
 
@@ -28,6 +30,7 @@ export async function startSupabaseStub(): Promise<{
     users: new Map(),
     members: new Map(),
     portalTokens: new Map(),
+    platformAdmins: new Map(),
     requests: [],
   };
 
@@ -68,6 +71,14 @@ export async function startSupabaseStub(): Promise<{
       const staffId = (url.searchParams.get("staff_id") ?? "").replace(/^eq\./, "");
       const row = state.members.get(staffId);
       // maybeSingle() asks for a single object; a plain select wants an array.
+      const wantsObject = (req.headers.accept ?? "").includes("pgrst.object");
+      if (wantsObject) return send(200, row ?? null);
+      return send(200, row ? [row] : []);
+    }
+
+    if (url.pathname === "/rest/v1/platform_admins") {
+      const userId = (url.searchParams.get("user_id") ?? "").replace(/^eq\./, "");
+      const row = state.platformAdmins.get(userId);
       const wantsObject = (req.headers.accept ?? "").includes("pgrst.object");
       if (wantsObject) return send(200, row ?? null);
       return send(200, row ? [row] : []);

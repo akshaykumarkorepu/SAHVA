@@ -21,6 +21,8 @@ import { staff } from "./routes/staff.js";
 import { voice } from "./routes/voice.js";
 import { portal } from "./routes/portal.js";
 import { onboarding } from "./routes/onboarding.js";
+import { admin } from "./routes/admin.js";
+import { requirePlatformAdmin } from "./middleware/admin.js";
 import { billing } from "./routes/billing.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { patientAccount } from "./routes/patientAccount.js";
@@ -82,6 +84,10 @@ app.use("/api/webhooks/messages", machineLimiter(), requireServiceKey("telephony
 // Note: this also means an unauthenticated request to a non-existent /api
 // route gets 401 rather than 404. That is deliberate — route existence is not
 // something an anonymous caller should be able to enumerate.
+// SAHVA's own admins. Not clinic members, so mounted before the clinic gate;
+// requirePlatformAdmin insists on a second factor and a platform_admins row.
+app.use("/api/admin", apiLimiter(), requirePlatformAdmin, admin);
+
 // Signed in, but possibly without a clinic yet: the only thing such a user
 // can do is create one.
 app.use("/api/onboarding", apiLimiter(), requireUser, onboarding);
