@@ -57,6 +57,25 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 }
 
 /**
+ * A signed-in user who may not belong to a clinic yet — the one moment that
+ * is allowed is creating their clinic. Everything else goes through
+ * requireAuth, which insists on an active membership.
+ */
+export async function requireUser(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const header = req.header("authorization");
+    if (!header?.startsWith("Bearer ")) throw unauthorized("Missing bearer token");
+    const token = header.slice("Bearer ".length).trim();
+    const user = token ? await verifyAccessToken(token) : null;
+    if (!user) throw unauthorized("Invalid or expired token");
+    req.user = { id: user.id, email: user.email ?? null, db: dbForUser(token) };
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * Role gate. RLS already enforces this at the row level; checking here too
  * turns a silent empty result into an explicit 403 the UI can render.
  */

@@ -8,14 +8,13 @@
 -- ---------------------------------------------------------------------------
 -- Global reference data
 -- ---------------------------------------------------------------------------
-insert into public.plans (code, name, monthly_price_paise, included_call_minutes, overage_per_min_paise, max_doctors, sort_order, features)
+-- The single plan sold, matching migration 20261012000700. Older tiers are
+-- not seeded: they were placeholders and nothing references them.
+insert into public.plans (code, name, monthly_price_paise, yearly_price_paise, included_call_minutes,
+                          overage_per_min_paise, max_doctors, sort_order, features)
 values
-  ('starter','Starter',       99900,  300, 400, 1, 1,
-   '{"ai_receptionist":true,"whatsapp_confirmations":true,"dashboard":true}'::jsonb),
-  ('growth','Growth',        249900, 1000, 300, 4, 2,
-   '{"ai_receptionist":true,"whatsapp_confirmations":true,"dashboard":true,"analytics":true,"care_loops":true}'::jsonb),
-  ('multi_branch','Multi-branch', 0,     0,   0, null, 3,
-   '{"custom":true,"multi_location":true,"ehr_integration":true}'::jsonb)
+  ('starter','SAHVA for Clinics', 199900, 999900, 0, 0, null, 1,
+   '{"ai_receptionist":true,"whatsapp_confirmations":true,"dashboard":true,"analytics":true}'::jsonb)
 on conflict (code) do nothing;
 
 insert into public.vaccine_catalogue (code, name, recommended_age_weeks, dose_number, sort_order) values
@@ -169,7 +168,7 @@ begin
 
   -- Subscription ------------------------------------------------------------
   insert into public.subscriptions (clinic_id, plan_code, status, current_period_start, current_period_end, billing_email)
-  values (v_clinic,'growth','active', date_trunc('month', now()),
+  values (v_clinic,'starter','active', date_trunc('month', now()),
           date_trunc('month', now()) + interval '1 month','frontdesk@srisaiclinic.in')
   on conflict do nothing;
 

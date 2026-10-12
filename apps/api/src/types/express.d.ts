@@ -17,6 +17,8 @@ declare global {
         /** RLS-scoped client for this user. Prefer this over dbAdmin. */
         db: Db;
       };
+      /** Present only after `requireUser`: signed in, clinic not required. */
+      user?: { id: string; email: string | null; db: Db };
       /** Present only after `requireServiceKey`. */
       machine?: { caller: "voice" | "telephony" | "worker" };
     }

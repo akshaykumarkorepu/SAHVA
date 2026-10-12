@@ -5,7 +5,7 @@ import helmet from "helmet";
 import { env, isProd } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { requestContext } from "./middleware/context.js";
-import { requireAuth, requireServiceKey } from "./middleware/auth.js";
+import { requireAuth, requireServiceKey, requireUser } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 import { clinic } from "./routes/clinic.js";
@@ -20,6 +20,9 @@ import { knowledge } from "./routes/knowledge.js";
 import { staff } from "./routes/staff.js";
 import { voice } from "./routes/voice.js";
 import { portal } from "./routes/portal.js";
+import { onboarding } from "./routes/onboarding.js";
+import { billing } from "./routes/billing.js";
+import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { patientAccount } from "./routes/patientAccount.js";
 import {
   apiLimiter,
@@ -47,6 +50,8 @@ app.use(
 // thrown by express.json(), and without a request id already attached that
 // response comes back untraceable.
 app.use(requestContext);
+// Before express.json: Razorpay signs the raw bytes it sent.
+app.post("/api/webhooks/razorpay", machineLimiter(), express.raw({ type: "*/*", limit: "100kb" }), razorpayWebhook);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_req, res) =>
@@ -77,6 +82,10 @@ app.use("/api/webhooks/messages", machineLimiter(), requireServiceKey("telephony
 // Note: this also means an unauthenticated request to a non-existent /api
 // route gets 401 rather than 404. That is deliberate — route existence is not
 // something an anonymous caller should be able to enumerate.
+// Signed in, but possibly without a clinic yet: the only thing such a user
+// can do is create one.
+app.use("/api/onboarding", apiLimiter(), requireUser, onboarding);
+
 app.use("/api", apiLimiter(), requireAuth);
 app.use("/api/clinic", clinic);
 app.use("/api/doctors", doctors);
@@ -88,6 +97,7 @@ app.use("/api/actions", actions);
 app.use("/api/messages", messages);
 app.use("/api/knowledge", knowledge);
 app.use("/api/staff", staff);
+app.use("/api/billing", billing);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

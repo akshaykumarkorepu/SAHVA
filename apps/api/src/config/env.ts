@@ -78,6 +78,17 @@ const schema = z.object({
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
+
+  /**
+   * Razorpay, for clinic subscriptions. Optional: without them the billing
+   * page says payments are not set up yet, and nothing else is affected.
+   * Use test-mode keys (rzp_test_…) everywhere but production — live keys
+   * are refused outside it, so a dev machine can never take real money.
+   */
+  RAZORPAY_KEY_ID: z.string().regex(/^rzp_(test|live)_\w+$/, "must look like rzp_test_…").optional(),
+  RAZORPAY_KEY_SECRET: z.string().min(10).optional(),
+  /** Set in Razorpay → Webhooks; signs payment.captured events. */
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(8).optional(),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -1997,6 +1997,7 @@ export type Database = {
           features: Json;
           is_active: boolean;
           sort_order: number;
+          yearly_price_paise: number | null;
         };
         Insert: {
           code: Database["public"]["Enums"]["plan_code"];
@@ -2008,6 +2009,7 @@ export type Database = {
           features?: Json;
           is_active?: boolean;
           sort_order?: number;
+          yearly_price_paise?: number | null;
         };
         Update: {
           code?: Database["public"]["Enums"]["plan_code"];
@@ -2019,6 +2021,7 @@ export type Database = {
           features?: Json;
           is_active?: boolean;
           sort_order?: number;
+          yearly_price_paise?: number | null;
         };
         Relationships: [];
       };
@@ -2473,6 +2476,76 @@ export type Database = {
           },
         ];
       };
+      subscription_payments: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          subscription_id: string;
+          billing_cycle: string;
+          amount_paise: number;
+          razorpay_order_id: string;
+          razorpay_payment_id: string | null;
+          status: string;
+          period_start: string | null;
+          period_end: string | null;
+          created_by: string | null;
+          created_at: string;
+          paid_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          subscription_id: string;
+          billing_cycle: string;
+          amount_paise: number;
+          razorpay_order_id: string;
+          razorpay_payment_id?: string | null;
+          status?: string;
+          period_start?: string | null;
+          period_end?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          paid_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          subscription_id?: string;
+          billing_cycle?: string;
+          amount_paise?: number;
+          razorpay_order_id?: string;
+          razorpay_payment_id?: string | null;
+          status?: string;
+          period_start?: string | null;
+          period_end?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          paid_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subscription_payments_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "subscription_payments_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "staff_profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "subscription_payments_subscription_id_fkey";
+            columns: ["subscription_id"];
+            isOneToOne: false;
+            referencedRelation: "subscriptions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       subscriptions: {
         Row: {
           id: string;
@@ -2488,6 +2561,7 @@ export type Database = {
           billing_email: string | null;
           created_at: string;
           updated_at: string;
+          billing_cycle: string | null;
         };
         Insert: {
           id?: string;
@@ -2503,6 +2577,7 @@ export type Database = {
           billing_email?: string | null;
           created_at?: string;
           updated_at?: string;
+          billing_cycle?: string | null;
         };
         Update: {
           id?: string;
@@ -2518,6 +2593,7 @@ export type Database = {
           billing_email?: string | null;
           created_at?: string;
           updated_at?: string;
+          billing_cycle?: string | null;
         };
         Relationships: [
           {
@@ -2794,6 +2870,13 @@ export type Database = {
       };
     };
     Functions: {
+      activate_paid_subscription: {
+        Args: {
+          p_order_id: string;
+          p_payment_id: string;
+        };
+        Returns: Database["public"]["Tables"]["subscription_payments"]["Row"];
+      };
       book_appointment: {
         Args: {
           p_clinic_id: string;
@@ -2823,6 +2906,14 @@ export type Database = {
           p_auth_user_id: string;
         };
         Returns: Database["public"]["Tables"]["patients"]["Row"];
+      };
+      create_clinic_with_trial: {
+        Args: {
+          p_name: string;
+          p_city: string;
+          p_phone: string;
+        };
+        Returns: string;
       };
       get_available_slots: {
         Args: {

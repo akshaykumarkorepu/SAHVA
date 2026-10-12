@@ -56,7 +56,7 @@ begin
 
   -- Global reference data is readable.
   select count(*) into v_n from public.plans;
-  perform pg_temp.check('plans are readable by any member', v_n = 3);
+  perform pg_temp.check('plans are readable by any member', v_n >= 1);
 
   select count(*) into v_n from public.message_templates where clinic_id is null;
   perform pg_temp.check('global default templates are readable', v_n > 0);
