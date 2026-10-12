@@ -351,3 +351,17 @@ test("patient record: the dosage chart reads the prescription, and keeps the doc
   await expect(metformin).toContainText("After food");
   await expect(metformin).toContainText("Take after breakfast and after dinner.");
 });
+
+test("patient record: a prescription prints on its own, without the page's buttons", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  await page.getByRole("tab", { name: "Medicines" }).click();
+  await page.getByRole("link", { name: "Print" }).first().click();
+  await expect(page.locator("table")).toContainText("Metformin");
+  await expect(page.locator("header")).toContainText(/\d{4}/); // the year
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByRole("button", { name: /Print or save/ })).toBeHidden();
+  await settle(page);
+  expect(errors).toEqual([]);
+});

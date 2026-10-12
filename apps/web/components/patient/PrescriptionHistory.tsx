@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { type Lang, patientDate } from "@/lib/portal/i18n";
 import { Badge, Card, EmptyState, cn } from "@/components/ui";
 import type { Prescription, RxItem } from "./types";
@@ -38,9 +39,17 @@ export function PrescriptionHistory({
                   {patientDate(rx.issued_at, "Asia/Kolkata", lang)}
                 </span>
               </p>
-              <Badge tone={active ? "good" : "neutral"}>
-                {active ? (L ? "ప్రస్తుతం" : "Active") : L ? "పాతది" : "Past"}
-              </Badge>
+              <span className="flex items-center gap-2">
+                <Link
+                  href={`/me/rx/${rx.id}`}
+                  className="text-xs font-medium text-brand-700 hover:underline"
+                >
+                  {L ? "ప్రింట్" : "Print"}
+                </Link>
+                <Badge tone={active ? "good" : "neutral"}>
+                  {active ? (L ? "ప్రస్తుతం" : "Active") : L ? "పాతది" : "Past"}
+                </Badge>
+              </span>
             </div>
 
             <div className="mt-4 space-y-3">
