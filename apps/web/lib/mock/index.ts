@@ -42,13 +42,26 @@ class MockNotFound extends Error {
   }
 }
 
+/**
+ * The signed-in staff role, overridable so a receptionist's view can be
+ * checked without a second account: set localStorage "sahva.mock.role" to
+ * "receptionist" (or "doctor", "manager"). Defaults to the fixture's owner.
+ */
+function mockRole(): string {
+  try {
+    return localStorage.getItem("sahva.mock.role") ?? d.me.role;
+  } catch {
+    return d.me.role;
+  }
+}
+
 function route(method: string, pathname: string, query: URLSearchParams, body: unknown): unknown {
   const seg = pathname.split("/").filter(Boolean);
   const b = (body ?? {}) as Record<string, unknown>;
 
   // ---- clinic ------------------------------------------------------------
   if (method === "GET" && pathname === "/clinic") return { ...d.clinic, settings };
-  if (method === "GET" && pathname === "/clinic/me") return d.me;
+  if (method === "GET" && pathname === "/clinic/me") return { ...d.me, role: mockRole() };
   if (method === "PATCH" && pathname === "/clinic/settings") {
     settings = { ...settings, ...b };
     return settings;

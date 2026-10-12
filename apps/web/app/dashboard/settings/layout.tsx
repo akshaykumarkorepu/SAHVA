@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCanAdminister } from "@/lib/session";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { useCanAdminister, useSession } from "@/lib/session";
+import { EmptyState, LoadingRows, PageHeader } from "@/components/ui";
 
 const TABS = [
   { href: "/dashboard/settings", label: "AI permissions" },
@@ -15,7 +15,20 @@ const TABS = [
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { roleStatus } = useSession();
   const canAdmin = useCanAdminister();
+
+  if (roleStatus === "loading") return <LoadingRows rows={4} />;
+
+  if (roleStatus === "failed") {
+    return (
+      <EmptyState
+        icon="warning"
+        title="Couldn’t check your access"
+        body="Your role did not load, so Settings is hidden to be safe. Refresh the page to try again."
+      />
+    );
+  }
 
   if (!canAdmin) {
     return (

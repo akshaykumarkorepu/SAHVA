@@ -22,6 +22,12 @@ type SessionState = {
   session: Session | null;
   clinic: ClinicContext | null;
   role: Enums<"staff_role"> | null;
+  /**
+   * Whether `role` is an answer yet. A null role while loading is not the
+   * same as "not allowed" — treating it that way told owners they could not
+   * open Settings for the half-second before /clinic/me returned.
+   */
+  roleStatus: "loading" | "known" | "failed";
   email: string | null;
   error: string | null;
   signOut: () => Promise<void>;
@@ -33,6 +39,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null>(null);
   const [clinic, setClinic] = React.useState<ClinicContext | null>(null);
   const [role, setRole] = React.useState<Enums<"staff_role"> | null>(null);
+  const [roleStatus, setRoleStatus] = React.useState<SessionState["roleStatus"]>("loading");
   const [status, setStatus] = React.useState<SessionState["status"]>(
     isMockMode || isSupabaseConfigured ? "loading" : "unconfigured",
   );
@@ -51,6 +58,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!s) {
         setClinic(null);
         setRole(null);
+        setRoleStatus("loading");
         setStatus("signed-out");
       }
     });
@@ -85,8 +93,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // Role lives in the JWT-independent membership row; the API exposes it on
     // /clinic/me so the UI can hide what a receptionist may not do.
     get<{ role: Enums<"staff_role"> }>("/clinic/me")
-      .then((m) => !cancelled && setRole(m.role))
-      .catch(() => undefined);
+      .then((m) => {
+        if (cancelled) return;
+        setRole(m.role);
+        setRoleStatus("known");
+      })
+      .catch(() => !cancelled && setRoleStatus("failed"));
 
     return () => {
       cancelled = true;
@@ -103,6 +115,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     session,
     clinic,
     role,
+    roleStatus,
     email: isMockMode ? "owner@srisaiclinic.in" : session?.user.email ?? null,
     error,
     signOut,

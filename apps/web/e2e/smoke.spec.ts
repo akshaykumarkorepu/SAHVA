@@ -82,3 +82,24 @@ test("patient record: every tab renders its section", async ({ page }) => {
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test.describe("as a receptionist", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("sahva.mock.role", "receptionist"));
+  });
+
+  test("Settings is not in the nav", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page.locator("body")).toContainText(/today|appointments/i, { timeout: 15_000 });
+    await settle(page);
+    await expect(page.locator('a[href="/dashboard/settings"]')).toHaveCount(0);
+  });
+
+  for (const path of ["/dashboard/settings", "/dashboard/settings/staff", "/dashboard/settings/doctors"]) {
+    test(`${path} is refused, with no admin controls rendered`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByText("Settings are owner and manager only")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("button", { name: /invite|save|add doctor/i })).toHaveCount(0);
+    });
+  }
+});
