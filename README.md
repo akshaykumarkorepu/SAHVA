@@ -424,6 +424,7 @@ the real figure off actual pilot calls — measure before finalising.
 
 ## Further reading
 
+- [`docs/roadmap.md`](docs/roadmap.md) — what is done, what is next, and in what order
 - [`docs/setup.md`](docs/setup.md) — Phase 0, scripted and by hand
 - [`docs/status.md`](docs/status.md) — what `main` has, and the gap to the Phase 1 wedge
 - [`docs/data-model.md`](docs/data-model.md) — table-by-table rationale, and known limitations
