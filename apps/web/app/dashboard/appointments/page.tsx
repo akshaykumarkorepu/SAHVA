@@ -22,6 +22,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import { DoctorDayView } from "@/components/diary/DoctorDayView";
+import { WalkInDialog } from "@/components/diary/WalkInDialog";
 import { AppointmentPanel, type PanelAppointment } from "@/components/dashboard/AppointmentPanel";
 import type { DayOff } from "@/lib/dayview";
 import { Icon } from "@/components/icons";
@@ -40,6 +41,7 @@ export default function AppointmentsPage() {
   const [date, setDate] = React.useState(() => todayIso(tz));
   const [bookOpen, setBookOpen] = React.useState(false);
   const [timeOffOpen, setTimeOffOpen] = React.useState(false);
+  const [walkInOpen, setWalkInOpen] = React.useState(false);
 
   const from = `${date}T00:00:00+05:30`;
   const to = `${date}T23:59:59+05:30`;
@@ -64,6 +66,9 @@ export default function AppointmentsPage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setTimeOffOpen(true)}>
               Mark doctor unavailable
+            </Button>
+            <Button variant="secondary" icon="plus" onClick={() => setWalkInOpen(true)}>
+              Walk-in
             </Button>
             <Button onClick={() => setBookOpen(true)}>Book appointment</Button>
           </div>
@@ -138,6 +143,8 @@ export default function AppointmentsPage() {
           list.reload();
         }}
       />
+
+      <WalkInDialog open={walkInOpen} onClose={() => setWalkInOpen(false)} doctors={doctors.data ?? []} tz={tz} />
 
       <AppointmentPanel
         appointment={selected ? toPanel(selected) : null}

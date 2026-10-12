@@ -477,7 +477,14 @@ export function Modal({
     const previouslyFocused = document.activeElement as HTMLElement | null;
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
-    panelRef.current?.querySelector<HTMLElement>("input,select,textarea,button")?.focus();
+    // A form field first; a button only if there is none. A combined selector
+    // matched the header's Close button, which comes first in the DOM — so
+    // typing went nowhere and Enter closed the dialog.
+    const panel = panelRef.current;
+    (
+      panel?.querySelector<HTMLElement>("input:not([type=hidden]):not([disabled]),select,textarea") ??
+      panel?.querySelector<HTMLElement>("button")
+    )?.focus();
 
     return () => {
       window.removeEventListener("keydown", onKey);

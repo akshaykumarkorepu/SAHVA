@@ -288,3 +288,41 @@ test("portal: the family share carries the appointment, never the link", async (
   expect(text).not.toContain("mock-portal-token");
   expect(text).not.toMatch(/https?:|\/p\//);
 });
+
+/** Today in the clinic's timezone at a fixed local time, so slot tests do not depend on when CI runs. */
+function clinicToday(hhmm: string): Date {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+  return new Date(`${day}T${hhmm}:00+05:30`);
+}
+
+test("walk-in: name, number, Enter — and a token to read out", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.clock.install({ time: clinicToday("09:00") });
+  await page.goto("/dashboard/appointments");
+  await page.getByRole("button", { name: "Walk-in" }).click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog", { name: "Walk-in" });
+  // The name field has focus: the receptionist just types.
+  await page.keyboard.type("Ramu");
+  await dialog.getByPlaceholder("98765 43210").fill("98765 43210");
+  await page.keyboard.press("Enter");
+
+  const issued = page.getByRole("dialog", { name: "Token issued" });
+  await expect(issued.getByRole("status")).toContainText(/\d+/);
+  await expect(issued).toContainText("Ramu");
+
+  // The next one starts clean, same doctor.
+  await issued.getByRole("button", { name: "Next walk-in" }).click();
+  await expect(page.getByRole("dialog", { name: "Walk-in" }).getByPlaceholder("Ramu")).toHaveValue("");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("walk-in: late in the day it says there is no time left, plainly", async ({ page }) => {
+  await page.clock.install({ time: clinicToday("23:00") });
+  await page.goto("/dashboard/appointments");
+  await page.getByRole("button", { name: "Walk-in" }).click({ timeout: 15_000 });
+  await page.keyboard.type("Late");
+  await page.getByRole("dialog", { name: "Walk-in" }).getByPlaceholder("98765 43210").fill("9876543210");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Walk-in" }).getByRole("alert")).toContainText("no free time left today");
+});

@@ -183,6 +183,35 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     });
     return paged(rows, query);
   }
+  if (method === "POST" && pathname === "/appointments/walk-in") {
+    // Mirrors the API: next free slot today, then a token from the doctor's
+    // own per-day sequence (sahva.assign_token_number).
+    const doc = doctors.find((x) => x.id === b.doctor_id) ?? doctors[0];
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+    const slot = d.availability(doc.id, today).find(
+      (sl) => new Date(sl.slot_start) > new Date() && !isTaken(doc.id, sl.slot_start),
+    );
+    if (!slot) throw new ApiError(409, "NO_SLOT_TODAY", "This doctor has no free time left today.");
+    const sameDay = appointments.filter(
+      (a) => a.doctor_id === doc.id && String(a.starts_at).slice(0, 10) === slot.slot_start.slice(0, 10),
+    );
+    const row = {
+      ...appointments[0],
+      id: crypto.randomUUID(),
+      doctor_id: doc.id,
+      patient_id: crypto.randomUUID(),
+      starts_at: slot.slot_start,
+      ends_at: slot.slot_end,
+      status: "booked",
+      source: "walk_in",
+      reason: "Walk-in",
+      token_number: Math.max(0, ...sameDay.map((a) => Number(a.token_number ?? 0))) + 1,
+      doctors: { id: doc.id, spoken_name: doc.spoken_name, specialty: doc.specialty, colour_hex: doc.colour_hex },
+      patients: { ...appointments[0].patients, full_name: String(b.patient_name), phone_e164: String(b.phone) },
+    };
+    appointments.unshift(row);
+    return row;
+  }
   if (method === "POST" && pathname === "/appointments") {
     // Mirrors appointments_no_double_booking. The localStorage switch lets a
     // test lose the race on purpose — the slot "goes" between seeing it and

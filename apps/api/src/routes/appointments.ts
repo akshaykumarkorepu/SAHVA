@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { isoDate, paginationQuery, phoneE164, uuid, validate } from "../middleware/validate.js";
-import { fromPostgrest, unwrap } from "../lib/errors.js";
+import { conflict, fromPostgrest, unwrap } from "../lib/errors.js";
+import { localDay } from "../lib/queue.js";
 
 export const appointments = Router();
 
@@ -137,6 +138,57 @@ appointments.post(
     });
     if (error) throw fromPostgrest(error, "booking the appointment");
     res.status(201).json(data);
+  }),
+);
+
+/**
+ * Walk-in fast pass: a patient at the counter gets the doctor's next free
+ * slot today and their token, in one request.
+ *
+ * Same rules as any booking — the slot comes from get_available_slots, so
+ * the clinic's minimum notice and the doctor's leave still apply. If another
+ * booking takes that slot in the same moment, it moves to the next one rather
+ * than sending the receptionist back to start over.
+ */
+appointments.post(
+  "/walk-in",
+  validate({
+    body: z.object({
+      doctor_id: uuid,
+      patient_name: z.string().trim().min(2).max(100),
+      phone: phoneE164,
+    }),
+  }),
+  asyncRoute(async (req, res) => {
+    const { db, clinicId } = req.auth!;
+    const b = req.body as { doctor_id: string; patient_name: string; phone: string };
+
+    const clinic = unwrap(await db.from("clinics").select("timezone").eq("id", clinicId).single(), "clinic");
+    const today = localDay(new Date().toISOString(), clinic.timezone);
+    const slots = unwrap(
+      await db.rpc("get_available_slots", { p_doctor_id: b.doctor_id, p_date: today }),
+      "availability",
+    );
+    if (slots.length === 0) {
+      throw conflict("NO_SLOT_TODAY", "This doctor has no free time left today.", "Offer another doctor or tomorrow.");
+    }
+
+    for (const slot of slots.slice(0, 3)) {
+      const { data, error } = await db.rpc("book_appointment", {
+        p_clinic_id: clinicId,
+        p_doctor_id: b.doctor_id,
+        p_patient_name: b.patient_name,
+        p_phone_e164: b.phone,
+        p_starts_at: slot.slot_start,
+        p_source: "walk_in",
+      });
+      if (!error) {
+        res.status(201).json(data);
+        return;
+      }
+      if (error.code !== "23P01") throw fromPostgrest(error, "booking the walk-in");
+    }
+    throw conflict("SLOT_TAKEN", "The next free times were all just taken.", "Try again.");
   }),
 );
 
