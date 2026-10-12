@@ -20,7 +20,10 @@ declare global {
  * read, because the holder of a link must not be able to address someone
  * else's record by changing a field.
  */
-export async function requirePortalToken(req: Request, _res: Response, next: NextFunction) {
+export async function requirePortalToken(req: Request, res: Response, next: NextFunction) {
+  // Patient data on a phone that may be shared: never cached by the browser
+  // or anything in between, including on error responses.
+  res.setHeader("Cache-Control", "no-store");
   try {
     const raw = (req.params.token ?? req.header("x-portal-token") ?? "").trim();
 

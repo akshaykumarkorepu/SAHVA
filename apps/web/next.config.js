@@ -45,6 +45,20 @@ const nextConfig = {
     // false and the branch, plus apps/web/lib/mock, disappears.
     NEXT_PUBLIC_MOCK: process.env.NEXT_PUBLIC_MOCK || "",
   },
+  // Patient pages. A portal link is a credential in the URL: send no Referer
+  // anywhere, and keep both surfaces out of search engines — WhatsApp links
+  // get pasted into public places.
+  async headers() {
+    const patient = [
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+    ];
+    return [
+      { source: "/p/:path*", headers: patient },
+      { source: "/me/:path*", headers: patient },
+      { source: "/me", headers: patient },
+    ];
+  },
   // The API enforces auth itself; this rewrite only saves a CORS hop in dev.
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_BASE}/api/:path*` }];

@@ -117,3 +117,15 @@ test("the raw token never appears in the response", async () => {
 test.after(async () => {
   await stub.close();
 });
+
+test("portal responses are never cached — valid or not", async () => {
+  const srv = await serve();
+  try {
+    for (const token of [valid.raw, stale.raw, "junk"]) {
+      const r = await fetch(`${srv.url}/api/portal/${token}`);
+      assert.equal(r.headers.get("cache-control"), "no-store", `for ${token.slice(0, 6)}…`);
+    }
+  } finally {
+    await srv.close();
+  }
+});

@@ -19,7 +19,9 @@ declare global {
  * — never from the request — and the attached client is RLS-scoped, so the
  * policies in migration 1800 decide which rows exist rather than this code.
  */
-export async function requirePatientAuth(req: Request, _res: Response, next: NextFunction) {
+export async function requirePatientAuth(req: Request, res: Response, next: NextFunction) {
+  // The medical record. Never cached, including on error responses.
+  res.setHeader("Cache-Control", "no-store");
   try {
     const header = req.header("authorization");
     if (!header?.startsWith("Bearer ")) throw unauthorized("Please sign in.");

@@ -267,3 +267,14 @@ test("patients: a name opens the quick view, and family on the same phone is sho
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("patient pages send no referrer, are not indexed, and are not cached", async ({ request }) => {
+  for (const path of ["/p/mock-portal-token", "/me"]) {
+    const r = await request.get(path);
+    expect(r.headers()["referrer-policy"], path).toBe("no-referrer");
+    expect(r.headers()["x-robots-tag"], path).toContain("noindex");
+  }
+  // Dynamic, so Next itself refuses caching; checked rather than assumed.
+  const portal = await request.get("/p/mock-portal-token");
+  expect(portal.headers()["cache-control"]).toContain("no-store");
+});
