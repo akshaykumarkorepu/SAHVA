@@ -1,7 +1,8 @@
 # SAHVA
 
 **Telugu-and-English AI receptionist for solo and small clinics in Tier 2/3 towns.**
-It answers every call, books real appointments off live availability, lets
+It answers every call (voice agents run on [OmniDimension](https://omnidim.io)),
+books real appointments off live availability, lets
 patients see their record and book online, and never lets a schedule change
 silently cancel a patient without staff knowing.
 
@@ -20,6 +21,7 @@ silently cancel a patient without staff knowing.
 - [Patient journeys](#patient-journeys) — new patient, returning patient
 - [Clinic journey](#clinic-journey) — apply, approval, trial, paying
 - [What each dashboard contains](#what-each-dashboard-contains) — patient, clinic, admin
+- [Voice calls — OmniDimension](#voice-calls--omnidimension) — the MVP voice plan, costs, demo
 - [Behind the scenes](#behind-the-scenes) — emails, scheduled jobs, money, privacy
 - [Repository layout](#repository-layout) · [Migrations](#migrations) · [Design decisions](#three-design-decisions-worth-knowing)
 - [Running the tests](#running-the-tests) · [Running it on localhost](#running-it-on-localhost) · [Deploying](#deploying)
@@ -71,15 +73,14 @@ flowchart LR
 
   RZ[Razorpay<br/>payments, refunds, webhooks]
   RS[Resend<br/>email]
-  LLM[Claude<br/>voice turns]
-  TEL[Telephony + WhatsApp<br/>not connected yet]
+  OD["OmniDimension<br/>voice agent per clinic<br/>numbers · speech · LLM<br/>(planned)"]
   GH[GitHub Actions<br/>every 15 min · nightly]
 
   P1 & P2 --> CS
   ST --> CS
   AD --> AC
-  P1 -. phone call .-> TEL
-  TEL -.-> API
+  P1 & P2 -. phone call .-> OD
+  OD -. "mid-call: slots, book<br/>after call: webhook" .-> API
   CS --> API
   AC --> API
   CS -- sign-in --> DB
@@ -88,7 +89,6 @@ flowchart LR
   API --> RZ
   RZ -- webhooks --> API
   API --> RS
-  API --> LLM
   GH --> API
 ```
 
@@ -98,6 +98,10 @@ flowchart LR
   security) — not in the browser and not in the AI.
 - **The browser never holds a secret.** Pages call the API with the user's own
   session; the API uses the service key only server-side, after its own checks.
+- **Voice runs on OmniDimension, bookings run on SAHVA.** OmniDimension
+  answers the phone, understands Telugu and English and speaks back; whenever
+  the caller wants a time it asks SAHVA's API, so the clinic's live diary — not
+  the voice agent — decides what is free and what gets booked.
 - **The clinic site and the admin console are the same app deployed twice**
   (`SITE_MODE`): `/admin` does not exist on the clinic site, and the console
   serves nothing else. Admin sign-in always needs an authenticator code.
@@ -138,8 +142,8 @@ flowchart TD
   J --> K[Signed-in record at /me]
 ```
 
-1. **Phone.** The AI receptionist answers, finds a free slot against the live
-   diary and books it. The database re-checks the slot inside the transaction,
+1. **Phone.** The clinic's OmniDimension agent answers, asks SAHVA's API for
+   free slots against the live diary, and books through SAHVA. The database re-checks the slot inside the transaction,
    so a slot the AI "thought" was free cannot be double-booked.
 2. **Walk-in.** The front desk books them, or uses the walk-in fast pass (name +
    phone → next token number).
@@ -302,6 +306,104 @@ Admin roles: **super admin** (everything), **reviewer** (applications),
 
 ---
 
+## Voice calls — OmniDimension
+
+> **Status: planned, not built yet.** The decision (Oct 2026) is to use
+> [OmniDimension](https://omnidim.io) for the phone side of the MVP instead
+> of assembling telephony, speech-to-text, text-to-speech and the language
+> model ourselves. The `apps/api/src/claude/` voice route stays as the
+> fallback and the reference for the tools.
+
+### What OmniDimension does and what SAHVA does
+
+| OmniDimension (voice) | SAHVA (everything the call touches) |
+|---|---|
+| Phone numbers: a +91 number bought in OmniDimension (eKYC once), or the clinic's own number imported (Exotel, Twilio, SIP) | Which clinic a number belongs to |
+| Speech in and out in **Telugu and English** (listed for both understanding and speaking), the conversation, the voice | The clinic's doctors, timings, fees, FAQs — the agent's script is generated from SAHVA's data |
+| Calls SAHVA's API **mid-call** ("Custom API") when the caller asks for a time | Live availability, booking through `book_appointment()` — no double booking, the live-clinic guard |
+| Sends the result **after the call** (post-call webhook: transcript, summary, extracted details) | Stores the call, transcript and outcome; raises Action Required for anything unresolved |
+| Website voice widget (for the demo) | The landing page it sits on |
+
+### How a call flows
+
+```mermaid
+sequenceDiagram
+  participant C as Caller
+  participant O as OmniDimension agent (one per clinic)
+  participant A as SAHVA API
+  participant D as Database
+  C->>O: Calls the clinic number
+  O->>C: Greets in Telugu/English, asks what they need
+  O->>A: Custom API: free slots for doctor X on date Y (clinic key in header)
+  A->>D: available_slots()
+  D-->>A: free times
+  A-->>O: 10:30, 10:45, 11:00
+  O->>C: Offers times, takes name and phone
+  O->>A: Custom API: book 10:45 for name, phone
+  A->>D: book_appointment(source = ai_call)
+  D-->>A: booked (or refused: slot gone)
+  A-->>O: confirmed, token 7
+  O->>C: Confirms the booking
+  O-->>A: Post-call webhook: transcript, summary, outcome
+  A->>D: calls + call_turns, Action Required if unresolved
+```
+
+### What has to be built
+
+1. **Agent per clinic.** Create and update an OmniDimension agent through its
+   API when a clinic is approved, and whenever doctors, hours or FAQs change —
+   the script comes from the same clinic profile the public page uses.
+2. **Mid-call endpoints** under `/api/voice/omnidim/*`: free slots, book,
+   find the caller's existing appointment, cancel/reschedule (only as the
+   clinic's AI permissions allow). Each request carries a per-clinic secret
+   header, so a request is tied to exactly one clinic.
+3. **Post-call webhook** `/api/webhooks/omnidim`: verified, stored once,
+   written to `calls`, `call_turns` and `call_summaries`; escalations, failed
+   bookings and dropped calls go to Action Required — exactly what the
+   dashboard's Calls page already shows.
+4. **Number mapping**: each clinic's number → its agent, kept in SAHVA.
+5. **Demo**: SAHVA's own demo agent and number on the landing page, plus
+   OmniDimension's website voice widget, running on the free credits — fixed
+   to a demo clinic so it can never book into a real diary.
+
+**To check with OmniDimension before building:** whether the caller's number
+reaches the Custom API automatically (their docs say not to assume it), how
+mid-call requests time out, how post-call webhooks are signed, concurrent
+calls per plan, the monthly rent for a +91 number, and how well Telugu–English
+code-switching works on a real script.
+
+### Cost: one account for SAHVA, not one plan per clinic
+
+From OmniDimension's public pricing (October 2026, USD):
+
+| Plan | Per month | Minutes included | Per minute |
+|---|---|---|---|
+| Starter | $15 | ~179 | $0.084 |
+| Jump Starter | $30 | ~395 | $0.076 |
+| Early deployers | $36 | ~588 | $0.068 |
+| Growth | $200 | ~3,571 | $0.056 |
+
+Plus number rent and telephony on OmniDimension numbers, and $6.74/month per
+extra concurrent call.
+
+**A $30 plan per clinic costs about ₹2,550 a month — more than the ₹1,999 the
+clinic pays** (≈ ₹1,694 after GST). So SAHVA runs **one OmniDimension
+account** with an agent per clinic and pays for the minutes used:
+
+| A clinic's month | Minutes (1.8 min a call) | Voice cost at $0.076/min | At Growth $0.056/min |
+|---|---|---|---|
+| 100 calls | 180 | ≈ ₹1,160 | ≈ ₹860 |
+| 200 calls | 360 | ≈ ₹2,330 | ≈ ₹1,710 |
+| 300 calls | 540 | ≈ ₹3,490 | ≈ ₹2,570 |
+
+(At ~₹85 to the dollar, before number rent.) A busy clinic costs more in voice
+than the plan earns, so **the plan needs a minute allowance** — for example
+300 minutes included and a per-minute charge above it — before pricing is
+final. SAHVA already meters usage per clinic (`usage_events`); the post-call
+webhook records minutes so Admin → Analytics can show cost per clinic.
+
+---
+
 ## Behind the scenes
 
 ### Emails and scheduled jobs
@@ -365,7 +467,8 @@ apps/
 │       │                     validation, rate limits, request context, errors
 │       ├── lib/              supabase clients, razorpay, reconcile, notifications,
 │       │                     email templates, invoices, clinic profile, security events
-│       ├── claude/ tools/    the AI receptionist: prompt, tools backed by guarded RPCs
+│       ├── claude/ tools/    fallback voice route and the booking tools (OmniDimension
+│       │                     will call the same guarded RPCs through /api/voice/omnidim)
 │       └── routes/           clinic doctors patients appointments calls analytics
 │                             actions messages voice billing onboarding portal
 │                             patientAccount publicClinic admin razorpayWebhook
@@ -548,7 +651,8 @@ variables, Razorpay webhook and capture settings, Supabase URLs, email:
 | `CORS_ORIGINS` | API | both web origins, comma-separated |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | API | `rzp_test_…` keys; live keys are refused outside production |
 | `RESEND_API_KEY`, `EMAIL_FROM`, `WEB_URL`, `ADMIN_URL` | API | email; optional until set |
-| `ANTHROPIC_API_KEY`, `REDIS_URL` | API | optional |
+| `OMNIDIM_API_KEY`, `OMNIDIM_WEBHOOK_SECRET` | API | **planned** — OmniDimension voice agents |
+| `ANTHROPIC_API_KEY`, `REDIS_URL` | API | optional (`ANTHROPIC_API_KEY` only for the fallback voice route) |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE` | Web | |
 | `SITE_MODE` | Web | `clinic` or `admin` |
 | `NEXT_PUBLIC_MOCK` | Web | `1` serves fixtures — **never** in a deployed environment |
@@ -568,8 +672,8 @@ retention, security events, and a DPDP review.
 
 | | Needs |
 |---|---|
-| Telephony + voice | An Exotel/Twilio number per clinic; Sarvam or Deepgram for speech. The voice route is shaped for the webhook. |
-| WhatsApp | Meta Cloud API and approved templates. Messages render and queue; nothing sends them yet. |
+| Voice calls | **OmniDimension** account, API key and numbers (+91 with eKYC, or the clinic's own via Exotel/Twilio import) — then the integration above. |
+| WhatsApp | Meta Cloud API and approved templates (OmniDimension's plans also include WhatsApp messaging — worth comparing). Messages render and queue; nothing sends them yet. |
 | SMS one-time codes | MSG91, Twilio or similar — then public-page requests become instant, verified bookings instead of call-backs. |
 | Email | Resend with a verified domain (also as Supabase's SMTP). |
 | Live payments | Business details on the legal pages and in Admin → Settings; Razorpay live activation. |
@@ -577,10 +681,13 @@ retention, security events, and a DPDP review.
 **Not blocked on accounts:** the product has not yet been in front of 8–10
 clinic owners. That is the only test of whether any of this was worth building.
 
-**Unit economics.** Using the blueprint's vendor rates, a 108-second call costs
-about **₹3.59** (TTS is the largest line, not STT) — 100 calls a month ≈ ₹359.
-Against ₹1,999 a month (≈ ₹1,694 before GST) that is a healthy margin, but
-measure it on real pilot calls with `v_call_costs` before it goes in a deck.
+**Unit economics.** With OmniDimension a 108-second call costs about
+**₹11.6** at $0.076/min (≈ ₹8.6 at Growth's rate) — three times the ₹3.59 of
+building the voice stack from separate vendors, in exchange for having it
+working now. 100 calls a month ≈ ₹1,160 against ₹1,694 of revenue after GST;
+heavy clinics need a minute allowance (see
+[Cost](#cost-one-account-for-sahva-not-one-plan-per-clinic)). Measure on real
+pilot calls before the price goes in a deck.
 
 ---
 
