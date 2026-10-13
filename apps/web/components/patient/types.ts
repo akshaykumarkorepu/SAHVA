@@ -89,7 +89,7 @@ export type Invoice = {
   items: { description: string; quantity: number; unit_price_paise: number }[];
 };
 
-export type Tab = "overview" | "visits" | "medicines" | "vaccines" | "bills";
+export type Tab = "overview" | "clinic" | "visits" | "medicines" | "vaccines" | "bills";
 
 export type ClinicInfo = {
   name: string;

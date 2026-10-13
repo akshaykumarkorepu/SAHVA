@@ -9,6 +9,7 @@ import { STRINGS, type Lang } from "@/lib/portal/i18n";
 import { Button, ErrorState, LoadingRows, Segmented, Spinner, cn } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { PageLoader } from "@/components/HeartLoader";
+import { ClinicSwitcher } from "@/components/patient/ClinicSwitcher";
 import type { CareTask, Invoice, Medical, Tab } from "@/components/patient/types";
 import { amountOwed, buildTiles, isActiveRx } from "@/components/patient/logic";
 import { PatientHeader } from "@/components/patient/PatientHeader";
@@ -81,6 +82,7 @@ export default function PatientHomePage() {
 
   const tabs: { value: Tab; label: string }[] = [
     { value: "overview", label: L ? "సారాంశం" : "Overview" },
+    { value: "clinic", label: L ? "మీ క్లినిక్" : "Your clinic" },
     { value: "visits", label: L ? "వైద్య చరిత్ర" : "Visits" },
     { value: "medicines", label: L ? "మందులు" : "Medicines" },
     { value: "vaccines", label: L ? "టీకాలు" : "Vaccines" },
@@ -105,6 +107,7 @@ export default function PatientHomePage() {
       <div className="mx-auto max-w-5xl px-4 pt-5 sm:px-6">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_292px] lg:items-start">
           <div className="min-w-0 space-y-5">
+            <ClinicSwitcher L={L} />
             {next ? (
               <AppointmentHero appt={next} L={L} lang={lang} clinic={me.clinic} />
             ) : (

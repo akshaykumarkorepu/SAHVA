@@ -1158,6 +1158,7 @@ export type Database = {
           portal_link_ttl_days: number;
           transcript_retention_days: number;
           receptionists_see_transcripts: boolean;
+          patient_may_book: boolean;
         };
         Insert: {
           clinic_id: string;
@@ -1186,6 +1187,7 @@ export type Database = {
           portal_link_ttl_days?: number;
           transcript_retention_days?: number;
           receptionists_see_transcripts?: boolean;
+          patient_may_book?: boolean;
         };
         Update: {
           clinic_id?: string;
@@ -1214,6 +1216,7 @@ export type Database = {
           portal_link_ttl_days?: number;
           transcript_retention_days?: number;
           receptionists_see_transcripts?: boolean;
+          patient_may_book?: boolean;
         };
         Relationships: [
           {

@@ -5,8 +5,8 @@ import { asyncRoute } from "../middleware/errorHandler.js";
 import { requirePatientAuth } from "../middleware/patientAuth.js";
 import { requirePortalToken } from "../middleware/portalAuth.js";
 import { authLimiter } from "../middleware/rateLimit.js";
-import { validate } from "../middleware/validate.js";
-import { badRequest, fromPostgrest, unwrap } from "../lib/errors.js";
+import { isoDate, uuid, validate } from "../middleware/validate.js";
+import { badRequest, forbidden, fromPostgrest, unwrap } from "../lib/errors.js";
 import { dbAdmin } from "../lib/supabase.js";
 
 export const patientAccount = Router();
@@ -239,5 +239,195 @@ patientAccount.get(
         };
       }),
     );
+  }),
+);
+
+/* -------------------------------------------------------------------------- */
+/* Your clinic: doctors, hours, services — and booking                         */
+/* -------------------------------------------------------------------------- */
+
+/** Every clinic this login is a patient at, for the switcher. */
+patientAccount.get(
+  "/me/clinics",
+  asyncRoute(async (req, res) => {
+    const { userId } = req.patient!;
+    const rows = unwrap(
+      await dbAdmin
+        .from("patients")
+        .select("id, clinic_id, full_name, clinics(name, city)")
+        .eq("auth_user_id", userId)
+        .order("created_at", { ascending: true }),
+      "clinics",
+    );
+    res.json(
+      rows.map((r) => ({
+        clinic_id: r.clinic_id,
+        patient_name: r.full_name,
+        name: (r.clinics as { name: string } | null)?.name ?? "",
+        city: (r.clinics as { city: string } | null)?.city ?? "",
+        current: r.clinic_id === req.patient!.clinicId,
+      })),
+    );
+  }),
+);
+
+/**
+ * The clinic's public face for its own patients: doctors with speciality,
+ * languages, fee and weekly timings; clinic hours; upcoming closures;
+ * services; FAQs. Nothing here is about other patients, and no doctor's
+ * registration number or phone is exposed.
+ */
+patientAccount.get(
+  "/me/clinic",
+  asyncRoute(async (req, res) => {
+    const { clinicId } = req.patient!;
+    const today = new Date().toISOString().slice(0, 10);
+    const [clinic, settings, doctors, sessions, hours, closures, services, faqs] = await Promise.all([
+      dbAdmin.from("clinics").select("id, name, city, address_line, landmark, phone_e164, whatsapp_e164, map_url, timezone").eq("id", clinicId).single(),
+      dbAdmin.from("clinic_settings").select("patient_may_book, booking_horizon_days, min_notice_minutes").eq("clinic_id", clinicId).maybeSingle(),
+      dbAdmin
+        .from("doctors")
+        .select("id, full_name, specialty, qualifications, languages, consult_fee_paise, followup_fee_paise, consult_duration_min, colour_hex")
+        .eq("clinic_id", clinicId)
+        .eq("is_active", true)
+        .order("sort_order"),
+      dbAdmin.from("doctor_sessions").select("doctor_id, day_of_week, starts_at, ends_at").eq("clinic_id", clinicId).order("starts_at"),
+      dbAdmin.from("clinic_hours").select("day_of_week, opens_at, closes_at, label").eq("clinic_id", clinicId).order("day_of_week").order("opens_at"),
+      dbAdmin.from("clinic_closures").select("starts_on, ends_on, reason").eq("clinic_id", clinicId).gte("ends_on", today).order("starts_on").limit(5),
+      dbAdmin.from("clinic_services").select("id, name_en, name_te, description, price_paise, duration_min").eq("clinic_id", clinicId).eq("is_active", true).order("sort_order"),
+      dbAdmin.from("clinic_faqs").select("id, question_en, question_te, answer_en, answer_te").eq("clinic_id", clinicId).eq("is_active", true).order("priority", { ascending: false }).limit(20),
+    ]);
+    const bySession = new Map<string, { day_of_week: number; starts_at: string; ends_at: string }[]>();
+    for (const s of sessions.data ?? []) {
+      const list = bySession.get(s.doctor_id) ?? [];
+      list.push({ day_of_week: s.day_of_week, starts_at: s.starts_at.slice(0, 5), ends_at: s.ends_at.slice(0, 5) });
+      bySession.set(s.doctor_id, list);
+    }
+    res.json({
+      clinic: unwrap(clinic, "clinic"),
+      booking: {
+        enabled: settings.data?.patient_may_book ?? true,
+        horizon_days: settings.data?.booking_horizon_days ?? 30,
+        min_notice_minutes: settings.data?.min_notice_minutes ?? 30,
+      },
+      doctors: (doctors.data ?? []).map((d) => ({ ...d, sessions: bySession.get(d.id) ?? [] })),
+      hours: (hours.data ?? []).map((h) => ({ ...h, opens_at: h.opens_at.slice(0, 5), closes_at: h.closes_at.slice(0, 5) })),
+      // The same closure entered twice is shown once.
+      closures: [...new Map((closures.data ?? []).map((c) => [`${c.starts_on}|${c.ends_on}|${c.reason}`, c])).values()],
+      services: services.data ?? [],
+      faqs: faqs.data ?? [],
+    });
+  }),
+);
+
+async function bookingRules(clinicId: string) {
+  const { data } = await dbAdmin
+    .from("clinic_settings")
+    .select("patient_may_book, booking_horizon_days, min_notice_minutes")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  return {
+    enabled: data?.patient_may_book ?? true,
+    horizonDays: data?.booking_horizon_days ?? 30,
+    minNoticeMin: data?.min_notice_minutes ?? 30,
+  };
+}
+
+async function clinicDoctor(clinicId: string, doctorId: string) {
+  const { data } = await dbAdmin
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!data) throw badRequest("UNKNOWN_DOCTOR", "That doctor is not available at your clinic.");
+}
+
+/** Free slots for one of the clinic's doctors on a day, within the clinic's booking rules. */
+patientAccount.get(
+  "/me/slots",
+  validate({ query: z.object({ doctor_id: uuid, date: isoDate }) }),
+  asyncRoute(async (req, res) => {
+    const { clinicId } = req.patient!;
+    const q = req.query as unknown as { doctor_id: string; date: string };
+    const rules = await bookingRules(clinicId);
+    if (!rules.enabled) throw forbidden("Please call the clinic to book.");
+    await clinicDoctor(clinicId, q.doctor_id);
+    const slots = unwrap(await dbAdmin.rpc("get_available_slots", { p_doctor_id: q.doctor_id, p_date: q.date }), "availability");
+    const earliest = Date.now() + rules.minNoticeMin * 60_000;
+    const latest = Date.now() + rules.horizonDays * 86_400_000;
+    res.json(
+      (slots ?? []).filter((s: { slot_start: string; remaining: number }) => {
+        const t = new Date(s.slot_start).getTime();
+        return s.remaining > 0 && t >= earliest && t <= latest;
+      }),
+    );
+  }),
+);
+
+/** Upcoming online bookings one patient may hold at once — enough for real use, not for blocking a diary. */
+export const MAX_OPEN_WEB_BOOKINGS = 2;
+
+/**
+ * Book a free slot for the signed-in patient. The same guarded RPC as the AI
+ * and the front desk: availability is re-checked in the transaction, the
+ * exclusion constraint is final, and a clinic that is not live refuses.
+ */
+patientAccount.post(
+  "/me/appointments",
+  authLimiter(),
+  validate({
+    body: z.object({
+      doctor_id: uuid,
+      starts_at: z.string().datetime({ offset: true }),
+      reason: z.string().trim().max(200).optional(),
+    }),
+  }),
+  asyncRoute(async (req, res) => {
+    const { clinicId, patientId } = req.patient!;
+    const b = req.body as { doctor_id: string; starts_at: string; reason?: string };
+    const rules = await bookingRules(clinicId);
+    if (!rules.enabled) throw forbidden("Please call the clinic to book.");
+    await clinicDoctor(clinicId, b.doctor_id);
+
+    const t = new Date(b.starts_at).getTime();
+    if (t < Date.now() + rules.minNoticeMin * 60_000 || t > Date.now() + rules.horizonDays * 86_400_000) {
+      throw badRequest("OUTSIDE_BOOKING_WINDOW", "That time can no longer be booked online. Please pick another.");
+    }
+
+    const open = await dbAdmin
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("patient_id", patientId)
+      .eq("source", "web")
+      .in("status", ["booked", "confirmed"])
+      .gte("starts_at", new Date().toISOString());
+    if ((open.count ?? 0) >= MAX_OPEN_WEB_BOOKINGS) {
+      throw badRequest("TOO_MANY_BOOKINGS", "You already have upcoming online bookings. Please call the clinic for more.");
+    }
+
+    const patient = unwrap(
+      await dbAdmin.from("patients").select("full_name, phone_e164, preferred_language").eq("id", patientId).single(),
+      "patient",
+    );
+    const { data, error } = await dbAdmin.rpc("book_appointment", {
+      p_clinic_id: clinicId,
+      p_doctor_id: b.doctor_id,
+      p_patient_name: patient.full_name,
+      p_phone_e164: patient.phone_e164,
+      p_starts_at: b.starts_at,
+      p_reason: (b.reason ?? null) as never,
+      p_source: "web",
+      p_language: (patient.preferred_language ?? null) as never,
+    });
+    if (error) throw fromPostgrest(error, "booking the appointment");
+    if (data.patient_id !== patientId) {
+      // book_appointment matches patients by clinic, phone and name; this
+      // must always be the signed-in patient's own record.
+      req.log.error({ booked: data.id, expected: patientId, got: data.patient_id }, "web booking matched another patient record");
+    }
+    req.log.info({ appointmentId: data.id }, "patient booked online");
+    res.status(201).json(data);
   }),
 );

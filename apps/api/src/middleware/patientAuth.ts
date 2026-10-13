@@ -36,12 +36,12 @@ export async function requirePatientAuth(req: Request, res: Response, next: Next
 
     // Read through the patient's own RLS-scoped client: if the account is not
     // linked to a patient record, this simply returns nothing.
-    const { data, error } = await db
-      .from("patients")
-      .select("id, clinic_id")
-      .eq("auth_user_id", user.id)
-      .limit(1)
-      .maybeSingle();
+    // One login can belong to several clinics (one patient record each). The
+    // page says which with x-sahva-clinic; without it, the oldest record.
+    const wanted = req.header("x-sahva-clinic");
+    let q = db.from("patients").select("id, clinic_id").eq("auth_user_id", user.id);
+    if (wanted && /^[0-9a-f-]{36}$/i.test(wanted)) q = q.eq("clinic_id", wanted);
+    const { data, error } = await q.order("created_at", { ascending: true }).limit(1).maybeSingle();
 
     if (error) {
       req.log.error({ err: error }, "patient lookup failed");

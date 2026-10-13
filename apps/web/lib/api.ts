@@ -34,6 +34,32 @@ export class ApiError extends Error {
   }
 }
 
+const PATIENT_CLINIC_KEY = "sahva.patient.clinic";
+
+/**
+ * A patient registered at several SAHVA clinics picks which one they are
+ * looking at; /me requests say so with x-sahva-clinic. The API still only
+ * returns the login's own records — this chooses among them.
+ */
+export function setPatientClinic(clinicId: string | null) {
+  try {
+    if (clinicId) localStorage.setItem(PATIENT_CLINIC_KEY, clinicId);
+    else localStorage.removeItem(PATIENT_CLINIC_KEY);
+  } catch {
+    /* storage unavailable: the API falls back to the first clinic */
+  }
+}
+
+function patientClinicHeader(path: string): Record<string, string> {
+  if (!path.startsWith("/me")) return {};
+  try {
+    const id = localStorage.getItem(PATIENT_CLINIC_KEY);
+    return id ? { "x-sahva-clinic": id } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -58,6 +84,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...(await authHeader()),
+      ...patientClinicHeader(path),
       ...(init.headers ?? {}),
     },
     cache: "no-store",

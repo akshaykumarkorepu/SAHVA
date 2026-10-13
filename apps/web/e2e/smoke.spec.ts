@@ -718,3 +718,55 @@ test("admin security: refused requests by kind and address, and staff role chang
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("patient: Your clinic lists the doctors with speciality and timings, and books a free slot", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  await page.getByRole("tab", { name: "Your clinic" }).click();
+  const main = page.locator("main");
+  await expect(main).toContainText("Dr. Anitha Reddy");
+  await expect(main).toContainText("General Physician");
+  await expect(main).toContainText(/\d(:\d{2})? AM – \d+(:\d{2})? PM/);
+  await expect(main).toContainText("Clinic hours");
+
+  await page.getByRole("button", { name: "Book with Dr. Anitha Reddy" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Book with");
+  const firstTime = dialog.getByRole("radiogroup", { name: "Time" }).getByRole("radio").first();
+  await firstTime.waitFor();
+  await firstTime.click();
+  await dialog.getByRole("button", { name: /^Book \d/ }).click();
+  await expect(page.getByText(/^Booked with /)).toBeVisible();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("patient: a slot someone else just took is reported, not double-booked", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sahva.mock.slotTaken", "1"));
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  await page.getByRole("tab", { name: "Your clinic" }).click();
+  await page.getByRole("button", { name: "Book with Dr. Anitha Reddy" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("radiogroup", { name: "Time" }).getByRole("radio").first().click();
+  await dialog.getByRole("button", { name: /^Book \d/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("just taken");
+});
+
+test("patient: the Book quick action opens Your clinic", async ({ page }) => {
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Book", exact: true }).first().click();
+  await expect(page.getByRole("tab", { name: "Your clinic" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("patient: a patient at two SAHVA clinics can switch between them", async ({ page }) => {
+  await page.goto("/me");
+  await page.getByRole("button", { name: "English" }).click({ timeout: 15_000 });
+  await expect(page.getByRole("navigation", { name: "Choose clinic" })).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem("sahva.mock.twoClinics", "1"));
+  await page.reload();
+  const nav = page.getByRole("navigation", { name: /Choose clinic|క్లినిక్ ఎంచుకోండి/ });
+  await expect(nav).toContainText("Krishna Clinic", { timeout: 15_000 });
+});

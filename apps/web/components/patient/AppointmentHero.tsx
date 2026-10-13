@@ -147,7 +147,6 @@ export function QuickActions({
   clinic: ClinicInfo;
   onJump: (t: Tab) => void;
 }) {
-  const address = [clinic.address_line, clinic.landmark, clinic.city].filter(Boolean).join(", ");
   const base =
     "flex flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-surface-raised px-2 py-4 text-center text-[12px] font-medium text-ink transition hover:border-line-strong hover:bg-surface-sunken active:scale-[.98]";
 
@@ -157,15 +156,10 @@ export function QuickActions({
         <Icon name="calls" className="h-[18px] w-[18px] text-brand-600" />
         {L ? "కాల్" : "Call"}
       </a>
-      <a
-        href={clinic.map_url ?? `https://maps.google.com/?q=${encodeURIComponent(address)}`}
-        target="_blank"
-        rel="noreferrer"
-        className={base}
-      >
-        <Icon name="chevronRight" className="h-[18px] w-[18px] text-brand-600" />
-        {L ? "దారి" : "Directions"}
-      </a>
+      <button type="button" onClick={() => onJump("clinic")} className={base}>
+        <Icon name="appointments" className="h-[18px] w-[18px] text-brand-600" />
+        {L ? "బుక్ చేయండి" : "Book"}
+      </button>
       <button type="button" onClick={() => onJump("medicines")} className={base}>
         <Icon name="activity" className="h-[18px] w-[18px] text-brand-600" />
         {L ? "మందులు" : "Medicines"}

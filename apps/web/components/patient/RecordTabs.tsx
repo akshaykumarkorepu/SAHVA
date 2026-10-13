@@ -5,6 +5,7 @@ import { VisitHistory } from "./VisitHistory";
 import { PrescriptionHistory, MedicineCard } from "./PrescriptionHistory";
 import { VaccinationTracker } from "./VaccinationTracker";
 import { InvoiceHistory } from "./InvoiceHistory";
+import { ClinicTab } from "./ClinicTab";
 
 export function TabPanel({
   tab,
@@ -26,6 +27,8 @@ export function TabPanel({
   switch (tab) {
     case "overview":
       return <OverviewTab L={L} lang={lang} me={me} activeRx={activeRx} />;
+    case "clinic":
+      return <ClinicTab L={L} />;
     case "visits":
       return <VisitHistory visits={medical?.visits ?? []} L={L} lang={lang} />;
     case "medicines":

@@ -857,6 +857,52 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
 
   // ---- patient portal ----------------------------------------------------
   if (method === "GET" && pathname === "/me") return d.patientMe;
+  // ---- patient: your clinic, booking, several clinics ----
+  if (method === "GET" && pathname === "/me/clinics") {
+    const two = mockFlag("sahva.mock.twoClinics");
+    return [
+      { clinic_id: d.clinic.id, name: d.clinic.name, city: d.clinic.city, patient_name: d.patientMe.patient.full_name, current: true },
+      ...(two ? [{ clinic_id: "c2000000-0000-4000-8000-000000000002", name: "Krishna Clinic", city: "Karimnagar", patient_name: d.patientMe.patient.full_name, current: false }] : []),
+    ];
+  }
+  if (method === "GET" && pathname === "/me/clinic") {
+    return {
+      clinic: { id: d.clinic.id, name: d.clinic.name, city: d.clinic.city, phone_e164: d.clinic.phone_e164, timezone: "Asia/Kolkata" },
+      booking: { enabled: true, horizon_days: 30, min_notice_minutes: 30 },
+      doctors: d.doctors.filter((x) => x.is_active).map((x) => ({
+        id: x.id, full_name: x.full_name, specialty: x.specialty, qualifications: x.qualifications, languages: x.languages,
+        consult_fee_paise: x.consult_fee_paise, followup_fee_paise: x.followup_fee_paise, consult_duration_min: x.consult_duration_min, colour_hex: x.colour_hex,
+        sessions: d.doctorSessions.filter((ss) => ss.doctor_id === x.id).map((ss) => ({ day_of_week: ss.day_of_week, starts_at: ss.starts_at.slice(0, 5), ends_at: ss.ends_at.slice(0, 5) })),
+      })),
+      hours: hours.map((h) => ({ day_of_week: h.day_of_week, opens_at: String(h.opens_at).slice(0, 5), closes_at: String(h.closes_at).slice(0, 5), label: h.label ?? null })),
+      closures: [],
+      services: d.services.filter((x) => x.is_active).map((x) => ({ id: x.id, name_en: x.name_en, name_te: x.name_te ?? null, description: null, price_paise: x.price_paise ?? null, duration_min: x.duration_min ?? null })),
+      faqs: d.faqs.filter((x) => x.is_active).slice(0, 6).map((x) => ({ id: x.id, question_en: x.question_en, question_te: x.question_te ?? null, answer_en: x.answer_en, answer_te: x.answer_te ?? null })),
+    };
+  }
+  if (method === "GET" && pathname === "/me/slots") {
+    // Mirrors get_available_slots for the mock: 15-minute slots in the doctor's sessions that day.
+    const date = query.get("date") ?? "";
+    const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+    const out: { slot_start: string; slot_end: string; remaining: number }[] = [];
+    for (const ss of d.doctorSessions.filter((x) => x.doctor_id === query.get("doctor_id") && x.day_of_week === dow)) {
+      const [h0, m0] = ss.starts_at.split(":").map(Number);
+      const [h1, m1] = ss.ends_at.split(":").map(Number);
+      for (let t = h0 * 60 + m0; t + 15 <= h1 * 60 + m1; t += 15) {
+        const start = new Date(`${date}T${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}:00+05:30`);
+        if (start.getTime() < Date.now() + 30 * 60_000) continue;
+        out.push({ slot_start: start.toISOString(), slot_end: new Date(start.getTime() + 15 * 60_000).toISOString(), remaining: 1 });
+      }
+    }
+    return out.slice(0, 16);
+  }
+  if (method === "POST" && pathname === "/me/appointments") {
+    if (takeSwitch()) throw new ApiError(409, "SLOT_TAKEN", "That time is no longer available.");
+    const doc = d.doctors.find((x) => x.id === b.doctor_id);
+    const appt = { ...d.patientMe.upcoming[0], id: crypto.randomUUID(), starts_at: String(b.starts_at), status: "booked", doctor_name: doc?.full_name ?? "", doctor_specialty: doc?.specialty ?? "" };
+    (d.patientMe.upcoming as unknown[]).unshift(appt);
+    return appt;
+  }
   if (method === "GET" && pathname === "/me/medical") return d.patientMedical;
   if (method === "GET" && pathname === "/me/tasks")
     return careTasks.filter((t) => t.status === "pending" || t.status === "sent");
