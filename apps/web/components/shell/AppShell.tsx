@@ -9,6 +9,7 @@ import { useLiveClinic, type LiveStatus } from "@/lib/live";
 import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./nav";
 import { Logo } from "./Logo";
 import { ClinicSetup } from "./ClinicSetup";
+import { PageLoader } from "@/components/HeartLoader";
 import { whoami, type AccountKind } from "@/lib/accountHome";
 import { TrialBanner } from "./TrialBanner";
 import { VerificationBanner } from "./VerificationBanner";
@@ -337,11 +338,7 @@ function MoreSheet({
 /* -------------------------------------------------------------------------- */
 
 function BootScreen() {
-  return (
-    <div className="grid min-h-[100dvh] place-items-center bg-surface">
-      <Spinner />
-    </div>
-  );
+  return <PageLoader />;
 }
 
 function SetupNeeded() {

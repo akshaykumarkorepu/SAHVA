@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRequireAdmin } from "@/lib/admin/session";
 import { Button, Spinner, cn } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
+import { PageLoader } from "@/components/HeartLoader";
 
 const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin", label: "Overview", icon: "overview" },
@@ -38,11 +39,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         </div>
       );
     }
-    return (
-      <div className="grid min-h-dvh place-items-center bg-surface">
-        <Spinner />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (

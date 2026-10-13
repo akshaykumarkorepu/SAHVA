@@ -9,6 +9,7 @@ import { Button, Field, Input, Segmented, Spinner, cn } from "@/components/ui";
 import { PRICE } from "@/lib/pricing";
 import { toIndianE164 } from "@/lib/phone";
 import { Icon } from "@/components/icons";
+import { PageLoader } from "@/components/HeartLoader";
 import { homeFor, whoami } from "@/lib/accountHome";
 
 /**
@@ -62,11 +63,7 @@ export default function SignInPage() {
 }
 
 function CentredSpinner() {
-  return (
-    <div className="grid min-h-[100dvh] place-items-center bg-surface">
-      <Spinner />
-    </div>
-  );
+  return <PageLoader />;
 }
 
 function AuthScreen() {
@@ -558,7 +555,7 @@ function SignUpForm({
     if (authError) {
       setError(
         authError.status === 429
-          ? "Too many sign-up attempts. Wait a few minutes, then try again."
+          ? "Too many confirmation emails have been sent in the last hour. Please try again in an hour."
           : authError.message,
       );
       return;
@@ -580,7 +577,9 @@ function SignUpForm({
         </p>
       )}
 
-      {sent ? (
+      {!staff && avail.ok ? (
+        <PatientSignupFromLink />
+      ) : sent ? (
         <Alert tone="info">
           Check <strong>{email}</strong> for a confirmation link.
           {staff ? " After confirming, you will set up your clinic and your trial starts." : " You can close this page."}
@@ -674,6 +673,51 @@ function SignUpForm({
           Sign in
         </button>
       </p>
+    </div>
+  );
+}
+
+/**
+ * Patients do not sign up with an email confirmation. A patient account must
+ * belong to a patient record, and the only proof that someone is that patient
+ * is the link their clinic sends to the phone on file. So the account is
+ * created from that link (/p/<link> → "Create account"), with no email to
+ * wait for. This panel says so, and opens a pasted link.
+ */
+function PatientSignupFromLink() {
+  const router = useRouter();
+  const [link, setLink] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  function open(e: React.FormEvent) {
+    e.preventDefault();
+    const m = link.trim().match(/(?:\/p\/)?([A-Za-z0-9_-]{40,50})\/?$/);
+    if (!m) return setError("That does not look like a SAHVA link. Copy the whole link from the clinic's message.");
+    router.push(`/p/${m[1]}`);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-line bg-surface-sunken p-4 text-sm text-ink">
+        <p className="font-semibold">Your clinic sends you a link</p>
+        <p className="mt-1 text-ink-muted">
+          When you book, the clinic sends a link on WhatsApp or SMS. Open it and tap <strong>Create account</strong> —
+          no email code needed.
+        </p>
+        <p lang="te" className="mt-2 text-ink-muted">
+          క్లినిక్ పంపిన లింక్‌ను తెరిచి <strong>ఖాతా సృష్టించండి</strong> నొక్కండి.
+        </p>
+      </div>
+      <form onSubmit={open} className="space-y-3">
+        <Field label="Have the link? Paste it here">
+          <Input value={link} onChange={(e) => { setLink(e.target.value); setError(null); }} placeholder="https://…/p/…" />
+        </Field>
+        {error && <Alert tone="error">{error}</Alert>}
+        <Button type="submit" size="lg" className="w-full" disabled={!link.trim()}>
+          Open my link
+        </Button>
+      </form>
+      <p className="text-center text-xs text-ink-subtle">No link? Ask your clinic&rsquo;s front desk to send one.</p>
     </div>
   );
 }

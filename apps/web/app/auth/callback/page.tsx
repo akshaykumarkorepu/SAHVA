@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Spinner } from "@/components/ui";
+import { PageLoader } from "@/components/HeartLoader";
 import { homeFor, whoami } from "@/lib/accountHome";
 
 /**
@@ -24,14 +24,7 @@ export default function AuthCallbackPage() {
 }
 
 function Waiting({ message = "Signing you in…" }: { message?: string }) {
-  return (
-    <main className="grid min-h-[100dvh] place-items-center bg-surface px-4">
-      <div className="text-center">
-        <Spinner />
-        <p className="mt-4 text-sm text-ink-muted">{message}</p>
-      </div>
-    </main>
-  );
+  return <PageLoader message={message} />;
 }
 
 /** Only same-origin, absolute-path destinations. Anything else goes home. */

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { HeartLoader } from "./HeartLoader";
 import { ApiError } from "@/lib/api";
 import { Icon, type IconName } from "@/components/icons";
 
@@ -290,14 +291,11 @@ export function LoadingRows({ rows = 4, className }: { rows?: number; className?
   );
 }
 
+/** Section and page loading: SAHVA's heart loader (components/HeartLoader). */
 export function Spinner({ label = "Loading" }: { label?: string }) {
   return (
     <div className="flex items-center justify-center py-16">
-      <span
-        role="status"
-        aria-label={label}
-        className="h-7 w-7 animate-spin rounded-full border-2 border-line-strong border-t-brand-600"
-      />
+      <HeartLoader size="md" label={label} />
     </div>
   );
 }

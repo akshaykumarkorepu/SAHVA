@@ -8,6 +8,7 @@ import { useApi } from "@/lib/hooks";
 import { STRINGS, type Lang } from "@/lib/portal/i18n";
 import { Button, ErrorState, LoadingRows, Segmented, Spinner, cn } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { PageLoader } from "@/components/HeartLoader";
 import type { CareTask, Invoice, Medical, Tab } from "@/components/patient/types";
 import { amountOwed, buildTiles, isActiveRx } from "@/components/patient/logic";
 import { PatientHeader } from "@/components/patient/PatientHeader";
@@ -45,11 +46,7 @@ export default function PatientHomePage() {
   const L = lang === "te";
 
   if (status === "loading" || status === "signed-out") {
-    return (
-      <div className="grid min-h-[100dvh] place-items-center bg-surface">
-        <Spinner />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (status === "not-a-patient") {
@@ -186,11 +183,7 @@ function NotAPatient({ error, L, onSignOut }: { error: string | null; L: boolean
       .catch(() => setChecked(true));
   }, [router]);
   if (!checked) {
-    return (
-      <div className="grid min-h-[100dvh] place-items-center bg-surface">
-        <Spinner />
-      </div>
-    );
+    return <PageLoader />;
   }
   return (
     <Centred>
