@@ -14,6 +14,9 @@ services:
     plan: free
     region: singapore # closest Render region to ap-south-1
     branch: saikirans-version
+    # Deploy only after the commit's GitHub checks pass: a broken push does not
+    # replace the running API.
+    autoDeployTrigger: checksPass
     # --include=dev: NODE_ENV=production below makes npm skip devDependencies,
     # and the build needs TypeScript.
     buildCommand: npm install --include=dev && npm run build -w apps/api
@@ -34,6 +37,12 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: VOICE_API_KEY
+        sync: false
+      # Optional: separate keys for telephony and scheduled jobs (each may be a
+      # comma-separated list, for rotating without downtime).
+      - key: TELEPHONY_API_KEY
+        sync: false
+      - key: WORKER_API_KEY
         sync: false
       # Both web deployments, comma-separated: the clinic site and the admin
       # console, e.g. https://sahva.vercel.app,https://sahva-admin.vercel.app

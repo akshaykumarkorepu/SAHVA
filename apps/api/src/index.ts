@@ -28,7 +28,9 @@ import { billing } from "./routes/billing.js";
 import { publicClinic } from "./routes/publicClinic.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { reconcile } from "./lib/reconcile.js";
-import { runNotifications } from "./lib/notifications.js";
+import { recordJob, runNotifications } from "./lib/notifications.js";
+import { startScheduler } from "./lib/scheduler.js";
+import { systemHealth } from "./lib/systemHealth.js";
 import { patientAccount } from "./routes/patientAccount.js";
 import {
   apiLimiter,
@@ -66,6 +68,20 @@ app.get("/api/health", (_req, res) =>
   res.json({ ok: true, env: env.NODE_ENV, ts: new Date().toISOString() }),
 );
 
+/**
+ * For an external monitor (UptimeRobot, Better Stack…): 503 when the database
+ * is unreachable or a scheduled job has stopped, so someone is told even if
+ * SAHVA's own emails are what broke. Names and ages only — nothing private.
+ */
+app.get("/api/health/deep", async (_req, res, next) => {
+  try {
+    const h = await systemHealth();
+    res.status(h.ok ? 200 : 503).json({ ok: h.ok, checks: h.checks, ts: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // --- Machine routes --------------------------------------------------------
 // Telephony and the voice orchestrator carry no user JWT, so they authenticate
 // with a shared secret and resolve tenancy from the dialed number. These get a
@@ -85,6 +101,7 @@ app.use("/api/webhooks/messages", machineLimiter(), requireServiceKey("telephony
 app.post("/api/internal/reconcile-payments", machineLimiter(), requireServiceKey("worker"), async (req, res, next) => {
   try {
     const summary = await reconcile();
+    await recordJob("payment_reconcile", summary.errors === 0, summary.errors ? `${summary.errors} orders could not be checked` : null, "github");
     req.log.info({ summary }, "payment reconciliation");
     res.json(summary);
   } catch (err) {
@@ -155,13 +172,17 @@ const server = app.listen(env.PORT, () => {
     "api listening",
   );
   if (!isProd) logger.info(`http://localhost:${env.PORT}/api/health`);
+  // The API's own trigger for scheduled work (one of three; see lib/scheduler.ts).
+  if (env.SCHEDULER !== "off" && env.NODE_ENV !== "test") stopScheduler = startScheduler();
 });
+let stopScheduler: (() => void) | null = null;
 
 // Finish in-flight requests before exiting. A container restart should not drop
 // a booking that is mid-transaction.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
     logger.info({ signal }, "shutting down");
+    stopScheduler?.();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 10_000).unref();
   });

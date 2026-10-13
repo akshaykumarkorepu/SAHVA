@@ -833,3 +833,10 @@ test("settings: the clinic's public link, and the online booking switches", asyn
   await page.getByLabel(/New patients can request a time/).uncheck();
   await expect(page.getByLabel(/New patients can request a time/)).not.toBeChecked();
 });
+
+test("admin overview: system health shows each scheduled job", async ({ page }) => {
+  await page.goto("/admin");
+  const health = page.getByRole("region", { name: "System health" });
+  await expect(health).toContainText("Email sending", { timeout: 15_000 });
+  await expect(health).toContainText("Payment reconciliation");
+});

@@ -66,6 +66,13 @@ const schema = z.object({
 
   /** Shared secret for machine callers (telephony webhook, voice orchestrator). */
   VOICE_API_KEY: z.string().min(32),
+  /**
+   * Optional separate keys for the other machine callers, so one leak does not
+   * open the rest. Each may hold several comma-separated keys for rotation.
+   * Unset: the caller uses VOICE_API_KEY.
+   */
+  TELEPHONY_API_KEY: optional(z.string().min(32)),
+  WORKER_API_KEY: optional(z.string().min(32)),
 
   CORS_ORIGINS: z
     .string()
@@ -103,6 +110,8 @@ const schema = z.object({
   EMAIL_FROM: optional(z.string().min(5)),
   /** Where links in emails point: the clinic app, and the admin console. */
   WEB_URL: z.string().url().default("http://localhost:3000"),
+  /** "off" stops the API's own scheduler (pg_cron and GitHub Actions still run the jobs). */
+  SCHEDULER: z.enum(["on", "off"]).default("on"),
   ADMIN_URL: optional(z.string().url()),
 });
 

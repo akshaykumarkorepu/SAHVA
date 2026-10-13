@@ -221,6 +221,33 @@ billing and the admin console, **SAHVA is the Data Fiduciary**.
 7. **Account data for staff** (SAHVA as fiduciary): a privacy notice that
    covers staff accounts, and a grievance contact.
 
+## Admin account recovery
+
+Admin sign-in needs a password and an authenticator code. If an admin loses
+their phone:
+
+1. Another super admin (or whoever holds the database password) opens the
+   Supabase SQL editor and removes the lost authenticator:
+   ```sql
+   delete from auth.mfa_factors
+    where user_id = (select id from auth.users where email = 'admin@example.com');
+   ```
+2. The admin signs in at `/admin/signin` with their password and is asked to
+   scan a new QR code.
+3. Record it: an `admin.mfa_reset` note in the audit log is written by hand
+   until this is a console action.
+
+To remove an admin entirely: `update public.platform_admins set disabled_at = now() where user_id = …`.
+Keep **at least two super admins** so one lost phone never locks SAHVA out.
+
+## Backups
+
+The free Supabase plan has no managed backups. Until the project is on Pro
+(daily backups, point-in-time recovery recommended for health data),
+`scripts/backup-db.sh` takes an encrypted dump: it refuses to run without an
+`age` recipient, so patient data is never written unencrypted. Keep the
+decryption key off the laptop that takes the backups.
+
 ## Not yet addressed
 
 - **Audit of patient-profile reads beyond `GET /patients/:id`.** Clinical

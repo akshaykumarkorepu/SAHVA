@@ -117,6 +117,19 @@ when going live, and swap the keys on Render.
 
 ---
 
+## 5. Monitoring and scheduled work
+
+- Scheduled work runs from **pg_cron** (set up by migration `1013_0400`), the
+  **API's own scheduler**, and **GitHub Actions**. Any one is enough; the
+  others are backups. To enable the GitHub ones on the fork: Actions tab →
+  enable workflows, and add the secrets `SAHVA_API_URL` and `SAHVA_WORKER_KEY`
+  (a worker key the API accepts).
+- Add an uptime monitor on `https://<render-url>/api/health/deep` (every 5
+  minutes, alert by email/SMS). It returns 503 if the database is unreachable
+  or any job is overdue; the body says which.
+- Render deploys only after CI passes (`autoDeployTrigger: checksPass` in
+  `render.yaml`).
+
 ## Continuous deployment
 
 Once connected, both hosts rebuild on every push to `saikirans-version`.

@@ -5,46 +5,35 @@ import { render, type Outgoing } from "./notify.js";
 import { mailerConfigured, sendEmail } from "./mailer.js";
 
 export type RunSummary = {
-  queued: number;
-  invoices_issued: number;
-  transcripts_purged: number;
-  security_alerts: number;
-  requests_expired: number;
+  /** The database-side jobs' own summary, or null if another trigger was already running them. */
+  database: Record<string, number | string> | null;
   sent: number;
   failed: number;
   email_configured: boolean;
 };
 
 /**
- * One pass of the scheduled job: queue what time has made due, issue any
- * invoices still owed, delete transcripts past each clinic's retention,
- * raise alerts for bursts of refused requests, then send a batch of emails.
- * Run every 15 minutes.
+ * One pass of the scheduled work. The database-side jobs (reminders, owed
+ * invoices, transcript retention, security alerts, releasing unconfirmed
+ * requests) run in run_database_jobs() — which pg_cron also triggers — and
+ * then a batch of emails is sent. Triggered by the API's own scheduler and by
+ * GitHub Actions; every trigger is safe to overlap with the others.
  */
 export async function runNotifications(batch = 50): Promise<RunSummary> {
-  const queued = await dbAdmin.rpc("enqueue_scheduled_notifications");
-  if (queued.error) throw queued.error;
-  const invoices = await dbAdmin.rpc("issue_missing_invoices");
-  if (invoices.error) throw invoices.error;
-  const purged = await dbAdmin.rpc("purge_expired_transcripts", { p_limit: 500 });
-  if (purged.error) throw purged.error;
-  const alerts = await dbAdmin.rpc("enqueue_security_alerts");
-  if (alerts.error) throw alerts.error;
-  const expired = await dbAdmin.rpc("expire_unverified_bookings");
-  if (expired.error) throw expired.error;
+  const jobs = await dbAdmin.rpc("run_database_jobs", { p_source: "api" });
+  if (jobs.error) throw jobs.error;
 
   const summary: RunSummary = {
-    queued: queued.data ?? 0,
-    invoices_issued: invoices.data ?? 0,
-    transcripts_purged: purged.data ?? 0,
-    security_alerts: alerts.data ?? 0,
-    requests_expired: expired.data ?? 0,
+    database: (jobs.data as Record<string, number | string> | null) ?? null,
     sent: 0,
     failed: 0,
     email_configured: mailerConfigured(),
   };
   // Without a provider, leave everything queued rather than burning retries.
-  if (!summary.email_configured) return summary;
+  if (!summary.email_configured) {
+    await recordJob("email_sender", true, null, "not configured");
+    return summary;
+  }
 
   const claimed = await dbAdmin.rpc("claim_notifications", { p_limit: batch });
   if (claimed.error) throw claimed.error;
@@ -68,5 +57,12 @@ export async function runNotifications(batch = 50): Promise<RunSummary> {
     if (error) logger.error({ err: error, notification: n.id }, "could not record email outcome");
     if (!r.ok && !r.retry) await dbAdmin.from("notifications").update({ status: "failed" }).eq("id", n.id);
   }
+  await recordJob("email_sender", summary.failed === 0 || summary.sent > 0, summary.failed ? `${summary.failed} failed` : null);
   return summary;
+}
+
+/** Note a job's outcome in job_runs, for health checks. Never throws. */
+export async function recordJob(job: string, ok: boolean, error: string | null, source = "api"): Promise<void> {
+  const { error: e } = await dbAdmin.rpc("record_job_run", { p_job: job, p_ok: ok, p_error: error as string, p_source: source });
+  if (e) logger.warn({ err: e, job }, "could not record job run");
 }

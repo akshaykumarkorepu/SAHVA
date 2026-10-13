@@ -597,6 +597,12 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       collectedThisMonthPaise: 2 * 199900 + 999900, paymentsThisMonth: 3,
       payingFromLedger: 2,
       refundApprovalsWaiting: refundRequests.filter((r) => r.status === "pending").length,
+      system: { ok: true, checks: [
+        { name: "database", ok: true, detail: "reachable" },
+        { name: "database_jobs", ok: true, detail: "last ok 4 min ago" },
+        { name: "email_sender", ok: true, detail: "last ok 4 min ago" },
+        { name: "payment_reconcile", ok: true, detail: "last ok 410 min ago" },
+      ] },
       openPaymentExceptions: paymentExceptions.filter((e) => e.status === "open").length,
       applicationsWaiting: applications.filter((a) => ["submitted", "under_review"].includes(a.verification_status)).length,
     };

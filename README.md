@@ -23,6 +23,7 @@ silently cancel a patient without staff knowing.
 - [What each dashboard contains](#what-each-dashboard-contains) — patient, clinic, admin
 - [Voice calls — OmniDimension](#voice-calls--omnidimension) — the MVP voice plan, costs, demo
 - [Behind the scenes](#behind-the-scenes) — emails, scheduled jobs, money, privacy
+- [Resilience — no single point of failure](#resilience--no-single-point-of-failure) — what is fixed, what needs a decision
 - [Repository layout](#repository-layout) · [Migrations](#migrations) · [Design decisions](#three-design-decisions-worth-knowing)
 - [Running the tests](#running-the-tests) · [Running it on localhost](#running-it-on-localhost) · [Deploying](#deploying)
 - [Status and next steps](#status-and-next-steps)
@@ -366,6 +367,25 @@ sequenceDiagram
    OmniDimension's website voice widget, running on the free credits — fixed
    to a demo clinic so it can never book into a real diary.
 
+### If OmniDimension or SAHVA is down
+
+A clinic's phone must never just ring out. The design keeps a person in the
+path:
+
+1. **Keep the clinic's own number at its carrier** (Exotel or the clinic's
+   provider) and forward to the OmniDimension agent with **failover to the
+   front-desk phone** — on no answer, busy or error the call rings the clinic
+   as it did before SAHVA.
+2. **If SAHVA's API does not answer mid-call** (timeout or error), the agent
+   does not guess a time: it takes the caller's name and number, says the
+   clinic will call back, and the post-call webhook raises a "call back"
+   item in Action Required. Nothing is booked that the database did not
+   confirm.
+3. **If the post-call webhook is lost**, SAHVA fetches the call log from
+   OmniDimension's API on the next scheduled pass, so no call disappears.
+4. The **escalation number** in Settings → AI permissions is the transfer
+   target for anything the agent should not handle.
+
 **To check with OmniDimension before building:** whether the caller's number
 reaches the Custom API automatically (their docs say not to assume it), how
 mid-call requests time out, how post-call webhooks are signed, concurrent
@@ -410,8 +430,10 @@ webhook records minutes so Admin → Analytics can show cost per clinic.
 
 Every event that should be announced is written to an **email outbox** in the
 same transaction as the change, so nothing is announced that rolled back and
-nothing that happened is missed. A job every 15 minutes
-(`.github/workflows/notifications.yml` → `POST /api/internal/notifications/run`):
+nothing that happened is missed. The scheduled work runs from **three
+independent triggers** (see [Resilience](#resilience--no-single-point-of-failure)):
+pg_cron inside the database every 10 minutes, the API's own scheduler every 5
+minutes, and GitHub Actions every 15 minutes. Each pass:
 
 - queues reminders — trial or plan ending (3 days, 1 day), entering grace;
 - issues any GST invoices still owed;
@@ -426,8 +448,9 @@ payment exceptions (disputes marked urgent), refunds awaiting approval, support
 access granted, security bursts, and get a daily digest. **No email ever
 contains patient data.**
 
-A nightly job (`reconcile-payments.yml`) checks every unfinished Razorpay order
-against Razorpay.
+Every unfinished Razorpay order is checked against Razorpay at least daily —
+by the API's scheduler (when the last good run is over 20 hours old) and by the
+nightly `reconcile-payments.yml`.
 
 ### Money
 
@@ -441,7 +464,7 @@ edited.
 
 ### Privacy and security
 
-- **Row-level security on all 55 tables**, keyed on clinic membership; composite
+- **Row-level security on all 56 tables**, keyed on clinic membership; composite
   foreign keys make cross-clinic mixing impossible even for the service role.
 - **Every read of a medical record or call transcript is logged** (fail-closed);
   owners see who looked.
@@ -453,6 +476,40 @@ edited.
 - **Security events** (refused requests, role changes) are recorded and bursts
   alerted.
 - DPDP Act 2023 review and the open gaps: [`docs/security.md`](docs/security.md).
+
+---
+
+## Resilience — no single point of failure
+
+A single point of failure (SPOF) is one thing whose failure alone stops part
+of SAHVA. The audit (October 2026) found nine. Five are fixed in code; four
+need a plan or an account, and are listed with the decision they need.
+
+### Fixed in code
+
+| SPOF | Was | Now |
+|---|---|---|
+| **Scheduled work had one trigger** (GitHub Actions on a fork — off by default, and GitHub disables scheduled runs after 60 days without activity) | Reminders, invoices, transcript retention, request expiry, security alerts and payment checks would silently stop | **Three triggers.** `run_database_jobs()` runs all database-side work and is called by **pg_cron inside Supabase** (every 10 min), the **API's own scheduler** (every 5 min) and **GitHub Actions** (every 15 min). An advisory lock makes overlapping triggers harmless; every job is idempotent. Emails and payment reconciliation run from the API scheduler and GitHub Actions. |
+| **Nothing noticed an outage** — the daily digest depends on the same jobs | A stopped job or unreachable database went unseen | **`job_runs`** records each job's last success. **`GET /api/health/deep`** returns 503 when the database is unreachable or a job is overdue (database jobs 30 min, email 45 min, reconciliation 26 h) — point an external monitor at it. **Admin → Overview → System health** shows the same. |
+| **One shared machine secret** (`VOICE_API_KEY`) for voice, telephony and scheduled jobs, with no rotation | One leak opened all three; changing it meant downtime | **A key per caller** (`VOICE_`, `TELEPHONY_`, `WORKER_API_KEY`), each accepting several comma-separated keys so a key can be **rotated without downtime**. Unset keys fall back to `VOICE_API_KEY`. |
+| **Every push deployed the API** | A broken commit replaced the running API | Render deploys **only after the commit's CI checks pass** (`autoDeployTrigger: checksPass`). |
+| **No backups on the free database plan** | A bad migration or mistake could lose patient data | **`scripts/backup-db.sh`** — an encrypted (age) dump of the live database, never written unencrypted, keeping the last 14. Until managed backups exist, run it daily. |
+
+### Needs a decision or an account
+
+| SPOF | Risk | Recommendation |
+|---|---|---|
+| **Render free plan** — one instance that sleeps after 15 minutes idle | ~30 s cold start: a voice agent's mid-call request would time out; the API scheduler pauses while asleep | **Render Starter (about $7/month)**: always on. Before running more than one instance, set `REDIS_URL` so rate limits are shared. pg_cron keeps database jobs running even while the API sleeps. |
+| **Supabase free plan** — pauses after a week without activity, no managed backups, one region | The whole product down, or data lost | **Supabase Pro (about $25/month)**: never pauses, daily backups (add point-in-time recovery for health data). Until then run `scripts/backup-db.sh` daily. |
+| **One admin, one authenticator** | Lose the phone and nobody can run the console | Grant a **second super admin** now. Recovery runbook in [`docs/security.md`](docs/security.md#admin-account-recovery). |
+| **OmniDimension as the only voice path** (planned) | Calls unanswered if it is down | See [the fallback design](#if-omnidimension-or-sahva-is-down). |
+| **Supabase's built-in email sender** for sign-up and password reset | Hourly limit blocks confirmations | **Custom SMTP through Resend** (`docs/deploy.md`). Clinic emails already go through the outbox with retries. |
+
+### Monitoring
+
+Add a free uptime monitor (UptimeRobot, Better Stack) on
+`https://<api>/api/health/deep` every 5 minutes, alerting the team by email or
+SMS. It is the one alarm that does not depend on SAHVA's own emails working.
 
 ---
 
@@ -489,10 +546,11 @@ apps/
 
 packages/types/               database types generated from the schema
 supabase/
-├── migrations/               40 ordered migrations
+├── migrations/               41 ordered migrations
 ├── seed.sql                  a pilot clinic with realistic data
-└── tests/                    run.sh + 288 assertions, no Docker
-scripts/                      bootstrap-supabase.sh, gen-types.py, copy-env.sh
+└── tests/                    run.sh + 294 assertions, no Docker
+scripts/                      bootstrap-supabase.sh, gen-types.py, copy-env.sh,
+                              backup-db.sh (encrypted backups)
 docs/                         setup · deploy · api · data-model · security
                               roadmap · upgrade-plan · admin-plan
 .github/workflows/            CI, notifications (15 min), payment reconciliation (nightly)
@@ -511,8 +569,9 @@ docs/                         setup · deploy · api · data-model · security
 | Insight | `1012_1200` | admin analytics: monthly metrics, clinic health signals |
 | Hardening | `1012_1300`–`1800` | email outbox, GST invoices, two-person refunds, clinic-granted support access, transcript retention, security events |
 | Booking | `1013_0100`–`0300` | patients booking online, the online-request action, the public page with call-back confirmation |
+| Resilience | `1013_0400` | `job_runs`, `run_database_jobs()`, `job_health()`, the pg_cron schedule |
 
-`supabase db push` applies them in order. **55 tables · 9 views · 139 RLS
+`supabase db push` applies them in order. **56 tables · 9 views · 139 RLS
 policies · 0 tables without RLS.**
 
 ---
@@ -560,10 +619,10 @@ make pairing clinic A's doctor with clinic B's patient a `foreign_key_violation`
 Needs a local PostgreSQL 16 (`brew install postgresql@16`). **No Docker.**
 
 ```bash
-./supabase/tests/run.sh                 # database: 40 migrations + seed, 288 assertions
-npm run test:api                        # API: 122 tests
+./supabase/tests/run.sh                 # database: 41 migrations + seed, 294 assertions
+npm run test:api                        # API: 129 tests
 npm test -w apps/web                    # web unit tests: 94
-npx playwright test -c apps/web         # browser, mock mode: 150 (desktop + mobile)
+npx playwright test -c apps/web         # browser, mock mode: 152 (desktop + mobile)
 npm run typecheck                       # both workspaces
 ```
 
@@ -637,7 +696,8 @@ authenticator QR code.
 | Database | Supabase, `ap-south-1` | `supabase/migrations/` |
 | Scheduled jobs | GitHub Actions | `.github/workflows/` |
 
-Hosts deploy from the branch on every push. Full walkthrough — environment
+Render deploys from the branch once the commit's CI checks pass; Vercel on
+every push. Point an uptime monitor at `/api/health/deep`. Full walkthrough — environment
 variables, Razorpay webhook and capture settings, Supabase URLs, email:
 [`docs/deploy.md`](docs/deploy.md).
 
@@ -647,7 +707,9 @@ variables, Razorpay webhook and capture settings, Supabase URLs, email:
 |---|---|---|
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | API | |
 | `SUPABASE_SERVICE_ROLE_KEY` | API only | bypasses RLS — **never** in the browser |
-| `VOICE_API_KEY` | API | shared secret for machine callers and scheduled jobs; ≥ 32 chars |
+| `VOICE_API_KEY` | API | machine-caller secret (≥ 32 chars); the fallback for the two below |
+| `TELEPHONY_API_KEY`, `WORKER_API_KEY` | API | optional separate keys for telephony and scheduled jobs; comma-separated lists allow rotation. The GitHub secret `SAHVA_WORKER_KEY` must be one of the worker keys |
+| `SCHEDULER` | API | `off` stops the API's own scheduler (pg_cron and GitHub Actions still run the jobs) |
 | `CORS_ORIGINS` | API | both web origins, comma-separated |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | API | `rzp_test_…` keys; live keys are refused outside production |
 | `RESEND_API_KEY`, `EMAIL_FROM`, `WEB_URL`, `ADMIN_URL` | API | email; optional until set |
@@ -677,6 +739,7 @@ retention, security events, and a DPDP review.
 | SMS one-time codes | MSG91, Twilio or similar — then public-page requests become instant, verified bookings instead of call-backs. |
 | Email | Resend with a verified domain (also as Supabase's SMTP). |
 | Live payments | Business details on the legal pages and in Admin → Settings; Razorpay live activation. |
+| Production hosting | Render Starter and Supabase Pro (see [Resilience](#needs-a-decision-or-an-account)), an uptime monitor on `/api/health/deep`, a second super admin. |
 
 **Not blocked on accounts:** the product has not yet been in front of 8–10
 clinic owners. That is the only test of whether any of this was worth building.

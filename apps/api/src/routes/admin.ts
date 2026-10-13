@@ -10,6 +10,7 @@ import { health } from "../lib/health.js";
 import { dbAdmin } from "../lib/supabase.js";
 import { logAdminAction } from "../lib/adminAudit.js";
 import { overview } from "../lib/adminMetrics.js";
+import { systemHealth } from "../lib/systemHealth.js";
 
 /**
  * The admin API. Mounted behind requirePlatformAdmin, so every handler here
@@ -48,6 +49,7 @@ admin.get(
       dbAdmin.rpc("admin_monthly_metrics", { p_months: 1 }),
     ]);
     const approvals = await dbAdmin.from("refund_requests").select("id", { count: "exact", head: true }).eq("status", "pending");
+    const system = await systemHealth().catch(() => ({ ok: false, checks: [{ name: "database", ok: false, detail: "health check failed" }] }));
     // MRR from the payment ledger, as Analytics computes it: what has
     // actually been paid for, not what subscriptions claim. A seeded or
     // comped "active" subscription with no payment is not revenue.
@@ -66,6 +68,7 @@ admin.get(
       openPaymentExceptions: exceptions.count ?? 0,
       applicationsWaiting: queue.count ?? 0,
       refundApprovalsWaiting: approvals.count ?? 0,
+      system,
     });
   }),
 );

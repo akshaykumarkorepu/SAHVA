@@ -1765,6 +1765,33 @@ export type Database = {
           },
         ];
       };
+      job_runs: {
+        Row: {
+          job: string;
+          last_started_at: string | null;
+          last_ok_at: string | null;
+          last_error: string | null;
+          last_source: string | null;
+          runs: number;
+        };
+        Insert: {
+          job: string;
+          last_started_at?: string | null;
+          last_ok_at?: string | null;
+          last_error?: string | null;
+          last_source?: string | null;
+          runs?: number;
+        };
+        Update: {
+          job?: string;
+          last_started_at?: string | null;
+          last_ok_at?: string | null;
+          last_error?: string | null;
+          last_source?: string | null;
+          runs?: number;
+        };
+        Relationships: [];
+      };
       message_templates: {
         Row: {
           id: string;
@@ -3958,6 +3985,10 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      job_health: {
+        Args: Record<string, never>;
+        Returns: { job: string; last_ok_at: string; minutes_since_ok: number; last_error: string; last_source: string }[];
+      };
       log_call_access: {
         Args: {
           p_call_id: string;
@@ -3984,6 +4015,15 @@ export type Database = {
           p_limit?: number;
         };
         Returns: number;
+      };
+      record_job_run: {
+        Args: {
+          p_job: string;
+          p_ok: boolean;
+          p_error?: string;
+          p_source?: string;
+        };
+        Returns: undefined;
       };
       record_payment_exception: {
         Args: {
@@ -4028,6 +4068,12 @@ export type Database = {
           p_grant: string;
         };
         Returns: Database["public"]["Tables"]["support_access_grants"]["Row"];
+      };
+      run_database_jobs: {
+        Args: {
+          p_source?: string;
+        };
+        Returns: Json;
       };
       set_appointment_status: {
         Args: {

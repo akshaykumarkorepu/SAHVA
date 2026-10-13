@@ -96,14 +96,34 @@ export function requireRole(...roles: Enums<"staff_role">[]) {
  * secret compared in constant time. Real carrier webhooks should additionally
  * verify the provider's request signature once telephony lands.
  */
+/**
+ * The accepted keys for a machine caller. Each caller can have its own
+ * (VOICE_/TELEPHONY_/WORKER_API_KEY), so one leaked key does not open the
+ * others; a comma-separated list lets a key be rotated without downtime —
+ * add the new one, switch the caller, remove the old. A caller without its
+ * own key falls back to VOICE_API_KEY.
+ */
+export function serviceKeys(caller: "voice" | "telephony" | "worker", e: Pick<typeof env, "VOICE_API_KEY" | "TELEPHONY_API_KEY" | "WORKER_API_KEY"> = env): Buffer[] {
+  const raw = caller === "telephony" ? e.TELEPHONY_API_KEY : caller === "worker" ? e.WORKER_API_KEY : undefined;
+  return (raw ?? e.VOICE_API_KEY)
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => k.length >= 32)
+    .map((k) => Buffer.from(k));
+}
+
+export function keyMatches(presented: string, keys: Buffer[]): boolean {
+  const p = Buffer.from(presented);
+  // Compare against every key so timing does not reveal which one matched.
+  let ok = false;
+  for (const k of keys) if (p.length === k.length && timingSafeEqual(p, k)) ok = true;
+  return ok;
+}
+
 export function requireServiceKey(caller: "voice" | "telephony" | "worker") {
-  const expected = Buffer.from(env.VOICE_API_KEY);
+  const keys = serviceKeys(caller);
   return (req: Request, _res: Response, next: NextFunction) => {
-    const presented = Buffer.from(req.header("x-sahva-key") ?? "");
-    if (
-      presented.length !== expected.length ||
-      !timingSafeEqual(presented, expected)
-    ) {
+    if (!keyMatches(req.header("x-sahva-key") ?? "", keys)) {
       return next(unauthorized("Invalid service key"));
     }
     req.machine = { caller };

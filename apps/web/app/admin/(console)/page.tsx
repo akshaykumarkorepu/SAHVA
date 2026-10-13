@@ -23,6 +23,14 @@ type Overview = {
   openPaymentExceptions: number;
   applicationsWaiting: number;
   refundApprovalsWaiting?: number;
+  system?: { ok: boolean; checks: { name: string; ok: boolean; detail: string }[] };
+};
+
+const JOB_LABEL: Record<string, string> = {
+  database: "Database",
+  database_jobs: "Scheduled jobs (reminders, invoices, retention, request expiry)",
+  email_sender: "Email sending",
+  payment_reconcile: "Payment reconciliation",
 };
 
 /** The business at a glance. Figures come from /api/admin/overview. */
@@ -60,6 +68,26 @@ export default function AdminOverview() {
                   <strong>{o.refundApprovalsWaiting}</strong> refund{o.refundApprovalsWaiting === 1 ? "" : "s"} waiting for a second approval →
                 </Link>
               )}
+            </section>
+          )}
+          {o.system && (
+            <section aria-label="System health">
+              <h2 className="mb-3 text-sm font-semibold text-ink">System health</h2>
+              <div className="rounded-2xl border border-line bg-surface-raised p-4">
+                <ul className="space-y-1.5 text-sm">
+                  {o.system.checks.map((c) => (
+                    <li key={c.name} className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-2 text-ink">
+                        <span aria-hidden className={c.ok ? "h-2 w-2 rounded-full bg-brand-500" : "h-2 w-2 rounded-full bg-accent-rose"} />
+                        {JOB_LABEL[c.name] ?? c.name}
+                      </span>
+                      <span className={c.ok ? "text-xs text-ink-subtle" : "text-xs font-medium text-accent-rose"}>
+                        {c.ok ? "OK" : "Needs attention"} · {c.detail}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </section>
           )}
           <section>
