@@ -36,3 +36,6 @@ supabase/.branches/
 test-results/
 playwright-report/
 .next-*/
+
+# Local test logins for the hosted database (never commit)
+.test-accounts.md
