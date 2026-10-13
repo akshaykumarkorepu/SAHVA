@@ -1,17 +1,29 @@
 # SAHVA
 
 **Telugu-and-English AI receptionist for solo and small clinics in Tier 2/3 towns.**
-It answers every call, books real appointments off live availability, and never
-lets a schedule change silently cancel a patient without staff knowing.
+It answers every call, books real appointments off live availability, lets
+patients see their record and book online, and never lets a schedule change
+silently cancel a patient without staff knowing.
 
 > **Branch: `saikirans-version`** — maintained by Saikiran.
-> This branch replaces the demo's data and API layers with production ones:
-> a multi-tenant Supabase schema, and an Express API rewritten on top of it with
-> real authentication.
->
-> The frontend has been rebuilt against it: one sign-in for everyone, tenant
-> context, the Action Required queue, write actions, a patient record, and a
-> light-first design system that clears WCAG AA.
+> A multi-tenant Supabase schema, an Express API with real authentication, a
+> clinic dashboard, a patient record and portal, a public booking page per
+> clinic, subscriptions through Razorpay, and a separate admin console for the
+> people who run SAHVA.
+
+---
+
+## Contents
+
+- [Try it in thirty seconds](#try-it-in-thirty-seconds)
+- [How SAHVA works](#how-sahva-works) — architecture, who uses it
+- [Patient journeys](#patient-journeys) — new patient, returning patient
+- [Clinic journey](#clinic-journey) — apply, approval, trial, paying
+- [What each dashboard contains](#what-each-dashboard-contains) — patient, clinic, admin
+- [Behind the scenes](#behind-the-scenes) — emails, scheduled jobs, money, privacy
+- [Repository layout](#repository-layout) · [Migrations](#migrations) · [Design decisions](#three-design-decisions-worth-knowing)
+- [Running the tests](#running-the-tests) · [Running it on localhost](#running-it-on-localhost) · [Deploying](#deploying)
+- [Status and next steps](#status-and-next-steps)
 
 ---
 
@@ -25,49 +37,320 @@ NEXT_PUBLIC_MOCK=1 npm run dev -w apps/web
 ```
 
 Open <http://localhost:3000>. Sign-in is bypassed and every screen is served
-from fixtures in `apps/web/lib/mock/` — the same Sri Sai Clinic the seed
-creates, including the Action Required queue and its reschedule-review flow.
-Writes mutate the fixtures in memory, so resolving an item or dispatching a
-batch behaves correctly until you reload.
+from fixtures in `apps/web/lib/mock/` — Sri Sai Clinic, its doctors, patients,
+the Action Required queue, the patient record (`/me`), the public page
+(`/c/sri-sai-warangal`) and the admin console (`/admin`). Writes change the
+fixtures in memory until you reload.
 
-Mock mode is a review and demo aid, not a test double — the tests run against
-real PostgreSQL. `NEXT_PUBLIC_MOCK` must never be set in a deployed
+Mock mode is a review and demo aid, not a test double — the database tests run
+against real PostgreSQL. `NEXT_PUBLIC_MOCK` must never be set in a deployed
 environment; with it unset the bundler drops the fixtures entirely.
-
-To run it for real, see [`docs/setup.md`](docs/setup.md).
 
 ---
 
-## What's in this branch
+## How SAHVA works
 
-| | `main` | `saikirans-version` |
+### Architecture
+
+```mermaid
+flowchart LR
+  subgraph People
+    P1[New patient]
+    P2[Returning patient]
+    ST[Clinic staff<br/>owner · manager · receptionist · doctor]
+    AD[SAHVA admins]
+  end
+
+  subgraph Web["Next.js — one codebase, two deployments"]
+    CS["Clinic site<br/>SITE_MODE=clinic<br/>/ · /signin · /dashboard · /me<br/>/p/link · /c/clinic · /display"]
+    AC["Admin console<br/>SITE_MODE=admin<br/>/admin/*"]
+  end
+
+  API["Express API<br/>Render · /api/*"]
+  DB[("Supabase<br/>PostgreSQL + Auth<br/>ap-south-1 (Mumbai)<br/>RLS on every table")]
+
+  RZ[Razorpay<br/>payments, refunds, webhooks]
+  RS[Resend<br/>email]
+  LLM[Claude<br/>voice turns]
+  TEL[Telephony + WhatsApp<br/>not connected yet]
+  GH[GitHub Actions<br/>every 15 min · nightly]
+
+  P1 & P2 --> CS
+  ST --> CS
+  AD --> AC
+  P1 -. phone call .-> TEL
+  TEL -.-> API
+  CS --> API
+  AC --> API
+  CS -- sign-in --> DB
+  AC -- sign-in + 2FA --> DB
+  API --> DB
+  API --> RZ
+  RZ -- webhooks --> API
+  API --> RS
+  API --> LLM
+  GH --> API
+```
+
+- **One database is the authority.** Availability, double-booking, who may see
+  what, clinic verification, the trial and grace rules, money and audit trails
+  are enforced in PostgreSQL (functions, constraints, triggers, row-level
+  security) — not in the browser and not in the AI.
+- **The browser never holds a secret.** Pages call the API with the user's own
+  session; the API uses the service key only server-side, after its own checks.
+- **The clinic site and the admin console are the same app deployed twice**
+  (`SITE_MODE`): `/admin` does not exist on the clinic site, and the console
+  serves nothing else. Admin sign-in always needs an authenticator code.
+
+### Who uses it
+
+| | Who | Where | How they sign in |
+|---|---|---|---|
+| **New patient** | Has never visited the clinic | Phone call, walk-in, or the clinic's public page `/c/<clinic>` | No account needed |
+| **Returning patient** | Has a record at the clinic | The WhatsApp link `/p/<link>`, or their record at `/me` | The link itself, or email + password (account created from the link) |
+| **Clinic staff** | Owner, manager, receptionist, doctor | `/dashboard` | Email + password; owners apply, staff are invited |
+| **SAHVA admin** | The people who run SAHVA | Admin console `/admin` (own domain) | Email + password + authenticator code, every time |
+
+---
+
+## Patient journeys
+
+### A new patient
+
+There are three ways in. Each one ends with the patient's record in the
+clinic's diary and a WhatsApp link in their hand.
+
+```mermaid
+flowchart TD
+  A[New patient] --> B{How do they reach the clinic?}
+  B -- Calls the clinic number --> C[AI receptionist answers in Telugu/English<br/>checks live slots, books]
+  B -- Walks in --> D[Front desk books in the diary<br/>or walk-in fast pass → token]
+  B -- Finds the clinic's public page --> E["Public page /c/clinic: doctors, timings, fees<br/>picks a slot, gives name + mobile"]
+  E --> F[Request holds the slot · unverified<br/>Action Required: 'call to confirm']
+  F -- Clinic calls, Confirm --> G[Appointment confirmed]
+  F -- No answer / not real, Cancel --> X[Slot released]
+  F -- Nobody confirms in 24 h --> X
+  C --> G
+  D --> G
+  G --> H[Patient record created<br/>WhatsApp link sent]
+  H --> I[Visit · token number · consultation]
+  I --> J[From the link: Create account<br/>no email code — the link proves the phone]
+  J --> K[Signed-in record at /me]
+```
+
+1. **Phone.** The AI receptionist answers, finds a free slot against the live
+   diary and books it. The database re-checks the slot inside the transaction,
+   so a slot the AI "thought" was free cannot be double-booked.
+2. **Walk-in.** The front desk books them, or uses the walk-in fast pass (name +
+   phone → next token number).
+3. **Public page `/c/<clinic>`** — for someone who found the clinic online. They
+   see the doctors, specialities, timings and fees, pick a free slot and give
+   their name and mobile number. Until SMS one-time codes are set up, the number
+   is not proven, so the request **holds the slot as unverified** and the clinic
+   gets an urgent **"Online request — call to confirm"** item. Confirming makes it
+   a normal appointment; unconfirmed requests are released after 24 hours (or 1
+   hour before the slot). Limits: 2 hours to 14 days ahead, one open request per
+   number, 20 unconfirmed per clinic per day, 5 per connection per hour.
+
+After the first booking the patient has a record at that clinic and a **link**
+(`/p/<link>`) for their appointment. From the link they can **create an
+account** — no email verification, because holding the link already proves the
+phone the clinic has on file.
+
+### A returning patient
+
+| Through the WhatsApp link `/p/<link>` (no sign-in) | Signed in at `/me` |
+|---|---|
+| See their appointment: doctor, time, token number and how many patients are ahead | Everything on the left, plus the full record |
+| Confirm it | Book a new appointment with any of the clinic's doctors |
+| Reschedule to a free slot with the same doctor (if the clinic allows) | Visits, medicines, vaccines, bills, care tasks |
+| Cancel (if the clinic allows, within its window) | Switch between clinics, if registered at more than one |
+| Clinic hours, call, directions; share the time with family on WhatsApp | Print a prescription |
+| Create an account | |
+
+A patient who already has an account simply signs in at `/signin`. Sign-in
+always lands people where their account belongs — staff on the dashboard,
+patients on `/me` — whichever tab they clicked.
+
+---
+
+## Clinic journey
+
+```mermaid
+flowchart LR
+  A[Owner signs up<br/>and applies] --> B[Submitted<br/>HFR ID or state reg +<br/>doctor's council reg]
+  B --> C{SAHVA reviewer}
+  C -- needs info --> B
+  C -- rejected --> R[Rejected]
+  C -- approved --> D[Live · 14-day free trial]
+  D --> E[Sets up doctors, hours,<br/>FAQs, staff]
+  D --> F{Pays?}
+  F -- ₹1,999/month or ₹9,999/year --> G[Active · GST invoice]
+  F -- trial/plan ends --> H[3-day grace<br/>still live, warned]
+  H -- pays --> G
+  H -- no payment --> I[Read-only<br/>nothing patient-facing]
+  I -- pays --> G
+  G -- renewal due --> F
+  D & G -.-> S[Suspended by admin<br/>with a reason] -.-> D
+```
+
+- **Apply.** The owner signs up at `/signin` (Clinic staff → create account),
+  then submits the clinic: name, address, phone, **HFR ID or state
+  clinical-establishment registration**, the owner doctor's **medical council
+  registration**, optional GSTIN, and documents.
+- **While under review** the clinic can set up doctors, hours, FAQs and staff,
+  but **nothing patient-facing runs**: no AI bookings, no WhatsApp or online
+  bookings, no patient links, no public page.
+- **Approval** starts a **14-day free trial**. Plans are prepaid through
+  Razorpay — **₹1,999/month or ₹9,999/year, GST included where it applies** — and
+  never renew on their own.
+- **Lapse.** When a trial or paid period ends there are **3 days of grace**
+  (everything works, reminders go out), then the clinic becomes **read-only**:
+  its data stays visible, nothing patient-facing runs, until it pays.
+- Every payment gets a **GST invoice**, every refund a **credit note**.
+
+---
+
+## What each dashboard contains
+
+### Patient — WhatsApp portal `/p/<link>`
+
+No sign-in; the link is the key. Hashed, expiring, scoped to scheduling only —
+it never reaches medical records. In the patient's language (Telugu or English).
+
+- Upcoming appointment: doctor, time, **token number, patients ahead**
+- **Confirm**, **reschedule** (free slots for the same doctor), **cancel** — each
+  only if the clinic allows it
+- Clinic hours, call, directions; "tell family on WhatsApp" (without the link)
+- **Create account** → the signed-in record
+
+### Patient — signed-in record `/me`
+
+| Area | What the patient sees and can do |
+|---|---|
+| Header | Their name, clinic, Telugu/English switch, sign out; clinic switcher if registered at several SAHVA clinics |
+| Next appointment | Date, time, doctor and speciality, status, fee; call the clinic, directions |
+| Quick actions | Call · **Book** · Medicines · Records |
+| Summary tiles | Medicines being taken, amount owed, ongoing conditions |
+| Care tasks | Follow-ups and reminders the clinic set |
+| **Your clinic** | Every doctor — speciality, qualifications, weekly timings, languages, fee — with **Book**: pick a day the doctor sits, then a free slot (books straight into the diary; at most 2 open online bookings); clinic hours and closures; services and prices; common questions |
+| Visits | Past consultations, doctor and speciality |
+| Medicines | Prescriptions with a dosage chart; printable prescription (`/me/rx/<id>`) |
+| Vaccines | Given and due |
+| Bills | The clinic's invoices to the patient |
+| Sidebar | Current conditions, clinic card, "your record is private" |
+
+Every time a patient's medical record or profile is opened — by the patient,
+by staff, or by SAHVA support — it is written to an access log the clinic owner
+can see.
+
+### Clinic — staff dashboard `/dashboard`
+
+| Page | What it is | Owner | Manager | Receptionist / Doctor |
+|---|---|:-:|:-:|:-:|
+| **Overview** | Today: appointments with tokens, live updates, what needs attention | ✓ | ✓ | ✓ |
+| **Action Required** | Everything that needs a person: reschedules after a doctor's leave (review → call → rebook), **online requests to call back**, AI escalations, low-confidence calls, failed messages, refused bookings, dropped calls | ✓ | ✓ | ✓ |
+| **Appointments** | The diary: day view per doctor, book, walk-in fast pass, confirm, check in, complete, no-show, reschedule, cancel; unverified online requests are marked | ✓ | ✓ | ✓ |
+| **Calls** | Every AI call: outcome, language, summary, transcript, what the AI tried and what the database refused | ✓ | ✓ | ✓ (transcripts can be hidden from receptionists) |
+| **Patients** | Search, profile, appointments, medical record, issue a portal link; who opened this record (access log) | ✓ | ✓ | ✓ (access log: owner & manager) |
+| **Analytics** | Calls, bookings, AI share, no-shows, recovered missed calls | ✓ | ✓ | ✓ |
+| **Settings → AI permissions** | What the AI may do (book, reschedule, cancel), notice, horizon, reminders, escalation number; **Online booking**: the public page link and its switches | ✓ | ✓ | — |
+| **Settings → Doctors & schedule** | Doctors, specialities, fees, weekly sessions, leave | ✓ | ✓ | — |
+| **Settings → Hours & closures** | Clinic hours, holidays | ✓ | ✓ | — |
+| **Settings → Knowledge base** | FAQs and services the AI and the public page use | ✓ | ✓ | — |
+| **Settings → Staff** | Invite staff, change roles, suspend | ✓ | ✓ | — |
+| **Settings → Billing** | Trial/plan status, pay monthly or yearly, payment history, **GST invoices and credit notes** | ✓ | ✓ | — |
+| **Settings → Privacy & support** | Transcript retention (30–365 days) and receptionist visibility; **open support access** for SAHVA for 1–72 hours | ✓ (changes) | view | — |
+| **Verification** | The application's status, the reviewer's notes, edit and resubmit | ✓ | — | — |
+| **Waiting-room screen** `/display` | Full-screen token board for a TV | ✓ | ✓ | ✓ |
+
+Banners at the top tell the clinic when it is under review, on trial, in grace,
+or read-only.
+
+### SAHVA admin console `/admin` (separate deployment)
+
+Sign-in: password **and** authenticator code, every time; every action is
+written to an append-only audit log. Admin accounts can never belong to a
+clinic, and patients are never visible except through access the clinic grants.
+
+| Page | What it is | Who |
 |---|---|---|
-| Database | SQLite, one hardcoded clinic | **Supabase / PostgreSQL, multi-tenant** |
-| Tenant isolation | none | **133 RLS policies + composite foreign keys** |
-| **API authentication** | **middleware existed, never mounted** | **mounted; clinic resolved from `clinic_members`** |
-| Availability | TypeScript, computed in the API | **`sahva.available_slots()`, computed in the DB** |
-| Double-booking | application check only | **impossible — `EXCLUDE USING gist` constraint** |
-| Action Required flow | did not exist | **trigger + `/api/actions`, tested** |
-| Knowledge base | hardcoded in the system prompt | **`clinic_faqs` + `clinic_services`, per clinic** |
-| Conversation state | round-tripped through the browser | **server-side, in `call_turns`** |
-| Unit economics | not measured | **metered per turn into `usage_events`** |
-| Request validation | none | **zod on every body, query and param** |
-| Rate limiting / headers | none | **`express-rate-limit` + `helmet`** |
-| Logging | `console.log` | **structured `pino`, redacted, request-correlated** |
-| Types | hand-written | **generated from the schema; CI fails on drift** |
-| **Sign-in** | **none — dashboard wide open** | **one `/signin` with a role toggle, OAuth, reset** |
-| **Action Required UI** | **did not exist** | **queue, live badge, batch review, dispatch** |
-| **Write actions** | **read-only dashboard** | **book / reschedule / cancel / check-in** |
-| **Mobile** | **nav unreachable below 768px** | **bottom tab bar; one nav definition for both** |
-| **Patient-facing** | **none** | **WhatsApp portal + a full signed-in record** |
-| **Design system** | **—** | **light-first tokens, every ink level ≥ AA** |
-| **Review without Supabase** | **—** | **`NEXT_PUBLIC_MOCK=1` serves the whole UI** |
-| Tests / CI | none | **65 DB assertions + 66 API tests + typecheck + build** |
+| **Overview** | Clinics, MRR and ARR from the payment ledger, paying clinics, trials ending, payments this month; links to applications waiting, payment problems and refunds awaiting approval | all |
+| **Applications** | The review queue: IDs, council registration, documents, possible duplicates; start review, approve (starts the trial), ask for information, reject — reasons required | reviewer |
+| **Clinics** | Every clinic's stage (review, trial, paying, grace, read-only, suspended) with an attention filter; per clinic: usage counts (never patient names), payments and invoices, staff, notes, history, **emails sent to the owner**, extend a trial or paid period with a reason, **support access** when the clinic has granted it | all; extend: finance; support access: support |
+| **Payments → Ledger** | Every order and payment; refund (policy suggested; above ₹2,000 needs a second admin); invoice links | finance |
+| **Payments → Refund approvals** | Large refunds waiting for a *different* finance admin to approve (refunds through Razorpay) or decline | finance |
+| **Payments → Exceptions** | Paid-not-activated, duplicates, wrong amounts, held payments, failed refunds, disputes — with the fix for each | finance |
+| **Payments → Webhook events** | Every Razorpay webhook, verified or not; check unfinished orders with Razorpay | finance |
+| **Analytics** | MRR by month, bookings across clinics, a month-by-month table, **clinic health** scores with reasons | all |
+| **Security** | Failed sign-ins, denied requests, invalid patient links, rate limiting, staff role changes; most-refused addresses | all |
+| **Audit log** | Every admin action, who, when and why | all |
+| **Settings** | SAHVA's business details for invoices (legal name, address, GSTIN, PAN, SAC, GST rate) and the refund approval limit | super admin edits |
 
-**38 tables · 9 views · 133 indexes · 133 RLS policies · 0 tables without RLS.**
+Admin roles: **super admin** (everything), **reviewer** (applications),
+**finance** (money), **support** (notes, clinic-granted access), **analyst**
+(read-only analytics).
 
-`main`'s README lists *"swap to Postgres when going multi-tenant"* under
-*Deploying later*. This branch is that swap, plus the API rewrite it forces.
+### Public pages
+
+| Page | |
+|---|---|
+| `/` | Landing page: product, Telugu, pricing, FAQ |
+| `/c/<clinic>` | The clinic's public page and booking requests |
+| `/signin`, `/forgot-password` | One door for patients and staff |
+| `/terms`, `/privacy`, `/refund-policy`, `/contact` | Required by Razorpay before live payments |
+
+---
+
+## Behind the scenes
+
+### Emails and scheduled jobs
+
+Every event that should be announced is written to an **email outbox** in the
+same transaction as the change, so nothing is announced that rolled back and
+nothing that happened is missed. A job every 15 minutes
+(`.github/workflows/notifications.yml` → `POST /api/internal/notifications/run`):
+
+- queues reminders — trial or plan ending (3 days, 1 day), entering grace;
+- issues any GST invoices still owed;
+- deletes call transcripts past each clinic's retention;
+- releases unconfirmed public-page requests;
+- raises security alerts for bursts of refused requests;
+- sends queued emails through Resend (five tries, never later than 7 days).
+
+Owners hear about their application, suspension, trial and plan endings,
+payments received or failed, and refunds. Admins hear about new applications,
+payment exceptions (disputes marked urgent), refunds awaiting approval, support
+access granted, security bursts, and get a daily digest. **No email ever
+contains patient data.**
+
+A nightly job (`reconcile-payments.yml`) checks every unfinished Razorpay order
+against Razorpay.
+
+### Money
+
+Razorpay Orders → Checkout → signature verified **and** the capture confirmed
+with Razorpay → the subscription extends. Webhooks (`payment.captured`,
+`payment.failed`, refunds, disputes) are stored, deduplicated and acted on once.
+Wrong amounts, duplicates and held payments become exceptions for an admin, not
+silent errors. Refunds above ₹2,000 need two finance admins. Invoices and
+credit notes are numbered without gaps per financial year and can never be
+edited.
+
+### Privacy and security
+
+- **Row-level security on all 55 tables**, keyed on clinic membership; composite
+  foreign keys make cross-clinic mixing impossible even for the service role.
+- **Every read of a medical record or call transcript is logged** (fail-closed);
+  owners see who looked.
+- **SAHVA admins see counts, never patients.** Support can look at a patient
+  only while the **clinic owner** has opened access (1–72 hours), and every look
+  shows in that patient's access log.
+- **Transcripts** are deleted after the clinic's retention period; owners
+  choose whether receptionists can read them.
+- **Security events** (refused requests, role changes) are recorded and bursts
+  alerted.
+- DPDP Act 2023 review and the open gaps: [`docs/security.md`](docs/security.md).
 
 ---
 
@@ -75,77 +358,59 @@ To run it for real, see [`docs/setup.md`](docs/setup.md).
 
 ```
 apps/
-├── api/                  REWRITTEN — Express on Supabase, no SQLite
+├── api/                      Express on Supabase (Render)
 │   └── src/
-│       ├── config/env.ts         zod-validated config; refuses to boot if wrong
-│       ├── lib/                  supabase clients, errors, logger, usage, templates
-│       ├── middleware/           auth, validation, request context, error handler
-│       ├── claude/               lazily-built client, tools, per-clinic prompt
-│       ├── tools/                the 4 tools, backed by guarded RPCs
-│       └── routes/               clinic doctors patients appointments calls
-│                                 analytics actions messages voice
-└── web/                  REBUILT — Next.js on the API, with auth
-    ├── app/page.tsx              landing page: product, pricing, economics
-    ├── app/signin                one door — patient/staff toggle, OAuth, sign-up
-    ├── app/forgot-password       reset request (never discloses who exists)
-    ├── app/auth/callback         where OAuth and email links land
-    ├── app/dashboard             overview · actions · appointments · calls
-    │                             patients · analytics
-    ├── app/dashboard/settings    AI permissions · doctors & schedule
-    │                             hours & closures · knowledge base · staff
-    ├── app/me                    signed-in patient record — visits, medicines,
-    │                             vaccines, care tasks, bills
-    ├── app/p/[token]             WhatsApp portal — no login, logistics only
-    ├── components/shell          desktop rail + mobile tabs, one nav definition
-    └── lib/
-        ├── mock/                 fixtures for NEXT_PUBLIC_MOCK=1
-        └── …                     api client, session, hooks, formatting
+│       ├── config/env.ts     zod-validated config; refuses to boot if wrong
+│       ├── middleware/       staff auth, patient auth, portal links, admin (2FA),
+│       │                     validation, rate limits, request context, errors
+│       ├── lib/              supabase clients, razorpay, reconcile, notifications,
+│       │                     email templates, invoices, clinic profile, security events
+│       ├── claude/ tools/    the AI receptionist: prompt, tools backed by guarded RPCs
+│       └── routes/           clinic doctors patients appointments calls analytics
+│                             actions messages voice billing onboarding portal
+│                             patientAccount publicClinic admin razorpayWebhook
+└── web/                      Next.js (Vercel, deployed twice)
+    ├── app/page.tsx          landing page
+    ├── app/signin            one door: patient / clinic staff, sign-up, reset
+    ├── app/dashboard         overview · actions · appointments · calls · patients
+    │                         analytics · settings/* · verification · invoices
+    ├── app/me                signed-in patient record + Your clinic + booking
+    ├── app/p/[token]         WhatsApp portal (no sign-in)
+    ├── app/c/[slug]          clinic public page + booking requests
+    ├── app/display           waiting-room token screen
+    ├── app/admin             admin console: sign-in (2FA) + (console)/*
+    ├── components/           shell, dashboard, diary, patient, admin, billing,
+    │                         HeartLoader, ui
+    ├── middleware.ts         SITE_MODE routing (clinic site vs admin console)
+    └── lib/mock/             fixtures for NEXT_PUBLIC_MOCK=1
 
-packages/
-└── types/                Database types generated from the schema
-
-supabase/                 the data layer
-├── migrations/           18 ordered migrations
-├── seed.sql              one pilot clinic with realistic data
-└── tests/run.sh          applies everything + 65 assertions, no Docker
-
-scripts/
-├── bootstrap-supabase.sh scripts all of Phase 0 — create, push, seed, verify
-├── introspect.sql        dumps the live schema as JSON
-└── gen-types.py          renders packages/types/database.ts from it
-
-docs/
-├── setup.md              Phase 0 runbook — what you must do in Supabase
-├── api.md                endpoints, auth model, error codes
-├── status.md             what `main` had, and the gap to the Phase 1 wedge
-├── data-model.md         table-by-table design rationale
-└── security.md           the RLS model and its threat assumptions
+packages/types/               database types generated from the schema
+supabase/
+├── migrations/               40 ordered migrations
+├── seed.sql                  a pilot clinic with realistic data
+└── tests/                    run.sh + 288 assertions, no Docker
+scripts/                      bootstrap-supabase.sh, gen-types.py, copy-env.sh
+docs/                         setup · deploy · api · data-model · security
+                              roadmap · upgrade-plan · admin-plan
+.github/workflows/            CI, notifications (15 min), payment reconciliation (nightly)
 ```
 
 ---
 
 ## Migrations
 
-| # | File | Contents |
+| Group | Files | What they add |
 |---|---|---|
-| 0100 | `foundation` | extensions, private `sahva` schema, 34 enums, `touch_updated_at` |
-| 0200 | `tenancy_and_staff` | `clinics`, `clinic_settings`, hours, closures, `staff_profiles`, `clinic_members` |
-| 0300 | `doctors_and_schedule` | `doctors`, `doctor_sessions`, `doctor_time_off` |
-| 0400 | `patients` | `patients`, with family-aware identity |
-| 0500 | `appointments` | `appointments` + the no-double-booking EXCLUDE constraint, `appointment_events` |
-| 0600 | `calls` | `calls`, `call_turns`, `call_tool_invocations`, `call_summaries` |
-| 0700 | `knowledge_base` | `clinic_services`, `clinic_faqs` |
-| 0800 | `action_required` | `action_items`, `reschedule_batches`, `reschedule_batch_items` |
-| 0900 | `messaging` | `message_templates`, `messages` |
-| 1000 | `billing_and_usage` | `plans`, `subscriptions`, `usage_events`, `subscription_invoices` |
-| 1100 | `clinical_phase2` | consultations, prescriptions, conditions, vaccinations, care loops, patient invoices |
-| 1200 | `functions_access` | `current_clinic_ids()`, `is_member()`, `has_role()`, `assert_clinic_access()` |
-| 1300 | `functions_scheduling` | `available_slots()`, `book_appointment()`, `cancel_`, `reschedule_` |
-| 1400 | `trust_flow` | the Action Required triggers |
-| 1450 | `views` | dashboard views, all `security_invoker` |
-| 1500 | `rls` | the policy set — every public table, no exceptions |
-| 1700 | `patient_portal` | `patient_access_tokens` — hashed, expiring WhatsApp links |
-| 1800 | `patient_accounts` | links an auth user to a patient record |
+| Foundation | `0925_0100`–`1500` | tenancy, staff, doctors and schedules, patients, appointments (no double booking), calls, knowledge base, Action Required and reschedule batches, messaging, billing and usage, clinical records, scheduling functions, trust-flow triggers, views, the RLS policy set |
+| Patients | `1700`, `1800` | hashed portal links; patient accounts |
+| Operations | `1012_0100`–`0600` | clinic-local times, realtime, status changes with audit, batch progress, token numbers, record access log |
+| Business | `1012_0700`–`1100` | signup + Razorpay billing, platform admins + audit log, clinic verification, admin clinic tools and the expiry rule, payment operations (webhooks, exceptions, refunds) |
+| Insight | `1012_1200` | admin analytics: monthly metrics, clinic health signals |
+| Hardening | `1012_1300`–`1800` | email outbox, GST invoices, two-person refunds, clinic-granted support access, transcript retention, security events |
+| Booking | `1013_0100`–`0300` | patients booking online, the online-request action, the public page with call-back confirmation |
+
+`supabase db push` applies them in order. **55 tables · 9 views · 139 RLS
+policies · 0 tables without RLS.**
 
 ---
 
@@ -164,268 +429,167 @@ exclude using gist (
 ) where (status in ('booked','confirmed','checked_in'))
 ```
 
-Two simultaneous callers can both pass the availability check; only one commits.
-A hallucinated slot cannot become a real double booking.
+Two simultaneous callers can both pass the availability check; only one
+commits. The AI, the front desk, a signed-in patient and a public-page visitor
+all book through the same function.
 
 ### 2. A doctor going unavailable creates work, never a silent cancellation
 
-Inserting a row into `doctor_time_off` fires a trigger that:
-
-1. opens a **draft** `reschedule_batch`;
-2. moves affected appointments to `needs_reschedule` — keeping the row, the
-   patient link and the history, and freeing the slot;
-3. writes a `flagged_for_reschedule` audit event per appointment;
-4. tracks one `reschedule_batch_item` per affected patient;
-5. raises one `action_items` row, severity scaled by how soon the window starts.
-
-Nothing is cancelled. No patient is messaged. A CHECK constraint
-(`reschedule_batches_human_dispatch`) blocks the batch from leaving draft
-without a named human dispatcher.
-
-It is a database trigger rather than application code so the guarantee holds
-regardless of which client wrote the row — dashboard, API, or psql.
+Inserting a row into `doctor_time_off` opens a **draft** reschedule batch,
+moves affected appointments to `needs_reschedule` (keeping them), records an
+audit event per appointment and raises one Action Required item. Nothing is
+cancelled and no patient is messaged until a named person dispatches the batch
+— a CHECK constraint enforces it. It is a trigger so the guarantee holds for
+every client.
 
 ### 3. Tenant isolation is structural, not conventional
 
-Every tenant table carries `clinic_id` and is covered by RLS keyed on clinic
-membership through a single function, `sahva.current_clinic_ids()`.
-
-Underneath that, cross-tenant mixing is blocked by **composite foreign keys**:
-
-```sql
-unique (id, clinic_id)                                  -- on doctors, patients
-foreign key (doctor_id, clinic_id)
-  references public.doctors(id, clinic_id)              -- on appointments
-```
-
-Pairing clinic A's doctor with clinic B's patient raises
-`foreign_key_violation`. This holds for `service_role` too — which the
-telephony webhook must use, since an inbound call carries no user JWT — so the
-guarantee survives a bug in the voice agent.
+Every tenant table carries `clinic_id` and is covered by RLS keyed on
+membership through `sahva.current_clinic_ids()`. Underneath, **composite
+foreign keys** (`(doctor_id, clinic_id) references doctors(id, clinic_id)`)
+make pairing clinic A's doctor with clinic B's patient a `foreign_key_violation`
+— for the service role too.
 
 ---
 
 ## Running the tests
 
-Needs a local PostgreSQL 16 (`brew install postgresql@16`). **No Docker
-required.**
+Needs a local PostgreSQL 16 (`brew install postgresql@16`). **No Docker.**
 
 ```bash
-./supabase/tests/run.sh    # database
-npm run test:api           # API
-npm run typecheck          # both workspaces
+./supabase/tests/run.sh                 # database: 40 migrations + seed, 288 assertions
+npm run test:api                        # API: 122 tests
+npm test -w apps/web                    # web unit tests: 94
+npx playwright test -c apps/web         # browser, mock mode: 150 (desktop + mobile)
+npm run typecheck                       # both workspaces
 ```
 
-`run.sh` spins up a throwaway cluster, applies all 18 migrations plus the seed,
-and runs 65 assertions covering slot generation, double-booking, the AI
-cancellation gate, the trust flow, the append-only audit log, cross-tenant
-foreign keys, and RLS isolation across staff, a second clinic's owner, and a
-signed-in patient.
-
-```
-migrations applied: 18
-assertions passed:  65
-assertions failed:  0
-```
+CI runs all of these plus a production build, and fails if
+`packages/types/database.ts` has drifted from the schema.
 
 > `run.sh` deliberately does **not** pipe `psql` into `grep`: a pipeline returns
-> the exit status of its *last* command, so that pattern throws the failure away
-> and reports success while assertions are failing.
-
----
-
-## Deploying the database
-
-Everything in [`docs/setup.md`](docs/setup.md) that can be scripted, is:
-
-```bash
-brew install supabase/tap/supabase jq
-
-SUPABASE_ACCESS_TOKEN=sbp_... \
-SAHVA_OWNER_EMAIL=you@example.com \
-  ./scripts/bootstrap-supabase.sh
-```
-
-It creates the project in `ap-south-1`, pushes every migration, seeds, asserts
-that no public table has RLS disabled, mints the first owner and their
-`clinic_members` row, writes `.env`, and regenerates the types. It is
-idempotent. By hand:
-
-```bash
-supabase link --project-ref <ref>
-supabase db push
-```
-
-The migrations assume hosted Supabase provides `auth.users`, `auth.uid()`,
-`auth.role()` and the `anon` / `authenticated` / `service_role` roles.
-
-> `supabase/tests/00_supabase_shim.sql` recreates those locally for testing and
-> is **not** a migration. Never apply it to a hosted project.
-
-### Environment
-
-| Variable | Required | Notes |
-|---|---|---|
-| `SUPABASE_URL` | yes | project URL |
-| `SUPABASE_ANON_KEY` | yes | browser / user-JWT requests |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes (server only) | telephony webhook, workers. **Never ship to the browser.** |
-| `VOICE_API_KEY` | yes | shared secret for machine callers; ≥ 32 chars |
-| `ANTHROPIC_API_KEY` | no | only the voice route uses it; without it a voice turn returns `AI_NOT_CONFIGURED` and nothing else is affected |
-| `REDIS_URL` | no | rate-limit counters; in-memory and per-instance without it |
-| `NEXT_PUBLIC_MOCK` | no | `1` serves the web app from fixtures. **Never set in a deployed environment.** |
+> the exit status of its *last* command, which would hide failing assertions.
 
 ---
 
 ## Running it on localhost
 
-### Prerequisites
-
-| | | |
-|---|---|---|
-| Node | **22 or newer** | `engines` enforces it; the API uses `node:` built-ins and native `--test` |
-| npm | 10+ | ships with Node 22 |
-| PostgreSQL 16 | only for `test:db` | `brew install postgresql@16`. **No Docker anywhere.** |
-| Supabase CLI + jq | only for the bootstrap script | `brew install supabase/tap/supabase jq` |
-
 ```bash
 git clone https://github.com/akshaykumarkorepu/SAHVA.git
 cd SAHVA && git checkout saikirans-version
-npm install          # one install for the whole workspace
+npm install
 ```
 
-### Option A — no backend at all
+`.env` goes at the repo root (see `.env.example`); both apps find it. With a
+Supabase project configured, run three terminals:
 
 ```bash
-NEXT_PUBLIC_MOCK=1 npm run dev -w apps/web
+# 1 — API on :4000
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001 npm run dev -w apps/api
 ```
 
-<http://localhost:3000>. Sign-in is bypassed, every screen is served from
-`apps/web/lib/mock/`. Nothing is installed, nothing is configured, no keys.
-Use this to look at the product or demo it.
-
-### Option B — the real stack
-
-Needs a Supabase project. `./scripts/bootstrap-supabase.sh` creates one and
-writes `.env` for you; see [`docs/setup.md`](docs/setup.md). Then:
+```bash
+# 2 — clinic site on :3000
+cd apps/web && SITE_MODE=clinic npx next dev -p 3000
+```
 
 ```bash
-npm run dev          # api on :4000, web on :3000, one terminal
+# 3 — admin console on :3001 (its own build folder)
+cd apps/web && SITE_MODE=admin NEXT_DIST_DIR=.next-admin npx next dev -p 3001
 ```
 
 | | |
 |---|---|
-| Web | <http://localhost:3000> |
+| Clinic site | <http://localhost:3000> (`/signin`, `/dashboard`, `/me`, `/c/sri-sai-warangal`) |
+| Admin console | <http://localhost:3001> |
 | API health | <http://localhost:4000/api/health> |
-| Sign in | <http://localhost:3000/signin> |
 
-Or run them separately — `npm run dev:api`, `npm run dev:web`.
-
-`.env` goes at the **repo root**. Both apps walk up to find it, so one file
-covers both; a real environment variable still wins over it.
-
-### Signing in
-
-One page, `/signin`, with a Patient / Clinic staff toggle that decides where
-you land. Staff cannot self-register — `enable_signup` is false, so a clinic's
-staff list is not something a stranger adds themselves to.
+Test logins for the hosted database live in a local, git-ignored
+`.test-accounts.md`. The first platform admin is made with
+`select sahva.grant_platform_admin('you@example.com', 'super_admin', 'Your Name');`
+in the Supabase SQL editor, then signing in at `/admin/signin` and scanning the
+authenticator QR code.
 
 ### When it does not work
 
 | Symptom | Cause |
 |---|---|
-| **"Supabase is not configured"** | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` missing. Restart the dev server — Next reads them at startup. |
-| **API exits listing every variable as missing** | No `.env` found. Put it at the repo root, or export the variables. |
-| **`403 FORBIDDEN — not an active member of any clinic`** | The signed-in user has no `clinic_members` row. Correct behaviour: the clinic is resolved from membership, never from the request. |
-| **Signed in, but no `staff_profiles` row** | The auth user needs `account_type: "staff"` in its metadata. `handle_new_auth_user()` returns early for anything else, because patients are not staff. |
-| **Every JS and CSS file 404s in dev** | You ran `npm run build` while `npm run dev` was up. They share `apps/web/.next`. `rm -rf apps/web/.next` and restart. |
-| **Port already in use** | `lsof -ti:3000 \| xargs kill` (or `:4000`). |
-
-### Checks
-
-```bash
-npm run typecheck    # both workspaces
-npm run test:api     # no database needed
-npm run test:db      # throwaway PostgreSQL cluster
-```
-
-See [Running the tests](#running-the-tests) for what each covers. CI runs all
-three plus a production build, and fails if `packages/types/database.ts` has
-drifted from the schema.
+| **"Supabase is not configured"** | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` missing; restart the dev server. |
+| **API exits listing variables** | No `.env` found, or a value is malformed (blank optional values are fine). |
+| **Staff login lands on clinic registration** | The account has a staff profile but no clinic yet — that *is* the registration step. A patient account never sees it. |
+| **"This account is not linked to a patient record"** | A patient login that was not created from a clinic's link. Open the link the clinic sent. |
+| **Sign-up says confirmation emails are rate limited** | Supabase's built-in email sender; set up SMTP with Resend (see `docs/deploy.md`). |
+| **Every JS file 404s in dev** | `npm run build` ran while dev was up — they share `.next`. Delete it and restart. |
+| **Port already in use** | `lsof -ti:3000 \| xargs kill` (or `:3001`, `:4000`). |
 
 ---
 
 ## Deploying
 
-GitHub does not host this — it is two Node servers. GitHub is what the hosts
-watch.
-
-| Piece | Host | Config in repo |
+| Piece | Host | Config |
 |---|---|---|
-| `apps/web` | Vercel (Root Directory `apps/web`) | `apps/web/vercel.json` |
-| `apps/api` | Render | `render.yaml` |
-| Database | Supabase | `supabase/migrations/` |
+| API | Render (blueprint) | `render.yaml` |
+| Clinic site | Vercel project 1 — Root Directory `apps/web`, `SITE_MODE=clinic` | `apps/web/vercel.json` |
+| Admin console | Vercel project 2 — same code, `SITE_MODE=admin` | `apps/web/vercel.json` |
+| Database | Supabase, `ap-south-1` | `supabase/migrations/` |
+| Scheduled jobs | GitHub Actions | `.github/workflows/` |
 
-Both redeploy on every push to `saikirans-version`. Full walkthrough, including
-the environment variables and what is still not production-ready:
+Hosts deploy from the branch on every push. Full walkthrough — environment
+variables, Razorpay webhook and capture settings, Supabase URLs, email:
 [`docs/deploy.md`](docs/deploy.md).
+
+### Environment
+
+| Variable | Where | Notes |
+|---|---|---|
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | API | |
+| `SUPABASE_SERVICE_ROLE_KEY` | API only | bypasses RLS — **never** in the browser |
+| `VOICE_API_KEY` | API | shared secret for machine callers and scheduled jobs; ≥ 32 chars |
+| `CORS_ORIGINS` | API | both web origins, comma-separated |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | API | `rzp_test_…` keys; live keys are refused outside production |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `WEB_URL`, `ADMIN_URL` | API | email; optional until set |
+| `ANTHROPIC_API_KEY`, `REDIS_URL` | API | optional |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE` | Web | |
+| `SITE_MODE` | Web | `clinic` or `admin` |
+| `NEXT_PUBLIC_MOCK` | Web | `1` serves fixtures — **never** in a deployed environment |
 
 ---
 
 ## Status and next steps
 
-**Done:** the data layer (schema, RLS, scheduling logic, seed, tests), the API
-layer (Supabase persistence, real auth, validation, error taxonomy, structured
-logging, rate limiting, usage metering, CI), and the frontend (sign-in, tenant
-context, Action Required with batch review and dispatch, write actions,
-patients, analytics, settings, both patient surfaces, mobile).
+**Done:** data layer, API, clinic dashboard, patient portal and record, online
+booking for patients, the public page with call-back confirmation, clinic
+verification, subscriptions and Razorpay with reconciliation, exceptions,
+refunds and GST invoices, the admin console (applications, clinics, payments,
+analytics, security, audit, settings), email notifications, transcript
+retention, security events, and a DPDP review.
 
 **Blocked on accounts, not code:**
 
 | | Needs |
 |---|---|
-| Live Supabase | A project. Everything so far is verified against local PostgreSQL and fixtures — `scripts/bootstrap-supabase.sh` has never been run against a hosted project. |
-| Google OAuth | The provider enabled in the Supabase dashboard with a client ID. The button is wired; the provider is not configured. |
-| Telephony | An Exotel/Twilio account and a number per clinic. `POST /api/voice/calls` is already shaped for the webhook. |
-| STT / TTS | Sarvam or Deepgram. Turns are currently text in, text out. |
-| WhatsApp | A Meta Cloud API account and pre-approved templates. Messages render and queue; nothing sends them. |
-| Workers | Nothing is scheduled yet — reminders and batch dispatch do not run. |
+| Telephony + voice | An Exotel/Twilio number per clinic; Sarvam or Deepgram for speech. The voice route is shaped for the webhook. |
+| WhatsApp | Meta Cloud API and approved templates. Messages render and queue; nothing sends them yet. |
+| SMS one-time codes | MSG91, Twilio or similar — then public-page requests become instant, verified bookings instead of call-backs. |
+| Email | Resend with a verified domain (also as Supabase's SMTP). |
+| Live payments | Business details on the legal pages and in Admin → Settings; Razorpay live activation. |
 
-**Not blocked on accounts:** the landing page still has no real proof on it —
-no clinic name, no testimonial, no founder — and the demo number is the seed's
-fake one. And the blueprint's Weeks 1–2, *talk to 8–10 clinic owners*, has not
-happened. That is the only item that says whether any of this was worth
-building.
+**Not blocked on accounts:** the product has not yet been in front of 8–10
+clinic owners. That is the only test of whether any of this was worth building.
 
----
-
-## One correction to the product blueprint
-
-Using the blueprint's own quoted vendor rates (STT ₹40/hr, TTS ₹22 per 10k
-chars, telephony ₹0.50/min, GPT-4o-mini-class LLM), a seeded 108-second call
-costs:
-
-| Component | ₹ |
-|---|---|
-| STT | 1.200 |
-| TTS | 1.408 |
-| LLM | 0.080 |
-| Telephony | 0.900 |
-| **Total** | **3.588** |
-
-100 calls/month ≈ **₹359**, not the "comfortably under ₹200–300" the blueprint
-assumes — that range is only reachable at the low end of every vendor quote
-simultaneously. **TTS, not STT, is the largest line item.**
-
-Gross margin on a ₹999 Starter tier is still ~64%, so the pricing holds, but
-the estimate should be corrected before it goes in a deck. `v_call_costs` gives
-the real figure off actual pilot calls — measure before finalising.
+**Unit economics.** Using the blueprint's vendor rates, a 108-second call costs
+about **₹3.59** (TTS is the largest line, not STT) — 100 calls a month ≈ ₹359.
+Against ₹1,999 a month (≈ ₹1,694 before GST) that is a healthy margin, but
+measure it on real pilot calls with `v_call_costs` before it goes in a deck.
 
 ---
 
 ## Further reading
 
-- [`docs/roadmap.md`](docs/roadmap.md) — what is done, what is next, and in what order
-- [`docs/setup.md`](docs/setup.md) — Phase 0, scripted and by hand
-- [`docs/status.md`](docs/status.md) — what `main` has, and the gap to the Phase 1 wedge
-- [`docs/data-model.md`](docs/data-model.md) — table-by-table rationale, and known limitations
-- [`docs/security.md`](docs/security.md) — the RLS model, its trade-offs, and what it does not cover
+- [`docs/deploy.md`](docs/deploy.md) — Render, two Vercel projects, Razorpay, Supabase URLs
+- [`docs/security.md`](docs/security.md) — RLS model, audit logs, break-glass, DPDP review
+- [`docs/admin-plan.md`](docs/admin-plan.md) — the admin console, step by step
+- [`docs/upgrade-plan.md`](docs/upgrade-plan.md) — the upgrade phases and their status
+- [`docs/api.md`](docs/api.md) — endpoints, auth model, error codes
+- [`docs/data-model.md`](docs/data-model.md) — table-by-table rationale
+- [`docs/setup.md`](docs/setup.md) — creating the Supabase project
