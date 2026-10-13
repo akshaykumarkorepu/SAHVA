@@ -31,12 +31,21 @@ const careTasks = d.patientCareTasks.map((t) => ({ ...t }));
 let batch = { ...d.rescheduleBatch };
 let billing = d.billingStatus();
 const pendingOrders = new Map<string, { cycle: "monthly" | "yearly"; amount: number }>();
-let settings = { ...d.clinic.settings };
+let settings = { transcript_retention_days: 90, receptionists_see_transcripts: !mockFlag("sahva.mock.hideTranscripts"), ...d.clinic.settings };
 
 function paged<T>(rows: T[], query: URLSearchParams) {
   const limit = Number(query.get("limit") ?? 50);
   const offset = Number(query.get("offset") ?? 0);
   return { data: rows.slice(offset, offset + limit), count: rows.length, limit, offset };
+}
+
+/** A localStorage knob for tests; false when storage is unavailable. */
+function mockFlag(key: string): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
 }
 
 class MockNotFound extends Error {
@@ -259,6 +268,9 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     return g;
   }
   if (method === "PATCH" && pathname === "/clinic/settings") {
+    // Mirrors routes/clinic.ts: privacy settings are the owner's alone.
+    if (("transcript_retention_days" in b || "receptionists_see_transcripts" in b) && mockRole() !== "owner")
+      throw new ApiError(403, "FORBIDDEN", "Only the clinic owner can change how transcripts are kept and shown.");
     settings = { ...settings, ...b };
     return settings;
   }
@@ -468,7 +480,11 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     // Only one call has a transcript worth showing, so every detail view gets
     // it — with the row's own metadata on top so the header still matches.
     const found = d.calls.find((c) => c.id === seg[1]);
-    return found ? { ...found, ...d.callDetail, id: found.id } : d.callDetail;
+    const detail = found ? { ...found, ...d.callDetail, id: found.id } : d.callDetail;
+    // Mirrors log_call_access(): receptionists see no words when the owner hides them.
+    if (mockRole() === "receptionist" && !settings.receptionists_see_transcripts)
+      return { ...detail, turns: [], tool_invocations: [], summary: null, transcript_status: "restricted" };
+    return { ...detail, transcript_status: "available" };
   }
 
   // ---- patients ----------------------------------------------------------
@@ -709,6 +725,22 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
   if (method === "PUT" && pathname === "/admin/settings") {
     Object.assign(platformSettings, b, { gstin: (b.gstin as string) || null, pan: (b.pan as string) || null });
     return platformSettings;
+  }
+  if (method === "GET" && pathname === "/admin/security") {
+    const days = Number(query.get("days") ?? 7);
+    const ago = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
+    const events = [
+      { id: "se1", kind: "auth_failed", actor_user_id: null, clinic_id: null, ip: "203.0.113.9", method: "GET", path: "/api/clinic/me", details: { status: 401 }, created_at: ago(1), clinics: null },
+      { id: "se2", kind: "auth_failed", actor_user_id: null, clinic_id: null, ip: "203.0.113.9", method: "GET", path: "/api/patients", details: { status: 401 }, created_at: ago(1.1), clinics: null },
+      { id: "se3", kind: "portal_link_invalid", actor_user_id: null, clinic_id: null, ip: "198.51.100.4", method: "GET", path: "/api/portal/:token", details: { status: 401 }, created_at: ago(5), clinics: null },
+      { id: "se4", kind: "role_changed", actor_user_id: "u1", clinic_id: "a0000000-0000-4000-8000-000000000001", ip: null, method: null, path: null, details: { role_before: "receptionist", role_after: "manager" }, created_at: ago(30), clinics: { name: "Sri Sai Clinic" } },
+      { id: "se5", kind: "admin_denied", actor_user_id: null, clinic_id: null, ip: "192.0.2.77", method: "GET", path: "/api/admin/overview", details: { status: 401 }, created_at: ago(70), clinics: null },
+    ].filter((e) => new Date(e.created_at).getTime() > Date.now() - days * 864e5);
+    const by_kind: Record<string, number> = {};
+    for (const e of events) by_kind[e.kind] = (by_kind[e.kind] ?? 0) + 1;
+    const ips = new Map<string, number>();
+    for (const e of events) if (e.ip) ips.set(e.ip, (ips.get(e.ip) ?? 0) + 1);
+    return { days, by_kind, top_addresses: [...ips].map(([ip, count]) => ({ ip, count })).sort((a, b) => b.count - a.count), events, truncated: false };
   }
   if (method === "GET" && pathname === "/admin/payments/refund-requests") return refundRequests;
   if (method === "POST" && seg[0] === "admin" && seg[1] === "payments" && seg[2] === "refund-requests" && seg[3]) {

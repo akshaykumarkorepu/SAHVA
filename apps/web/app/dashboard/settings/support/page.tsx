@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { post } from "@/lib/api";
+import { patch, post } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { formatDateTime } from "@/lib/format";
@@ -22,7 +22,7 @@ type Grant = {
 };
 
 /**
- * Break-glass, on the clinic's terms. SAHVA staff never see patients unless
+ * Privacy settings, and break-glass on the clinic's terms. SAHVA staff never see patients unless
  * the owner opens access here — for a few hours, with a reason, closable at
  * any time. Every patient they open appears in that patient's access log.
  */
@@ -70,6 +70,8 @@ export default function SupportAccessPage() {
 
   return (
     <div className="space-y-6">
+      <PrivacyCard isOwner={isOwner} />
+
       <Card className="p-5">
         <div className="flex items-start gap-3">
           <Icon name="support" className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
@@ -148,5 +150,76 @@ export default function SupportAccessPage() {
         )}
       </section>
     </div>
+  );
+}
+
+type PrivacySettings = { settings: { transcript_retention_days: number; receptionists_see_transcripts: boolean } | null };
+
+/**
+ * How long call transcripts are kept, and who reads them. Patients describe
+ * symptoms on these calls; keeping less for less time is the safer default.
+ */
+function PrivacyCard({ isOwner }: { isOwner: boolean }) {
+  const q = useApi<PrivacySettings>("/clinic");
+  const client = useQueryClient();
+  const [busy, setBusy] = React.useState(false);
+  // Shown at once, saved behind; put back if the save fails.
+  const [local, setLocal] = React.useState<PrivacySettings["settings"]>(null);
+  const server = q.data?.settings ?? null;
+  const s = local ?? server;
+  if (q.loading || !s) return <LoadingRows rows={2} />;
+
+  async function save(change: Partial<NonNullable<PrivacySettings["settings"]>>) {
+    const before = s!;
+    setLocal({ ...before, ...change });
+    setBusy(true);
+    try {
+      await patch("/clinic/settings", change);
+      toast.success("Saved.");
+      void client.invalidateQueries({ queryKey: ["api"] });
+    } catch (e) {
+      setLocal(before);
+      toast.error(e instanceof Error ? e.message : "That did not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink">Call transcripts</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Patients often describe symptoms when they call. Transcripts older than this are deleted automatically; the call&rsquo;s
+        time and outcome are kept. Every transcript opened is recorded.
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <Field label="Keep transcripts for">
+          <Select
+            value={String(s.transcript_retention_days)}
+            disabled={!isOwner || busy}
+            onChange={(e) => void save({ transcript_retention_days: Number(e.target.value) })}
+          >
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+            <option value="180">6 months</option>
+            <option value="365">1 year</option>
+          </Select>
+        </Field>
+        <label className="flex items-start gap-2 pt-6 text-sm text-ink">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={s.receptionists_see_transcripts}
+            disabled={!isOwner || busy}
+            onChange={(e) => void save({ receptionists_see_transcripts: e.target.checked })}
+          />
+          <span>
+            Receptionists can read transcripts
+            <span className="block text-xs text-ink-subtle">Owners, managers and doctors always can.</span>
+          </span>
+        </label>
+      </div>
+      {!isOwner && <p className="mt-3 text-xs text-ink-subtle">Only the clinic owner can change these.</p>}
+    </Card>
   );
 }

@@ -759,6 +759,43 @@ admin.get(
   }),
 );
 
+// --- Security -----------------------------------------------------------------------------------
+
+/**
+ * Refused requests and staff role changes. Counts by kind and by address for
+ * the period, and the latest events. Addresses and paths only — no bodies.
+ */
+admin.get(
+  "/security",
+  validate({ query: z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }) }),
+  asyncRoute(async (req, res) => {
+    const { days } = req.query as unknown as { days: number };
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const rows = unwrap(
+      await dbAdmin
+        .from("security_events")
+        .select("id, kind, actor_user_id, clinic_id, ip, method, path, details, created_at, clinics(name)")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(2000),
+      "security events",
+    );
+    const byKind: Record<string, number> = {};
+    const byIp = new Map<string, number>();
+    for (const r of rows) {
+      byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
+      if (r.ip && r.kind !== "role_changed" && r.kind !== "member_added" && r.kind !== "member_removed") byIp.set(r.ip, (byIp.get(r.ip) ?? 0) + 1);
+    }
+    res.json({
+      days,
+      by_kind: byKind,
+      top_addresses: [...byIp.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([ip, count]) => ({ ip, count })),
+      events: rows.slice(0, 200),
+      truncated: rows.length === 2000,
+    });
+  }),
+);
+
 // --- Analytics -------------------------------------------------------------------------------
 
 /** Months of growth, money and platform-wide activity, plus every clinic's health. */

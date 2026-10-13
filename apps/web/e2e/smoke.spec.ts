@@ -674,3 +674,47 @@ test("admin support: patients only while the clinic has access open, and emails 
   await settle(page);
   expect(errors).toEqual([]);
 });
+
+test("privacy: the owner sets how long transcripts are kept and who reads them", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/dashboard/settings/support");
+  const keep = page.getByLabel("Keep transcripts for");
+  await expect(keep).toHaveValue("90", { timeout: 15_000 });
+  await keep.selectOption("30");
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await page.getByLabel(/Receptionists can read transcripts/).uncheck();
+  await expect(page.getByLabel(/Receptionists can read transcripts/)).not.toBeChecked();
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("privacy: a manager sees the transcript settings but cannot change them", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sahva.mock.role", "manager"));
+  await page.goto("/dashboard/settings/support");
+  await expect(page.getByLabel("Keep transcripts for")).toBeDisabled({ timeout: 15_000 });
+  await expect(page.getByText("Only the clinic owner can change these.")).toBeVisible();
+});
+
+test("privacy: when the owner hides transcripts, a receptionist sees the call but not its words", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("sahva.mock.role", "receptionist");
+    localStorage.setItem("sahva.mock.hideTranscripts", "1");
+  });
+  await page.goto("/dashboard/calls");
+  await page.getByRole("button", { name: "View →" }).first().click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("note")).toContainText("owners, managers and doctors only");
+});
+
+test("admin security: refused requests by kind and address, and staff role changes", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/admin/security");
+  await expect(page.getByText("Most refused addresses")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("main")).toContainText("203.0.113.9");
+  await expect(page.locator("main")).toContainText("receptionist → manager");
+  await expect(page.locator("main")).not.toContainText("/api/portal/ey"); // never a patient link
+  await page.getByRole("tab", { name: "24 hours" }).click();
+  await expect(page.locator("main")).not.toContainText("receptionist → manager");
+  await settle(page);
+  expect(errors).toEqual([]);
+});

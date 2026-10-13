@@ -5,7 +5,7 @@ import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { requireRole } from "../middleware/auth.js";
 import { isoDate, uuid, validate } from "../middleware/validate.js";
-import { badRequest, fromPostgrest, unwrap } from "../lib/errors.js";
+import { badRequest, forbidden, fromPostgrest, unwrap } from "../lib/errors.js";
 
 export const clinic = Router();
 
@@ -79,6 +79,9 @@ const settingsPatch = z
     greeting_en: z.string().max(500).nullable(),
     escalation_phone_e164: z.string().regex(/^\+[1-9]\d{7,14}$/).nullable(),
     escalation_keywords: z.array(z.string().min(1).max(60)).max(40),
+    // Privacy: owner only (checked in the handler).
+    transcript_retention_days: z.number().int().min(30).max(365),
+    receptionists_see_transcripts: z.boolean(),
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no fields to update");
@@ -89,7 +92,9 @@ clinic.patch(
   requireRole("owner", "manager"),
   validate({ body: settingsPatch }),
   asyncRoute(async (req, res) => {
-    const { db, clinicId } = req.auth!;
+    const { db, clinicId, role } = req.auth!;
+    const privacy = ["transcript_retention_days", "receptionists_see_transcripts"].filter((k) => k in (req.body as object));
+    if (privacy.length && role !== "owner") throw forbidden("Only the clinic owner can change how transcripts are kept and shown.");
     const row = unwrap(
       await db.from("clinic_settings").update(req.body).eq("clinic_id", clinicId).select().single(),
       "clinic settings",

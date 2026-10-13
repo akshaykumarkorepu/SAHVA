@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncRoute } from "../middleware/errorHandler.js";
 import { paginationQuery, uuid, validate } from "../middleware/validate.js";
-import { unwrap } from "../lib/errors.js";
+import { AppError, unwrap } from "../lib/errors.js";
 
 export const calls = Router();
 
@@ -48,12 +48,30 @@ calls.get(
   }),
 );
 
-/** One call with its full transcript and every tool the model attempted. */
+/**
+ * One call with its full transcript and every tool the model attempted.
+ *
+ * The transcript is what a patient said about their health, so opening it is
+ * logged first (log_call_access, fail closed) — and refused for receptionists
+ * when the owner has hidden transcripts from them. Past the clinic's
+ * retention the words are gone; the call itself is still shown.
+ */
 calls.get(
   "/:id",
   validate({ params: z.object({ id: uuid }) }),
   asyncRoute(async (req, res) => {
     const { db } = req.auth!;
+    const logged = await db.rpc("log_call_access", { p_call_id: req.params.id, p_request_id: req.id });
+    if (logged.error && logged.error.code !== "42501") {
+      req.log.error({ err: logged.error }, "transcript access could not be logged; refusing the read");
+      throw new AppError(503, "AUDIT_UNAVAILABLE", "This call cannot be opened right now. Please try again.");
+    }
+    const transcriptStatus = logged.error ? "restricted" : logged.data ? "available" : "purged";
+    if (transcriptStatus !== "available") {
+      const call = unwrap(await db.from("calls").select("*, patients(id, full_name, phone_e164)").eq("id", req.params.id).single(), "call");
+      res.json({ ...call, turns: [], tool_invocations: [], summary: null, transcript_status: transcriptStatus });
+      return;
+    }
     const [call, turns, tools, summary] = await Promise.all([
       db
         .from("calls")
@@ -74,6 +92,7 @@ calls.get(
       turns: turns.data ?? [],
       tool_invocations: tools.data ?? [],
       summary: summary.data,
+      transcript_status: transcriptStatus,
     });
   }),
 );

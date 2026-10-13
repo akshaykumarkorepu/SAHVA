@@ -151,6 +151,15 @@ function adminBody(kind: string, p: Record<string, unknown>, l: Links): Body {
         lines: [`The clinic's reason: “${str(p.reason)}”`, `Every record opened is shown to the clinic owner.`],
         action: { label: "Open the clinic", href: `${l.admin}/admin/clinics/${str(p.clinic_id)}` },
       };
+    case "admin.security_alert":
+      return {
+        subject: `Security: ${Number(p.count ?? 0)} refused requests from ${str(p.ip)} in 15 minutes`,
+        lines: [
+          `${Number(p.count ?? 0)} refused requests (${(Array.isArray(p.kinds) ? p.kinds : []).join(", ") || "various"}) came from ${str(p.ip)} in the last 15 minutes.`,
+          `If this is not someone you know, consider blocking the address at the host.`,
+        ],
+        action: { label: "Open security", href: `${l.admin}/admin/security` },
+      };
     case "admin.daily_digest": {
       const n = (k: string) => Number(p[k] ?? 0);
       return {
@@ -160,6 +169,7 @@ function adminBody(kind: string, p: Record<string, unknown>, l: Links): Body {
           `Open payment exceptions: ${n("open_exceptions")}`,
           `Webhook signature failures, last 24h: ${n("signature_failures_24h")}`,
           `Emails that failed to send, last 24h: ${n("failed_emails_24h")}`,
+          `Failed sign-ins: ${n("auth_failures_24h")} · denied requests: ${n("access_denied_24h")} · staff role changes: ${n("role_changes_24h")}`,
         ],
         action: { label: "Open the console", href: `${l.admin}/admin` },
       };

@@ -145,6 +145,82 @@ finance admins (asker ≠ approver), enforced in `admin_record_refund`; a claim
 step makes concurrent approvals refund once. Invoices and credit notes are
 immutable and numbered without gaps per financial year.
 
+## Call transcripts
+
+Patients describe symptoms when they call, so transcripts are treated like
+clinical records (migration `001800`, DB suite 35):
+
+- **Retention.** Each clinic keeps transcripts 30–365 days (default 90). The
+  scheduled job deletes the words — turns, tool arguments, summaries, the
+  recording link — and keeps the call row (time, outcome, booking link) so
+  analytics still add up. `call_turns` stays append-only; only the purge
+  function can delete, behind a transaction-local flag.
+- **Who reads them.** Owners, managers and doctors; receptionists only if the
+  owner allows it (Settings → Privacy & support). Enforced by RLS on
+  `call_turns`, `call_tool_invocations` and `call_summaries`.
+- **Audited.** `GET /calls/:id` calls `log_call_access` first and fails
+  closed. Each opening is in `call_access_log`, and in the patient's own
+  access log when the call is linked to a patient.
+
+## Security events
+
+`security_events` (append-only, admin-only) records refused requests — 401,
+403 and 429 on the API, classed as failed sign-in, access denied, admin
+access refused, invalid patient link or rate limited — and every staff
+member added, removed or changed role (a database trigger, so no code path
+can skip it). Rows hold address, method and path only; patient-link paths
+are stored as `/api/portal/:token`, never the token. Writes are throttled to
+one per address and kind every 5 seconds. 20+ refused requests from one
+address in 15 minutes emails super admins; the daily digest carries 24-hour
+counts. Admin → Security shows counts, the most-refused addresses, and the
+latest events.
+
+## DPDP Act 2023 — applicability review (2026-10)
+
+Not legal advice: a map of where SAHVA stands, to be checked with counsel
+before clinics sign. The DPDP Rules were notified in November 2025 with most
+obligations phased in over 18 months; confirm the dates that apply.
+
+**Roles.** For patient data, each **clinic is the Data Fiduciary** and SAHVA
+is its **Data Processor** — SAHVA processes patients' data only to run the
+clinic's reception, on the clinic's instructions. For clinic staff accounts,
+billing and the admin console, **SAHVA is the Data Fiduciary**.
+
+**What is in place**
+
+| Obligation | Where |
+|---|---|
+| Reasonable security safeguards | RLS on every table, service key never in the browser, admin 2FA, append-only audit and access logs, fail-closed read auditing |
+| Purpose limitation / minimisation | Admins see counts, not patients; notifications carry no patient data; support access only when the clinic grants it, profiles and appointments only |
+| Erasure when no longer needed | Transcript retention with automatic deletion |
+| Logs to detect and investigate misuse | `record_access_log`, `call_access_log`, `admin_audit_log`, `security_events` — none are purged (the Rules expect logs kept at least a year; confirm) |
+| Processor acts on fiduciary's instructions | Clinic-controlled settings: transcript retention and visibility, support access grants |
+| Data stays in India by default | Database in ap-south-1 (Mumbai) |
+
+**Gaps to close before patients' data is processed at scale**
+
+1. **Data Processing Agreement** with every clinic (processor terms, security,
+   breach notice to the clinic, sub-processors, deletion at contract end).
+   The terms page is not enough.
+2. **Notice to patients on calls and WhatsApp.** The AI's greeting must say
+   the call is answered by an automated assistant and transcribed, and point
+   to the clinic's privacy notice. Confirm in the voice script.
+3. **Data principal requests.** The clinic must be able to give a patient
+   their data, correct it, and erase it. There is no export or erase tool for
+   a single patient yet.
+4. **Breach response runbook.** Who decides, how the clinic is told, and the
+   timeline for informing the Data Protection Board and affected patients
+   (the Rules set 72 hours for the Board's detailed report — confirm).
+5. **Sub-processor list**, published: Supabase, Render, Vercel, Anthropic
+   (transcripts are sent to the model — outside India), Razorpay, Resend,
+   and the telephony and WhatsApp providers once chosen.
+6. **Children's data.** Paediatric clinics will hold children's records. The
+   Rules exempt clinical establishments and healthcare professionals from
+   verifiable parental consent to the extent needed to provide health
+   services — confirm SAHVA's processing on their behalf falls within it.
+7. **Account data for staff** (SAHVA as fiduciary): a privacy notice that
+   covers staff accounts, and a grievance contact.
+
 ## Not yet addressed
 
 - **Audit of patient-profile reads beyond `GET /patients/:id`.** Clinical

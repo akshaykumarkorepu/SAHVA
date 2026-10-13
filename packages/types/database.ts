@@ -419,6 +419,48 @@ export type Database = {
           },
         ];
       };
+      call_access_log: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          call_id: string;
+          actor_user_id: string;
+          request_id: string | null;
+          accessed_at: string;
+        };
+        Insert: {
+          id?: string;
+          clinic_id: string;
+          call_id: string;
+          actor_user_id: string;
+          request_id?: string | null;
+          accessed_at?: string;
+        };
+        Update: {
+          id?: string;
+          clinic_id?: string;
+          call_id?: string;
+          actor_user_id?: string;
+          request_id?: string | null;
+          accessed_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "call_access_log_call_id_fkey";
+            columns: ["call_id"];
+            isOneToOne: false;
+            referencedRelation: "calls";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "call_access_log_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       call_summaries: {
         Row: {
           call_id: string;
@@ -607,6 +649,7 @@ export type Database = {
           recovered_missed: boolean;
           created_at: string;
           updated_at: string;
+          transcript_purged_at: string | null;
         };
         Insert: {
           id?: string;
@@ -632,6 +675,7 @@ export type Database = {
           recovered_missed?: boolean;
           created_at?: string;
           updated_at?: string;
+          transcript_purged_at?: string | null;
         };
         Update: {
           id?: string;
@@ -657,6 +701,7 @@ export type Database = {
           recovered_missed?: boolean;
           created_at?: string;
           updated_at?: string;
+          transcript_purged_at?: string | null;
         };
         Relationships: [
           {
@@ -1111,6 +1156,8 @@ export type Database = {
           patient_may_reschedule: boolean;
           patient_may_cancel: boolean;
           portal_link_ttl_days: number;
+          transcript_retention_days: number;
+          receptionists_see_transcripts: boolean;
         };
         Insert: {
           clinic_id: string;
@@ -1137,6 +1184,8 @@ export type Database = {
           patient_may_reschedule?: boolean;
           patient_may_cancel?: boolean;
           portal_link_ttl_days?: number;
+          transcript_retention_days?: number;
+          receptionists_see_transcripts?: boolean;
         };
         Update: {
           clinic_id?: string;
@@ -1163,6 +1212,8 @@ export type Database = {
           patient_may_reschedule?: boolean;
           patient_may_cancel?: boolean;
           portal_link_ttl_days?: number;
+          transcript_retention_days?: number;
+          receptionists_see_transcripts?: boolean;
         };
         Relationships: [
           {
@@ -3102,6 +3153,50 @@ export type Database = {
           },
         ];
       };
+      security_events: {
+        Row: {
+          id: string;
+          kind: string;
+          actor_user_id: string | null;
+          clinic_id: string | null;
+          ip: string | null;
+          method: string | null;
+          path: string | null;
+          details: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          kind: string;
+          actor_user_id?: string | null;
+          clinic_id?: string | null;
+          ip?: string | null;
+          method?: string | null;
+          path?: string | null;
+          details?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          kind?: string;
+          actor_user_id?: string | null;
+          clinic_id?: string | null;
+          ip?: string | null;
+          method?: string | null;
+          path?: string | null;
+          details?: Json;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "security_events_clinic_id_fkey";
+            columns: ["clinic_id"];
+            isOneToOne: false;
+            referencedRelation: "clinics";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       staff_profiles: {
         Row: {
           id: string;
@@ -3818,6 +3913,10 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      enqueue_security_alerts: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       finish_notification: {
         Args: {
           p_id: string;
@@ -3846,6 +3945,13 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      log_call_access: {
+        Args: {
+          p_call_id: string;
+          p_request_id?: string;
+        };
+        Returns: boolean;
+      };
       log_record_access: {
         Args: {
           p_patient_id: string;
@@ -3853,6 +3959,12 @@ export type Database = {
           p_request_id?: string;
         };
         Returns: undefined;
+      };
+      purge_expired_transcripts: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: number;
       };
       record_payment_exception: {
         Args: {

@@ -12,7 +12,7 @@ type AccessRow = {
   id: string;
   actor_type: "staff" | "patient";
   actor_name: string;
-  record_type: "medical_record" | "patient_profile";
+  record_type: "medical_record" | "patient_profile" | "call_transcript";
   accessed_at: string;
 };
 
@@ -131,7 +131,7 @@ export function PatientQuickView({
                         {r.actor_name}
                         <span className="text-ink-subtle">
                           {" "}
-                          · {r.record_type === "medical_record" ? "medical record" : "profile"}
+                          · {r.record_type === "medical_record" ? "medical record" : r.record_type === "call_transcript" ? "call transcript" : "profile"}
                         </span>
                       </span>
                       <span className="shrink-0 text-xs text-ink-subtle">{formatDateTime(r.accessed_at, tz)}</span>

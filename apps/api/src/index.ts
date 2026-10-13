@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { env, isProd } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { requestContext } from "./middleware/context.js";
+import { securityEvents } from "./lib/securityEvents.js";
 import { requireAuth, requireServiceKey, requireUser } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
@@ -54,6 +55,8 @@ app.use(
 // thrown by express.json(), and without a request id already attached that
 // response comes back untraceable.
 app.use(requestContext);
+// Refused requests (401/403/429) go to security_events, after the response.
+app.use(securityEvents);
 // Before express.json: Razorpay signs the raw bytes it sent.
 app.post("/api/webhooks/razorpay", machineLimiter(), express.raw({ type: "*/*", limit: "100kb" }), razorpayWebhook);
 app.use(express.json({ limit: "1mb" }));

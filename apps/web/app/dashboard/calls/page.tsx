@@ -29,6 +29,8 @@ type CallDetail = Call & {
   turns: Tables<"call_turns">[];
   tool_invocations: Tables<"call_tool_invocations">[];
   summary: Tables<"call_summaries"> | null;
+  /** "restricted": the owner hides transcripts from this role. "purged": past the clinic's retention. */
+  transcript_status?: "available" | "restricted" | "purged";
 };
 
 function CallsView() {
@@ -152,6 +154,18 @@ function CallDetailModal({
             {formatPhone(data.from_e164)} · {formatDateTime(data.started_at, tz)}
             {data.duration_sec ? ` · ${data.duration_sec}s` : ""}
           </div>
+
+          {data.transcript_status === "restricted" && (
+            <p role="note" className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink-muted">
+              Your clinic shows call transcripts to owners, managers and doctors only.
+            </p>
+          )}
+          {data.transcript_status === "purged" && (
+            <p role="note" className="rounded-lg border border-line px-3 py-2.5 text-sm text-ink-muted">
+              This call&rsquo;s transcript was deleted under your clinic&rsquo;s retention setting. The call&rsquo;s time and
+              outcome are kept.
+            </p>
+          )}
 
           {data.summary?.summary_en && (
             <div className="rounded-lg bg-surface-sunken/60 px-3 py-2.5 text-sm text-ink-muted">

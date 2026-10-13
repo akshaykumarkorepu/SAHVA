@@ -259,9 +259,14 @@ Not left to the end.
   unusual token validation volume, role changes.
 - DPDP Act applicability review written into `security.md`.
 
-**Status (2026-10-12): read audit done** (migration `000600`, fail-closed,
-owners see it, and a test fails any clinical route that skips it). Open:
-transcript retention, security-event logging, DPDP review.
+**Status (2026-10-13): done.** Read audit (migration `000600`, fail-closed,
+owners see it, and a test fails any clinical route that skips it).
+Transcripts: per-clinic retention with automatic deletion, receptionist
+visibility set by the owner, every opening logged (migration `001800`).
+Security events: refused requests and staff role changes recorded, burst
+alerts by email, Admin → Security. DPDP review written in `security.md`,
+with seven gaps to close before scale — the agreement with clinics and the
+AI disclosure on calls first.
 
 ---
 

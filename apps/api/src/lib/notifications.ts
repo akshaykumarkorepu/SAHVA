@@ -4,21 +4,37 @@ import { logger } from "./logger.js";
 import { render, type Outgoing } from "./notify.js";
 import { mailerConfigured, sendEmail } from "./mailer.js";
 
-export type RunSummary = { queued: number; invoices_issued: number; sent: number; failed: number; email_configured: boolean };
+export type RunSummary = {
+  queued: number;
+  invoices_issued: number;
+  transcripts_purged: number;
+  security_alerts: number;
+  sent: number;
+  failed: number;
+  email_configured: boolean;
+};
 
 /**
- * One pass of the notifications job: queue what time has made due, issue any
- * invoices still owed, then send a batch. Run every 15 minutes.
+ * One pass of the scheduled job: queue what time has made due, issue any
+ * invoices still owed, delete transcripts past each clinic's retention,
+ * raise alerts for bursts of refused requests, then send a batch of emails.
+ * Run every 15 minutes.
  */
 export async function runNotifications(batch = 50): Promise<RunSummary> {
   const queued = await dbAdmin.rpc("enqueue_scheduled_notifications");
   if (queued.error) throw queued.error;
   const invoices = await dbAdmin.rpc("issue_missing_invoices");
   if (invoices.error) throw invoices.error;
+  const purged = await dbAdmin.rpc("purge_expired_transcripts", { p_limit: 500 });
+  if (purged.error) throw purged.error;
+  const alerts = await dbAdmin.rpc("enqueue_security_alerts");
+  if (alerts.error) throw alerts.error;
 
   const summary: RunSummary = {
     queued: queued.data ?? 0,
     invoices_issued: invoices.data ?? 0,
+    transcripts_purged: purged.data ?? 0,
+    security_alerts: alerts.data ?? 0,
     sent: 0,
     failed: 0,
     email_configured: mailerConfigured(),

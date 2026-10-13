@@ -12,7 +12,7 @@ const TABS = [
   { href: "/dashboard/settings/knowledge", label: "Knowledge base" },
   { href: "/dashboard/settings/staff", label: "Staff" },
   { href: "/dashboard/settings/billing", label: "Billing" },
-  { href: "/dashboard/settings/support", label: "Support access" },
+  { href: "/dashboard/settings/support", label: "Privacy & support" },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

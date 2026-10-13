@@ -75,6 +75,7 @@ run_suite "$HERE/31_payment_operations.sql"
 run_suite "$HERE/32_admin_analytics.sql"
 run_suite "$HERE/33_notifications_and_invoices.sql"
 run_suite "$HERE/34_refund_approvals_and_support.sql"
+run_suite "$HERE/35_transcripts_and_security.sql"
 
 echo
 echo "All suites passed. Stop the cluster with:"

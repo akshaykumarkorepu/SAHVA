@@ -12,6 +12,7 @@ const NAV: { href: string; label: string; icon: IconName; soon?: boolean }[] = [
   { href: "/admin/clinics", label: "Clinics", icon: "patients" },
   { href: "/admin/payments", label: "Payments", icon: "rupee" },
   { href: "/admin/analytics", label: "Analytics", icon: "analytics" },
+  { href: "/admin/security", label: "Security", icon: "shield" },
   { href: "/admin/audit", label: "Audit log", icon: "inbox" },
   { href: "/admin/settings", label: "Settings", icon: "settings" },
 ];
