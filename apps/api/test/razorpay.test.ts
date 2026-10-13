@@ -1,3 +1,4 @@
+import "./setup.js";
 import { strict as assert } from "node:assert";
 import { createHmac } from "node:crypto";
 import test from "node:test";
