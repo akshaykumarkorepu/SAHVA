@@ -31,7 +31,9 @@ services:
         sync: false
       - key: VOICE_API_KEY
         sync: false
-      # The Vercel URL of the web app. Without it the browser is blocked by CORS.
+      # Both web deployments, comma-separated: the clinic site and the admin
+      # console, e.g. https://sahva.vercel.app,https://sahva-admin.vercel.app
+      # Without them the browser is blocked by CORS.
       - key: CORS_ORIGINS
         sync: false
       # Optional. Without it rate-limit counters are per-instance and reset on
@@ -40,4 +42,22 @@ services:
         sync: false
       # Optional. Only the voice route uses it.
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # Razorpay (test keys rzp_test_… until going live). The webhook secret
+      # is the one typed into Razorpay → Webhooks.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # Email through Resend. Optional: without them emails wait in the outbox.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Where links in emails point: the clinic site and the admin console.
+      - key: WEB_URL
+        sync: false
+      - key: ADMIN_URL
         sync: false

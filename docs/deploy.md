@@ -6,7 +6,8 @@ where the code lives and what the hosts watch.
 
 | Piece | Host | Why |
 |---|---|---|
-| `apps/web` | **Vercel** | Native Next.js, free tier, redeploys on push |
+| `apps/web` — clinic site | **Vercel** project 1 (`SITE_MODE=clinic`) | Native Next.js, free tier, redeploys on push |
+| `apps/web` — admin console | **Vercel** project 2 (`SITE_MODE=admin`) | Same code, deployed separately: own domain, own env, `/admin` absent from the clinic site |
 | `apps/api` | **Render** | Long-running Node process, free tier, redeploys on push |
 | Database | **Supabase** | Already live, `ap-south-1` |
 
@@ -31,30 +32,49 @@ nothing to configure by hand except the secrets.
 | `SUPABASE_ANON_KEY` | from Supabase → Project Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | same page. **Server-side only.** |
 | `VOICE_API_KEY` | any 32+ char secret |
-| `CORS_ORIGINS` | the Vercel URL — fill in after step 2, then redeploy |
+| `CORS_ORIGINS` | **both** Vercel URLs, comma-separated (clinic site, admin console) — fill in after step 2, then redeploy |
 | `ANTHROPIC_API_KEY` | optional; only the voice route uses it |
 | `REDIS_URL` | optional; see the note below |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Razorpay → Account & Settings → API Keys (`rzp_test_…` until live) |
+| `RAZORPAY_WEBHOOK_SECRET` | the secret you type into Razorpay → Webhooks (step 4) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | optional; resend.com, on a verified domain |
+| `WEB_URL`, `ADMIN_URL` | the clinic site and admin console URLs, for links in emails |
 
 Do **not** set `PORT`. Render injects it, and the API reads it.
 
 Health check is `/api/health`. If the service will not go live, that endpoint
 is the first thing to curl.
 
-## 2. The web app, on Vercel
+## 2. The web apps, on Vercel — two projects
 
-`vercel.json` pins the monorepo build, so leave Root Directory as the repo root.
+The clinic site and the admin console are the same Next.js app deployed as
+**two Vercel projects**. `SITE_MODE` tells each which it is: the clinic site
+returns a plain 404 for `/admin`, and the admin console serves only `/admin`
+(everything else redirects there). It is decided by the setting, not the
+host name, so it holds on preview deployments too.
 
-1. <https://vercel.com/new> → import the repo → branch `saikirans-version`
-2. Set environment variables:
+`vercel.json` pins the monorepo build, so leave Root Directory as the repo
+root in both projects.
 
-| Variable | Value |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key — public by design |
-| `NEXT_PUBLIC_API_BASE` | the Render URL, e.g. `https://sahva-api.onrender.com` |
+1. <https://vercel.com/new> → import the repo → branch `saikirans-version` →
+   name it e.g. `sahva` (the clinic site).
+2. <https://vercel.com/new> again → the **same repo and branch** → name it
+   e.g. `sahva-admin`.
+3. Environment variables — the same three in both, plus `SITE_MODE`:
 
-3. Deploy. Copy the resulting URL back into Render's `CORS_ORIGINS` and
-   redeploy the API.
+| Variable | Clinic project | Admin project |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` | same |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key — public by design | same |
+| `NEXT_PUBLIC_API_BASE` | the Render URL, e.g. `https://sahva-api.onrender.com` | same |
+| `SITE_MODE` | `clinic` | `admin` |
+
+   `ADMIN_HOST` is no longer needed once `SITE_MODE` is set.
+
+4. Deploy both. Put **both** URLs in Render's `CORS_ORIGINS` and redeploy the
+   API. Set `WEB_URL` (clinic) and `ADMIN_URL` (admin) on Render too.
+5. Later, a custom domain for each (e.g. `sahva.in` and `admin.sahva.in`) in
+   each project's Domains settings.
 
 > **Never set `NEXT_PUBLIC_MOCK` here.** It serves the whole app from fixtures.
 > Unset, the bundler drops them entirely.
@@ -64,13 +84,34 @@ is the first thing to curl.
 
 ## 3. Supabase
 
-Add the Vercel URL to **Authentication → URL Configuration**:
+Add the Vercel URLs to **Authentication → URL Configuration**:
 
-- Site URL: `https://<your-app>.vercel.app`
-- Redirect URLs: `https://<your-app>.vercel.app/auth/callback`
+- Site URL: `https://<clinic-app>.vercel.app`
+- Redirect URLs: `https://<clinic-app>.vercel.app/auth/callback` and
+  `https://<admin-app>.vercel.app/**`
 
 Without this, sign-in redirects and password-reset links come back to
 `localhost:3000` and fail in production.
+
+## 4. Razorpay
+
+Needs the API live (step 1): Razorpay must reach it over the internet.
+
+1. Razorpay → **Account & Settings → Webhooks → Add new webhook**
+   - URL: `https://<render-url>/api/webhooks/razorpay`
+   - Secret: a long random string (`openssl rand -hex 32`). Put the same
+     value in Render's `RAZORPAY_WEBHOOK_SECRET`.
+   - Events: `payment.captured`, `payment.failed`, `refund.processed`,
+     `refund.failed`, `payment.dispute.created`, `payment.dispute.won`,
+     `payment.dispute.lost`, `payment.dispute.closed`.
+2. **Account & Settings → Payment capture → Automatic.** Otherwise payments
+   wait as "authorised" and show up as exceptions.
+3. Check: Admin → Payments → **Webhook events**. A test payment should show
+   `payment.captured · activated`. A row marked "bad signature" means the two
+   secrets differ.
+
+Test mode and live mode have separate keys and separate webhooks; set up both
+when going live, and swap the keys on Render.
 
 ---
 

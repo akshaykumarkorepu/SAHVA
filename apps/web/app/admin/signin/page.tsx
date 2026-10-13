@@ -7,6 +7,7 @@ import { isMockMode } from "@/lib/mock/flag";
 import { ApiError, get, post } from "@/lib/api";
 import { useAdminSession, type AdminMe } from "@/lib/admin/session";
 import { Button, Field, Input } from "@/components/ui";
+import Image from "next/image";
 import { Icon } from "@/components/icons";
 
 type Step =
@@ -113,27 +114,28 @@ export default function AdminSignIn() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-surface-sunken px-4 py-10">
-      <div className="w-full max-w-sm rounded-3xl border border-line bg-surface-raised p-8 shadow-card animate-scale-in">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-surface-inverse text-white">
-            <Icon name="shield" className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="font-display text-lg font-semibold tracking-tight text-ink">SAHVA Admin</p>
-            <p className="text-xs text-ink-subtle">Restricted. Every action is recorded.</p>
-          </div>
-        </div>
+    <main className="min-h-dvh bg-surface lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+      <ConsoleStory />
 
+      <section className="flex min-h-[calc(100dvh-0px)] flex-col px-5 py-10 sm:px-10 lg:min-h-dvh lg:justify-center">
+        <div className="mx-auto w-full max-w-sm animate-fade-up">
+          <p className="text-[12px] font-bold uppercase tracking-wider text-brand-700">Operations console</p>
+          <h1 className="mt-2 font-display text-[28px] font-semibold leading-tight tracking-tight text-ink">
+            {step.kind === "enroll" ? "Set up your authenticator" : step.kind === "verify" ? "Enter your code" : "Sign in to SAHVA Admin"}
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">Restricted to SAHVA staff. Every action is recorded.</p>
+          <Steps current={step.kind === "enroll" || step.kind === "verify" ? 2 : 1} />
+
+          <div className="mt-6 rounded-3xl border border-line bg-surface-raised p-6 shadow-card sm:p-7">
         {isMockMode ? (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <p className="rounded-xl bg-surface-sunken p-3 text-sm text-ink-muted">Mock mode — fixtures only, no sign-in.</p>
             <Button className="w-full" onClick={() => router.replace("/admin")}>
               Continue
             </Button>
           </div>
         ) : step.kind === "password" ? (
-          <form onSubmit={onPassword} className="mt-6 space-y-4">
+          <form onSubmit={onPassword} className="space-y-4">
             <Field label="Email" required>
               <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
@@ -146,7 +148,7 @@ export default function AdminSignIn() {
             </Button>
           </form>
         ) : step.kind === "existing" ? (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <p className="text-sm text-ink-muted">
               This browser is already signed in as <strong className="text-ink">{step.email ?? "another account"}</strong>.
             </p>
@@ -159,7 +161,7 @@ export default function AdminSignIn() {
             </Button>
           </div>
         ) : step.kind === "not-admin" ? (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <p role="alert" className="rounded-xl bg-accent-rose/[0.07] p-3 text-sm text-ink">
               This account is not a SAHVA admin. If you run a clinic, sign in on the clinic site instead.
             </p>
@@ -168,7 +170,7 @@ export default function AdminSignIn() {
             </Button>
           </div>
         ) : (
-          <form onSubmit={onCode} className="mt-6 space-y-4">
+          <form onSubmit={onCode} className="space-y-4">
             {step.kind === "enroll" ? (
               <>
                 <p className="text-sm text-ink-muted">
@@ -200,7 +202,12 @@ export default function AdminSignIn() {
             </Button>
           </form>
         )}
-      </div>
+          </div>
+          <p className="mt-6 text-center text-xs text-ink-subtle">
+            Clinic staff sign in on the clinic site, not here.
+          </p>
+        </div>
+      </section>
     </main>
   );
 }
@@ -210,5 +217,99 @@ function ErrorLine({ text }: { text: string }) {
     <p role="alert" className="rounded-xl bg-accent-rose/[0.07] px-3 py-2 text-sm text-ink">
       {text}
     </p>
+  );
+}
+
+function Steps({ current }: { current: 1 | 2 }) {
+  const items = ["Password", "Authenticator code"];
+  return (
+    <ol className="mt-5 flex items-center gap-3 text-xs" aria-label="Sign-in steps">
+      {items.map((label, i) => {
+        const n = (i + 1) as 1 | 2;
+        const done = n < current;
+        const on = n === current;
+        return (
+          <li key={label} className="flex items-center gap-2" aria-current={on ? "step" : undefined}>
+            <span
+              className={
+                "grid h-6 w-6 place-items-center rounded-full text-[11px] font-semibold " +
+                (done ? "bg-brand-600 text-on-brand" : on ? "bg-surface-inverse text-white" : "border border-line-strong text-ink-subtle")
+              }
+            >
+              {done ? <Icon name="check" className="h-3.5 w-3.5" /> : n}
+            </span>
+            <span className={on ? "font-medium text-ink" : "text-ink-subtle"}>{label}</span>
+            {i === 0 && <span aria-hidden className="mx-1 h-px w-6 bg-line-strong" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+const PILLARS: { icon: "shield" | "rupee" | "eyeOff"; title: string; body: string }[] = [
+  { icon: "shield", title: "Verify every clinic", body: "Registration and the doctor's council number checked before anything goes live." },
+  { icon: "rupee", title: "Money with two keys", body: "Ledger, reconciliation with Razorpay, GST invoices, and large refunds approved by a second admin." },
+  { icon: "eyeOff", title: "Patients stay with clinics", body: "Counts, never names. Records open only when a clinic owner grants access, and they see who looked." },
+];
+
+/**
+ * The left half: what this console is for, on the same dark ink as its
+ * navigation rail, so nobody mistakes it for the clinic site.
+ */
+function ConsoleStory() {
+  return (
+    <aside className="relative overflow-hidden bg-surface-inverse px-5 py-8 text-white sm:px-10 lg:flex lg:min-h-dvh lg:flex-col lg:justify-between lg:py-12">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(36rem_28rem_at_0%_0%,rgb(var(--brand-500)/0.28),transparent_60%),radial-gradient(28rem_22rem_at_100%_100%,rgb(var(--accent-sky)/0.14),transparent_60%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgb(255_255_255)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255)_1px,transparent_1px)] [background-size:40px_40px] [mask-image:radial-gradient(ellipse_at_30%_30%,black,transparent_75%)]"
+      />
+
+      <div className="relative flex items-center gap-2.5">
+        <span className="relative h-9 w-9 shrink-0 rounded-xl bg-white/95 p-1">
+          <Image src="/brand/sahva-logo.png" alt="" fill className="object-contain p-1" priority />
+        </span>
+        <span>
+          <span className="block font-display text-[16px] font-bold tracking-tight">SAHVA</span>
+          <span className="block text-[11px] leading-none text-white/60">Admin console</span>
+        </span>
+      </div>
+
+      <div className="relative mt-10 hidden max-w-lg lg:block">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white/80">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-400" />
+          </span>
+          Restricted access
+        </div>
+        <h2 className="mt-6 font-display text-[40px] font-semibold leading-[1.08] tracking-tight">
+          Run the platform.
+          <br />
+          <span className="text-brand-400">Leave the patients to the clinics.</span>
+        </h2>
+        <ul className="mt-10 space-y-5">
+          {PILLARS.map((p) => (
+            <li key={p.title} className="flex gap-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.06]">
+                <Icon name={p.icon} className="h-5 w-5 text-brand-400" />
+              </span>
+              <span>
+                <span className="block font-semibold">{p.title}</span>
+                <span className="mt-0.5 block text-sm leading-relaxed text-white/65">{p.body}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="relative mt-10 hidden text-xs text-white/50 lg:block">
+        Authenticator required on every sign-in · Every action in the audit log · Sessions on record
+      </p>
+    </aside>
   );
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideAdminRoute } from "../lib/adminHost";
+import { decideAdminRoute, siteMode } from "../lib/adminHost";
 
 const ADMIN = "admin.sahva.in";
 
@@ -24,4 +24,25 @@ test("on the admin host, only the console and shared assets are served", () => {
   assert.deepEqual(decideAdminRoute("admin.sahva.in", "/", ADMIN), { kind: "redirect", to: "/admin" });
   assert.deepEqual(decideAdminRoute("admin.sahva.in", "/dashboard", ADMIN), { kind: "redirect", to: "/admin" });
   assert.deepEqual(decideAdminRoute("admin.sahva.in", "/me", ADMIN), { kind: "redirect", to: "/admin" });
+});
+
+test("SITE_MODE=admin: the console deployment serves only the console, on any host", () => {
+  // Vercel preview URLs are random: the mode, not the host, decides.
+  assert.deepEqual(decideAdminRoute("sahva-admin-git-x.vercel.app", "/admin/signin", undefined, "admin"), { kind: "next" });
+  assert.deepEqual(decideAdminRoute("sahva-admin-git-x.vercel.app", "/", undefined, "admin"), { kind: "redirect", to: "/admin" });
+  assert.deepEqual(decideAdminRoute("sahva-admin-git-x.vercel.app", "/dashboard", undefined, "admin"), { kind: "redirect", to: "/admin" });
+  assert.deepEqual(decideAdminRoute("sahva-admin-git-x.vercel.app", "/brand/logo.svg", undefined, "admin"), { kind: "next" });
+});
+
+test("SITE_MODE=clinic: the clinic deployment has no console, whatever ADMIN_HOST says", () => {
+  assert.deepEqual(decideAdminRoute("sahva.vercel.app", "/admin/signin", undefined, "clinic"), { kind: "not_found" });
+  assert.deepEqual(decideAdminRoute("admin.sahva.in", "/admin", "admin.sahva.in", "clinic"), { kind: "not_found" });
+  assert.deepEqual(decideAdminRoute("sahva.vercel.app", "/", undefined, "clinic"), { kind: "next" });
+});
+
+test("only the two known modes count", () => {
+  assert.equal(siteMode("admin"), "admin");
+  assert.equal(siteMode("clinic"), "clinic");
+  assert.equal(siteMode("Admin"), undefined);
+  assert.equal(siteMode(""), undefined);
 });
