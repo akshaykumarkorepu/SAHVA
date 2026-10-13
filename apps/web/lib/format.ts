@@ -146,4 +146,5 @@ export const ACTION_TYPE_LABEL: Record<Enums<"action_type">, string> = {
   failed_message: "Message failed",
   booking_conflict: "Booking refused",
   missed_call_followup: "Unresolved call",
+  online_request: "Online request — call to confirm",
 };

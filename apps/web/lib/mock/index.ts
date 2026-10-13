@@ -171,6 +171,7 @@ const refundRequests: {
     subscription_payments: { razorpay_payment_id: "pay_mock_y1", billing_cycle: "yearly", amount_paise: 999900 }, requester: { full_name: "Finance Two" }, decider: null,
   },
 ];
+const publicRequests = new Set<string>();
 const supportGrants: { id: string; reason: string; created_at: string; expires_at: string; revoked_at: string | null; granted_by: string | null; active: boolean; records_opened: number }[] = [];
 const supportPatients = [
   { id: "f0000000-0000-4000-8000-000000000001", full_name: "Lakshmi Devi", phone_e164: "+919876500001", sex: "female", date_of_birth: "1971-03-02", preferred_language: "te", created_at: new Date(Date.now() - 90 * 864e5).toISOString() },
@@ -864,6 +865,26 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
       { clinic_id: d.clinic.id, name: d.clinic.name, city: d.clinic.city, patient_name: d.patientMe.patient.full_name, current: true },
       ...(two ? [{ clinic_id: "c2000000-0000-4000-8000-000000000002", name: "Krishna Clinic", city: "Karimnagar", patient_name: d.patientMe.patient.full_name, current: false }] : []),
     ];
+  }
+  // ---- public clinic page (no sign-in) ----
+  if (seg[0] === "public" && seg[1] === "clinics" && seg[2]) {
+    if (seg[2] !== d.clinic.slug) throw new ApiError(404, "NOT_FOUND", "clinic not found");
+    if (method === "GET" && !seg[3]) {
+      const profile = route("GET", "/me/clinic", query, body) as Record<string, unknown>;
+      return { ...profile, clinic: { ...(profile.clinic as object), slug: d.clinic.slug, address_line: d.clinic.address_line, landmark: d.clinic.landmark, whatsapp_e164: d.clinic.whatsapp_e164 ?? null, map_url: null }, booking: { enabled: true, horizon_days: 14, min_notice_minutes: 120 } };
+    }
+    if (method === "GET" && seg[3] === "slots") {
+      // Same as /me/slots, but 2 hours' notice for a call-back.
+      return (route("GET", "/me/slots", query, body) as { slot_start: string }[]).filter((x) => new Date(x.slot_start).getTime() > Date.now() + 2 * 3600e3);
+    }
+    if (method === "POST" && seg[3] === "requests") {
+      // Mirrors request_public_booking: an Indian mobile, one open request per number.
+      const digits = String(b.phone ?? "").replace(/\D/g, "").replace(/^(91|0)(?=[6-9]\d{9}$)/, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) throw new ApiError(400, "BAD_PHONE", "Enter a 10-digit Indian mobile number.");
+      if (publicRequests.has(digits)) throw new ApiError(409, "REQUEST_PENDING", "There is already a request waiting for this number. The clinic will call you.");
+      publicRequests.add(digits);
+      return { starts_at: String(b.starts_at), phone: `+91${digits}` };
+    }
   }
   if (method === "GET" && pathname === "/me/clinic") {
     return {

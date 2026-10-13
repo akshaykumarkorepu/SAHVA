@@ -9,6 +9,7 @@ export type RunSummary = {
   invoices_issued: number;
   transcripts_purged: number;
   security_alerts: number;
+  requests_expired: number;
   sent: number;
   failed: number;
   email_configured: boolean;
@@ -29,12 +30,15 @@ export async function runNotifications(batch = 50): Promise<RunSummary> {
   if (purged.error) throw purged.error;
   const alerts = await dbAdmin.rpc("enqueue_security_alerts");
   if (alerts.error) throw alerts.error;
+  const expired = await dbAdmin.rpc("expire_unverified_bookings");
+  if (expired.error) throw expired.error;
 
   const summary: RunSummary = {
     queued: queued.data ?? 0,
     invoices_issued: invoices.data ?? 0,
     transcripts_purged: purged.data ?? 0,
     security_alerts: alerts.data ?? 0,
+    requests_expired: expired.data ?? 0,
     sent: 0,
     failed: 0,
     email_configured: mailerConfigured(),

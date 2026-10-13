@@ -15,7 +15,12 @@ export default function AiPermissionsPage() {
   if (clinic.error) return <ErrorState error={clinic.error} onRetry={clinic.reload} />;
   if (!clinic.data) return null;
 
-  return <AiPermissions clinic={clinic.data} onSaved={clinic.reload} />;
+  return (
+    <div className="space-y-6">
+      <AiPermissions clinic={clinic.data} onSaved={clinic.reload} />
+      <OnlineBooking clinic={clinic.data} onSaved={clinic.reload} />
+    </div>
+  );
 }
 
 function AiPermissions({
@@ -182,5 +187,71 @@ function Toggle({
         )}
       </span>
     </label>
+  );
+}
+
+/**
+ * The clinic's public page and who may book online. The link is what the
+ * clinic shares (Google Maps, WhatsApp, a QR at reception); requests from it
+ * arrive in Action Required for a call-back.
+ */
+function OnlineBooking({ clinic, onSaved }: { clinic: ClinicWithSettings; onSaved: () => void }) {
+  const s = clinic.settings as (ClinicWithSettings["settings"] & { public_booking_enabled?: boolean; patient_may_book?: boolean }) | null;
+  const [publicOn, setPublicOn] = React.useState(s?.public_booking_enabled ?? true);
+  const [patientsOn, setPatientsOn] = React.useState(s?.patient_may_book ?? true);
+  const [copied, setCopied] = React.useState(false);
+  const url = typeof window === "undefined" ? `/c/${clinic.slug}` : `${window.location.origin}/c/${clinic.slug}`;
+  const save = useMutation((change: Record<string, boolean>) => patch("/clinic/settings", change));
+
+  async function toggle(key: "public_booking_enabled" | "patient_may_book", value: boolean) {
+    if (key === "public_booking_enabled") setPublicOn(value);
+    else setPatientsOn(value);
+    const ok = await save.run({ [key]: value });
+    if (ok === null) {
+      if (key === "public_booking_enabled") setPublicOn(!value);
+      else setPatientsOn(!value);
+    } else onSaved();
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink">Online booking</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Your public page shows your doctors and timings. New patients can request a time there; each request holds the slot
+        and appears in <strong>Action Required</strong> for you to call and confirm. Unconfirmed requests are released after 24
+        hours.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-xl border border-line bg-surface-sunken px-3 py-2 text-sm text-ink">{url}</code>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+        >
+          {copied ? "Copied" : "Copy link"}
+        </Button>
+        <a href={url} target="_blank" rel="noreferrer">
+          <Button variant="ghost">Open</Button>
+        </a>
+      </div>
+      <div className="mt-4 space-y-1">
+        <Toggle
+          label="New patients can request a time on the public page"
+          hint="Off: the page still shows your doctors and timings, with a Call button."
+          checked={publicOn}
+          onChange={(v) => void toggle("public_booking_enabled", v)}
+        />
+        <Toggle
+          label="Signed-in patients can book online"
+          hint="Your existing patients book straight into the diary from their own page."
+          checked={patientsOn}
+          onChange={(v) => void toggle("patient_may_book", v)}
+        />
+      </div>
+    </Card>
   );
 }

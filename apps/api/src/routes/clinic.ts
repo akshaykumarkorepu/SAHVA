@@ -82,6 +82,9 @@ const settingsPatch = z
     // Privacy: owner only (checked in the handler).
     transcript_retention_days: z.number().int().min(30).max(365),
     receptionists_see_transcripts: z.boolean(),
+    // Online booking: the public page's requests, and signed-in patients.
+    public_booking_enabled: z.boolean(),
+    patient_may_book: z.boolean(),
   })
   .partial()
   .refine((o) => Object.keys(o).length > 0, "no fields to update");

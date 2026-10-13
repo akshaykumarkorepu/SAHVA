@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, get, post } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingRows, Modal, Textarea, cn } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingRows, Modal, Textarea, cn } from "@/components/ui";
 import { HeartLoader } from "@/components/HeartLoader";
 import { Icon } from "@/components/icons";
 
@@ -32,6 +32,25 @@ type ClinicData = {
   faqs: { id: string; question_en: string; question_te: string | null; answer_en: string; answer_te: string | null }[];
 };
 type Slot = { slot_start: string; slot_end: string; remaining: number };
+
+/**
+ * Where the clinic's data comes from and where a booking goes. A signed-in
+ * patient books straight into the diary; a visitor on the public page sends
+ * a request the clinic confirms by calling back.
+ */
+export type ClinicSource =
+  | { kind: "patient" }
+  | { kind: "public"; slug: string };
+
+function paths(source: ClinicSource) {
+  return source.kind === "patient"
+    ? { profile: "/me/clinic", slots: (doc: string, date: string) => `/me/slots?doctor_id=${doc}&date=${date}`, book: "/me/appointments" }
+    : {
+        profile: `/public/clinics/${source.slug}`,
+        slots: (doc: string, date: string) => `/public/clinics/${source.slug}/slots?doctor_id=${doc}&date=${date}`,
+        book: `/public/clinics/${source.slug}/requests`,
+      };
+}
 
 const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_TE = ["ఆది", "సోమ", "మంగళ", "బుధ", "గురు", "శుక్ర", "శని"];
@@ -80,8 +99,8 @@ export function sessionLines(sessions: Session[], L: boolean): string[] {
  * what they charge, and a way to book a free slot — plus the clinic's hours,
  * closures, services and common questions.
  */
-export function ClinicTab({ L }: { L: boolean }) {
-  const q = useApi<ClinicData>("/me/clinic");
+export function ClinicTab({ L, source = { kind: "patient" } }: { L: boolean; source?: ClinicSource }) {
+  const q = useApi<ClinicData>(paths(source).profile, [paths(source).profile]);
   const [booking, setBooking] = React.useState<Doctor | null>(null);
 
   if (q.loading) return <LoadingRows rows={4} />;
@@ -219,7 +238,7 @@ export function ClinicTab({ L }: { L: boolean }) {
         </section>
       )}
 
-      {booking && <BookingSheet doctor={booking} clinic={d} L={L} onClose={() => setBooking(null)} />}
+      {booking && <BookingSheet doctor={booking} clinic={d} L={L} source={source} onClose={() => setBooking(null)} />}
     </div>
   );
 }
@@ -234,7 +253,25 @@ function localDay(at: Date, tz: string): string {
  * availability the AI uses; booking re-checks inside the database, so a slot
  * taken a moment ago is reported, not double-booked.
  */
-function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: ClinicData; L: boolean; onClose: () => void }) {
+function BookingSheet({
+  doctor,
+  clinic,
+  L,
+  source,
+  onClose,
+}: {
+  doctor: Doctor;
+  clinic: ClinicData;
+  L: boolean;
+  source: ClinicSource;
+  onClose: () => void;
+}) {
+  const visitor = source.kind === "public";
+  const p = paths(source);
+  const [name, setName] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [website, setWebsite] = React.useState(""); // honeypot: hidden from people
+  const [requested, setRequested] = React.useState<{ starts_at: string; phone: string } | null>(null);
   const tz = clinic.clinic.timezone || "Asia/Kolkata";
   const client = useQueryClient();
   const sitsOn = new Set(doctor.sessions.map((s) => s.day_of_week));
@@ -256,18 +293,19 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const slotsUrl = day ? p.slots(doctor.id, day) : null;
   React.useEffect(() => {
-    if (!day) return;
+    if (!day || !slotsUrl) return;
     let stop = false;
     setSlots(null);
     setSlot(null);
-    get<Slot[]>(`/me/slots?doctor_id=${doctor.id}&date=${day}`)
+    get<Slot[]>(slotsUrl)
       .then((s) => !stop && setSlots(s))
       .catch((e) => !stop && (setSlots([]), setError(e instanceof Error ? e.message : "Could not load times.")));
     return () => {
       stop = true;
     };
-  }, [day, doctor.id]);
+  }, [day, slotsUrl]);
 
   const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: tz });
   const dayLabel = (iso: string) =>
@@ -275,10 +313,26 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
 
   async function book() {
     if (!slot) return;
+    if (visitor && (name.trim().length < 2 || phone.replace(/\D/g, "").length < 10)) {
+      setError(L ? "మీ పేరు, 10 అంకెల మొబైల్ నంబర్ ఇవ్వండి." : "Enter your name and 10-digit mobile number.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await post("/me/appointments", { doctor_id: doctor.id, starts_at: slot.slot_start, reason: reason.trim() || undefined });
+      if (visitor) {
+        const r = await post<{ starts_at: string; phone: string }>(p.book, {
+          doctor_id: doctor.id,
+          starts_at: slot.slot_start,
+          name: name.trim(),
+          phone: phone.trim(),
+          reason: reason.trim() || undefined,
+          website,
+        });
+        setRequested(r);
+        return;
+      }
+      await post(p.book, { doctor_id: doctor.id, starts_at: slot.slot_start, reason: reason.trim() || undefined });
       toast.success(L ? "అపాయింట్‌మెంట్ బుక్ అయింది" : `Booked with ${doctor.full_name} at ${time(slot.slot_start)}.`);
       void client.invalidateQueries({ queryKey: ["api"] });
       onClose();
@@ -296,6 +350,35 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
     }
   }
 
+  if (requested) {
+    const when = `${dayLabel(localDay(new Date(requested.starts_at), tz))}, ${time(requested.starts_at)}`;
+    return (
+      <Modal open onClose={onClose} title={L ? "అభ్యర్థన పంపబడింది" : "Request sent"} footer={<Button onClick={onClose}>{L ? "సరే" : "Done"}</Button>}>
+        <div className="space-y-3 pb-4 text-sm text-ink" role="status">
+          <p>
+            {L ? (
+              <>
+                <strong>{doctor.full_name}</strong> తో <strong>{when}</strong> సమయం మీకోసం ఉంచబడింది.
+              </>
+            ) : (
+              <>
+                We are holding <strong>{when}</strong> with <strong>{doctor.full_name}</strong> for you.
+              </>
+            )}
+          </p>
+          <p className="text-ink-muted">
+            {L
+              ? `${clinic.clinic.name} నుండి ${requested.phone} కు కాల్ వస్తుంది — నిర్ధారించిన తర్వాతే అపాయింట్‌మెంట్ ఖాయం. మిమ్మల్ని చేరుకోలేకపోతే, సమయం విడుదల అవుతుంది.`
+              : `${clinic.clinic.name} will call ${requested.phone} to confirm. The appointment is final once they have spoken to you; if they cannot reach you, the time is released.`}
+          </p>
+          <a href={`tel:${clinic.clinic.phone_e164}`} className="inline-block font-medium text-brand-700 underline">
+            {L ? "క్లినిక్‌కు కాల్ చేయండి" : "Call the clinic"} · {clinic.clinic.phone_e164}
+          </a>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open
@@ -306,7 +389,11 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
         <>
           <Button variant="secondary" onClick={onClose}>{L ? "రద్దు" : "Cancel"}</Button>
           <Button loading={busy} disabled={!slot} onClick={() => void book()}>
-            {slot ? (L ? `${time(slot.slot_start)} కి బుక్ చేయండి` : `Book ${time(slot.slot_start)}`) : L ? "సమయం ఎంచుకోండి" : "Pick a time"}
+            {slot
+              ? visitor
+                ? L ? `${time(slot.slot_start)} కోసం అభ్యర్థించండి` : `Request ${time(slot.slot_start)}`
+                : L ? `${time(slot.slot_start)} కి బుక్ చేయండి` : `Book ${time(slot.slot_start)}`
+              : L ? "సమయం ఎంచుకోండి" : "Pick a time"}
           </Button>
         </>
       }
@@ -362,6 +449,28 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
                 </div>
               )}
             </div>
+            {visitor && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[13px] font-medium text-ink">{L ? "మీ పేరు" : "Your name"}</span>
+                  <Input className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={100} />
+                </label>
+                <label className="block">
+                  <span className="text-[13px] font-medium text-ink">{L ? "మొబైల్ నంబర్" : "Mobile number"}</span>
+                  <Input className="mt-1.5" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" placeholder="98765 43210" maxLength={20} />
+                </label>
+                <input
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  className="absolute -left-[9999px] h-0 w-0 opacity-0"
+                  name="website"
+                />
+              </div>
+            )}
             <label className="block">
               <span className="text-[13px] font-medium text-ink">{L ? "కారణం (ఐచ్ఛికం)" : "Reason (optional)"}</span>
               <Textarea rows={2} className="mt-1.5" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
@@ -374,7 +483,13 @@ function BookingSheet({ doctor, clinic, L, onClose }: { doctor: Doctor; clinic: 
           </p>
         )}
         <p className="text-xs text-ink-subtle">
-          {L ? "బుక్ చేసిన తర్వాత క్లినిక్‌కు వెంటనే తెలుస్తుంది." : "The clinic sees your booking straight away."}{" "}
+          {visitor
+            ? L
+              ? "క్లినిక్ మీకు కాల్ చేసి నిర్ధారిస్తుంది. మీ నంబర్ ఈ క్లినిక్‌కు మాత్రమే."
+              : "The clinic will call you to confirm. Your number goes to this clinic only."
+            : L
+              ? "బుక్ చేసిన తర్వాత క్లినిక్‌కు వెంటనే తెలుస్తుంది."
+              : "The clinic sees your booking straight away."}{" "}
           <Badge tone="neutral">{L ? "ఆన్‌లైన్" : "Online"}</Badge>
         </p>
       </div>

@@ -323,6 +323,7 @@ export type Database = {
           cancellation_reason: string | null;
           created_at: string;
           updated_at: string;
+          phone_verified: boolean;
         };
         Insert: {
           id?: string;
@@ -348,6 +349,7 @@ export type Database = {
           cancellation_reason?: string | null;
           created_at?: string;
           updated_at?: string;
+          phone_verified?: boolean;
         };
         Update: {
           id?: string;
@@ -373,6 +375,7 @@ export type Database = {
           cancellation_reason?: string | null;
           created_at?: string;
           updated_at?: string;
+          phone_verified?: boolean;
         };
         Relationships: [
           {
@@ -1159,6 +1162,7 @@ export type Database = {
           transcript_retention_days: number;
           receptionists_see_transcripts: boolean;
           patient_may_book: boolean;
+          public_booking_enabled: boolean;
         };
         Insert: {
           clinic_id: string;
@@ -1188,6 +1192,7 @@ export type Database = {
           transcript_retention_days?: number;
           receptionists_see_transcripts?: boolean;
           patient_may_book?: boolean;
+          public_booking_enabled?: boolean;
         };
         Update: {
           clinic_id?: string;
@@ -1217,6 +1222,7 @@ export type Database = {
           transcript_retention_days?: number;
           receptionists_see_transcripts?: boolean;
           patient_may_book?: boolean;
+          public_booking_enabled?: boolean;
         };
         Relationships: [
           {
@@ -3920,6 +3926,10 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      expire_unverified_bookings: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       finish_notification: {
         Args: {
           p_id: string;
@@ -3963,6 +3973,12 @@ export type Database = {
         };
         Returns: undefined;
       };
+      public_clinic_by_slug: {
+        Args: {
+          p_slug: string;
+        };
+        Returns: { id: string; live: boolean; requests_enabled: boolean }[];
+      };
       purge_expired_transcripts: {
         Args: {
           p_limit?: number;
@@ -3979,6 +3995,17 @@ export type Database = {
           p_details: Json;
         };
         Returns: string;
+      };
+      request_public_booking: {
+        Args: {
+          p_clinic_id: string;
+          p_doctor_id: string;
+          p_name: string;
+          p_phone: string;
+          p_starts_at: string;
+          p_reason?: string;
+        };
+        Returns: Database["public"]["Tables"]["appointments"]["Row"];
       };
       reschedule_appointment: {
         Args: {
@@ -4040,7 +4067,7 @@ export type Database = {
     Enums: {
       action_severity: "low" | "normal" | "high" | "urgent";
       action_status: "open" | "in_progress" | "resolved" | "dismissed";
-      action_type: "reschedule_needed" | "unrecognised_caller" | "ai_escalation" | "low_confidence_call" | "failed_message" | "booking_conflict" | "missed_call_followup";
+      action_type: "reschedule_needed" | "unrecognised_caller" | "ai_escalation" | "low_confidence_call" | "failed_message" | "booking_conflict" | "missed_call_followup" | "online_request";
       actor_type: "ai" | "staff" | "patient" | "doctor" | "system" | "support";
       appointment_event: "created" | "confirmed" | "rescheduled" | "cancelled" | "checked_in" | "completed" | "no_show" | "flagged_for_reschedule" | "reminder_sent";
       appointment_status: "booked" | "confirmed" | "checked_in" | "completed" | "cancelled" | "no_show" | "needs_reschedule";

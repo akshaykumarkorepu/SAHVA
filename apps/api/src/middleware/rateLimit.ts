@@ -117,3 +117,14 @@ export const authLimiter = () =>
       return `${ip}:${who}`;
     },
   });
+
+/**
+ * Booking requests from a clinic's public page: the one write a stranger can
+ * make. A handful per address per hour is plenty for a family booking.
+ */
+export const publicRequestLimiter = () =>
+  make({
+    windowMs: 60 * 60_000,
+    max: 5,
+    message: "Too many requests from this connection. Please call the clinic.",
+  });

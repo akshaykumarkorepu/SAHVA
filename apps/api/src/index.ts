@@ -25,6 +25,7 @@ import { onboarding } from "./routes/onboarding.js";
 import { admin } from "./routes/admin.js";
 import { adminEligibility, requirePlatformAdmin, whoami } from "./middleware/admin.js";
 import { billing } from "./routes/billing.js";
+import { publicClinic } from "./routes/publicClinic.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { reconcile } from "./lib/reconcile.js";
 import { runNotifications } from "./lib/notifications.js";
@@ -112,6 +113,8 @@ app.post("/api/internal/notifications/run", machineLimiter(), requireServiceKey(
 // something an anonymous caller should be able to enumerate.
 // SAHVA's own admins. Not clinic members, so mounted before the clinic gate;
 // requirePlatformAdmin insists on a second factor and a platform_admins row.
+// A clinic's public page: no sign-in. Read, see free slots, request one.
+app.use("/api/public", apiLimiter(), publicClinic);
 app.get("/api/admin-eligibility", apiLimiter(), adminEligibility);
 // Any signed-in account: is it staff, a patient, an admin? Sign-in routes by it.
 app.get("/api/whoami", apiLimiter(), whoami);

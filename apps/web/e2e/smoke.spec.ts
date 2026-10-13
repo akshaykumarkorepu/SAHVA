@@ -770,3 +770,66 @@ test("patient: a patient at two SAHVA clinics can switch between them", async ({
   const nav = page.getByRole("navigation", { name: /Choose clinic|క్లినిక్ ఎంచుకోండి/ });
   await expect(nav).toContainText("Krishna Clinic", { timeout: 15_000 });
 });
+
+/** In the booking sheet, pick the first day that has a free time, then that time. */
+async function pickFirstFreeTime(dialog: import("@playwright/test").Locator) {
+  const days = dialog.getByRole("radiogroup", { name: "Day" }).getByRole("radio");
+  const n = await days.count();
+  for (let i = 0; i < n; i++) {
+    await days.nth(i).click();
+    const times = dialog.getByRole("radiogroup", { name: "Time" }).getByRole("radio");
+    try {
+      await times.first().waitFor({ timeout: 2_000 });
+      await times.first().click();
+      return;
+    } catch {
+      /* no free time this day: try the next */
+    }
+  }
+  throw new Error("no free time in the booking window");
+}
+
+test("public clinic page: anyone sees the doctors and requests a time; the clinic calls back", async ({ page }) => {
+  const errors = watchForErrors(page);
+  await page.goto("/c/sri-sai-warangal");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sri Sai Clinic", { timeout: 15_000 });
+  await expect(page.locator("main")).toContainText("Dr. Anitha Reddy");
+  await expect(page.locator("main")).toContainText("New here? Pick a time below");
+
+  await page.getByRole("button", { name: "Book with Dr. Anitha Reddy" }).click();
+  const dialog = page.getByRole("dialog");
+  await pickFirstFreeTime(dialog);
+  await dialog.getByRole("button", { name: /^Request \d/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("name and 10-digit mobile");
+
+  await dialog.getByLabel("Your name").fill("Suma Reddy");
+  await dialog.getByLabel("Mobile number").fill("98765 43210");
+  await dialog.getByRole("button", { name: /^Request \d/ }).click();
+  await expect(page.getByRole("dialog", { name: "Request sent" })).toContainText("will call +919876543210 to confirm");
+  await settle(page);
+  expect(errors).toEqual([]);
+});
+
+test("public clinic page: a landline or short number is refused", async ({ page }) => {
+  await page.goto("/c/sri-sai-warangal");
+  await page.getByRole("button", { name: "Book with Dr. Anitha Reddy" }).click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog");
+  await pickFirstFreeTime(dialog);
+  await dialog.getByLabel("Your name").fill("Suma Reddy");
+  await dialog.getByLabel("Mobile number").fill("040 2345 6789");
+  await dialog.getByRole("button", { name: /^Request \d/ }).click();
+  await expect(dialog.getByRole("alert")).toContainText("10-digit Indian mobile");
+});
+
+test("public clinic page: an unknown clinic says so plainly", async ({ page }) => {
+  await page.goto("/c/no-such-clinic");
+  await expect(page.getByText("This clinic page is not available")).toBeVisible({ timeout: 15_000 });
+});
+
+test("settings: the clinic's public link, and the online booking switches", async ({ page }) => {
+  await page.goto("/dashboard/settings");
+  await expect(page.locator("code").filter({ hasText: "/c/sri-sai-warangal" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel(/New patients can request a time/)).toBeChecked();
+  await page.getByLabel(/New patients can request a time/).uncheck();
+  await expect(page.getByLabel(/New patients can request a time/)).not.toBeChecked();
+});

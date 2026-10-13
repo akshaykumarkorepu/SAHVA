@@ -122,6 +122,7 @@ const TYPE_ICON: Record<string, IconName> = {
   booking_conflict: "appointments",
   missed_call_followup: "calls",
   unrecognised_caller: "patients",
+  online_request: "calls",
 };
 
 function ActionCard({
@@ -204,6 +205,9 @@ function ActionCard({
               </Button>
             </Link>
           )}
+          {item.type === "online_request" && item.related_appointment_id && (
+            <OnlineRequestButtons appointmentId={item.related_appointment_id} phone={item.patient_phone} />
+          )}
           {item.related_call_id && (
             <Link href={`/dashboard/calls?open=${item.related_call_id}`} className="flex-1 sm:flex-none">
               <Button variant="secondary" icon="calls" className="w-full">
@@ -226,5 +230,31 @@ function ActionCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * A request from the public page: call the number, then confirm (the slot
+ * becomes a normal appointment) or cancel. Either closes the item.
+ */
+function OnlineRequestButtons({ appointmentId, phone }: { appointmentId: string; phone: string | null }) {
+  const confirm = useMutation(() => post(`/appointments/${appointmentId}/status`, { status: "confirmed" }));
+  const cancel = useMutation(() => post(`/appointments/${appointmentId}/cancel`, { reason: "Online request: could not confirm by phone" }));
+  return (
+    <>
+      {phone && (
+        <a href={`tel:${phone}`} className="flex-1 sm:flex-none">
+          <Button icon="calls" className="w-full">
+            Call {phone.replace(/^\+91/, "")}
+          </Button>
+        </a>
+      )}
+      <Button variant="secondary" icon="check" loading={confirm.pending} disabled={cancel.pending} onClick={() => void confirm.run()}>
+        Confirm
+      </Button>
+      <Button variant="ghost" loading={cancel.pending} disabled={confirm.pending} onClick={() => void cancel.run()}>
+        Cancel request
+      </Button>
+    </>
   );
 }

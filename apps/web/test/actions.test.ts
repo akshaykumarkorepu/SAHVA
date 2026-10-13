@@ -9,9 +9,11 @@ test("every action type says why it needs a person and what to do", () => {
   }
 });
 
-test("only reschedules close themselves — everything else needs a person to say so", () => {
-  const self = Object.entries(ACTION_GUIDE).filter(([, g]) => g.closesItself).map(([t]) => t);
-  assert.deepEqual(self, ["reschedule_needed"]);
+test("only reschedules and online requests close themselves — everything else needs a person to say so", () => {
+  // A reschedule closes when its last patient is handled; an online request
+  // when its appointment is confirmed or cancelled (a database trigger).
+  const self = Object.entries(ACTION_GUIDE).filter(([, g]) => g.closesItself).map(([t]) => t).sort();
+  assert.deepEqual(self, ["online_request", "reschedule_needed"]);
 });
 
 test("countByCategory groups by what the item is about", () => {

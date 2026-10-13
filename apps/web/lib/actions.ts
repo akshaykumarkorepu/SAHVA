@@ -33,6 +33,13 @@ export const ACTION_GUIDE: Record<
     why: "The AI tried to book during a call and the diary refused it.",
     next: "Open the call, then book the caller yourself if they still need a time.",
   },
+  online_request: {
+    category: "appointments",
+    why: "Someone new requested this slot on your public page. Their number is not verified, so the slot is only held.",
+    next: "Call them. If they are real, Confirm the appointment; if not, cancel it. Unconfirmed requests are released after 24 hours.",
+    // Confirming or cancelling the appointment closes it.
+    closesItself: true,
+  },
   failed_message: {
     category: "messages",
     why: "A message to the patient did not reach them, so they may not know their time.",

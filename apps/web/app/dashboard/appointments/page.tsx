@@ -232,6 +232,9 @@ function AppointmentRow({
         </div>
 
         <Badge tone={st.tone}>{st.label}</Badge>
+        {(a as { phone_verified?: boolean }).phone_verified === false && a.status === "booked" && (
+          <Badge tone="warn">Unverified — call to confirm</Badge>
+        )}
       </div>
 
       {live && (
