@@ -9,14 +9,38 @@ import { Button, Field, Input, Segmented, Spinner, cn } from "@/components/ui";
 import { PRICE } from "@/lib/pricing";
 import { toIndianE164 } from "@/lib/phone";
 import { Icon } from "@/components/icons";
+import { homeFor, whoami } from "@/lib/accountHome";
+
+/**
+ * After a password check (or on arriving already signed in), go where this
+ * account belongs — staff to the dashboard, patients to /me — whatever tab
+ * was selected or `next` was in the address. Admins are told to use the
+ * admin console. Returns an error message to show, if any.
+ */
+async function goHome(router: { replace: (to: string) => void }, next: string | null): Promise<string | null> {
+  let who;
+  try {
+    who = await whoami();
+  } catch {
+    return "Signed in, but your account could not be checked. Please refresh the page.";
+  }
+  const to = homeFor(who.kind, next);
+  if (!to) {
+    await supabase.auth.signOut();
+    return "This is a SAHVA admin account. Sign in on the admin console instead.";
+  }
+  router.replace(to);
+  return null;
+}
 
 /**
  * One door for everyone.
  *
  * There used to be two sign-in links in the header — "Patient sign in" and
  * "Staff sign in" — which is an implementation detail leaking into the product.
- * A person knows who they are; the page can ask. Role is a toggle here, and it
- * decides where you land, nothing else.
+ * A person knows who they are; the page can ask. Role is a toggle here that
+ * only changes the wording and the sign-up form: where you land after signing
+ * in is decided by what the account is (lib/accountHome.ts), never the tab.
  *
  * Staff cannot self-register: `enable_signup = false` in supabase/config.toml,
  * because a clinic's staff list is not something a stranger should be able to
@@ -57,13 +81,15 @@ function AuthScreen() {
   );
 
   const next = params.get("next") || HOME[role];
+  const requested = params.get("next");
 
+  // Already signed in: go where this account belongs, not where the tab says.
   React.useEffect(() => {
     if (isMockMode) return;
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) router.replace(next);
+      if (data.session) void goHome(router, requested);
     });
-  }, [router, next]);
+  }, [router, requested]);
 
   return (
     <main className="relative grid min-h-[100dvh] place-items-center overflow-hidden bg-surface px-4 py-10">
@@ -80,7 +106,7 @@ function AuthScreen() {
         Back
       </Link>
 
-      <AuthCard role={role} setRole={setRole} mode={mode} setMode={setMode} next={next} />
+      <AuthCard role={role} setRole={setRole} mode={mode} setMode={setMode} next={next} requested={requested} />
     </main>
   );
 }
@@ -95,12 +121,14 @@ function AuthCard({
   mode,
   setMode,
   next,
+  requested,
 }: {
   role: Role;
   setRole: (r: Role) => void;
   mode: Mode;
   setMode: (m: Mode) => void;
   next: string;
+  requested: string | null;
 }) {
   const signup = mode === "signup";
 
@@ -119,7 +147,7 @@ function AuthCard({
           )}
         >
           <Panel active={!signup}>
-            <SignInForm role={role} setRole={setRole} next={next} onSwitch={() => setMode("signup")} />
+            <SignInForm role={role} setRole={setRole} next={next} requested={requested} onSwitch={() => setMode("signup")} />
           </Panel>
           <Panel active={signup}>
             <SignUpForm role={role} setRole={setRole} next={next} onSwitch={() => setMode("signin")} />
@@ -345,11 +373,13 @@ function SignInForm({
   role,
   setRole,
   next,
+  requested,
   onSwitch,
 }: {
   role: Role;
   setRole: (r: Role) => void;
   next: string;
+  requested: string | null;
   onSwitch: () => void;
 }) {
   const router = useRouter();
@@ -366,20 +396,25 @@ function SignInForm({
     setPending(true);
     setError(null);
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setPending(false);
     if (authError) {
       // A lockout is not a typo. Telling someone to recheck a password they
       // typed correctly just burns more attempts against the limit.
       if (authError.status === 429) {
         setError("Too many attempts. Wait a few minutes, then try again.");
+        setPending(false);
         return;
       }
       // Not distinguishing "no such account" from "wrong password" — that
       // difference tells an attacker which emails are registered.
       setError("That email and password did not match.");
+      setPending(false);
       return;
     }
-    router.replace(next);
+    const problem = await goHome(router, requested);
+    if (problem) {
+      setError(problem);
+      setPending(false);
+    }
   }
 
   return (

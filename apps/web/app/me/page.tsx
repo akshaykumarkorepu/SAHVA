@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { whoami } from "@/lib/accountHome";
 import { useRequirePatient } from "@/lib/portal/session";
 import { useApi } from "@/lib/hooks";
 import { STRINGS, type Lang } from "@/lib/portal/i18n";
@@ -51,22 +53,8 @@ export default function PatientHomePage() {
   }
 
   if (status === "not-a-patient") {
-    return (
-      <Centred>
-        <Icon name="warning" className="mx-auto h-8 w-8 text-accent-amber" />
-        <p className="mt-4 font-semibold text-ink">
-          {L
-            ? "ఈ ఖాతా ఏ రోగి రికార్డుతో అనుసంధానించబడలేదు"
-            : "This account is not linked to a patient record"}
-        </p>
-        <p className="mt-2 text-sm text-ink-muted">{error}</p>
-        <Button variant="secondary" className="mt-5" onClick={signOut}>
-          {L ? "సైన్ అవుట్" : "Sign out"}
-        </Button>
-      </Centred>
-    );
+    return <NotAPatient error={error} L={L} onSignOut={signOut} />;
   }
-
   // Without this branch the page falls through every guard and renders an empty
   // body — the staff shell handles "unconfigured", the patient surface did not.
   if (status === "unconfigured") {
@@ -178,5 +166,42 @@ function Centred({ children, tone }: { children: React.ReactNode; tone?: "amber"
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * Signed in, but not a patient. A staff login that lands here (an old link,
+ * a bookmark) is forwarded to the dashboard; only an account linked to
+ * nothing at all sees the "not linked" message.
+ */
+function NotAPatient({ error, L, onSignOut }: { error: string | null; L: boolean; onSignOut: () => void }) {
+  const router = useRouter();
+  const [checked, setChecked] = React.useState(false);
+  React.useEffect(() => {
+    whoami()
+      .then((w) => {
+        if (w.kind === "staff" || w.kind === "staff_no_clinic") router.replace("/dashboard");
+        else setChecked(true);
+      })
+      .catch(() => setChecked(true));
+  }, [router]);
+  if (!checked) {
+    return (
+      <div className="grid min-h-[100dvh] place-items-center bg-surface">
+        <Spinner />
+      </div>
+    );
+  }
+  return (
+    <Centred>
+      <Icon name="warning" className="mx-auto h-8 w-8 text-accent-amber" />
+      <p className="mt-4 font-semibold text-ink">
+        {L ? "ఈ ఖాతా ఏ రోగి రికార్డుతో అనుసంధానించబడలేదు" : "This account is not linked to a patient record"}
+      </p>
+      <p className="mt-2 text-sm text-ink-muted">{error}</p>
+      <Button variant="secondary" className="mt-5" onClick={onSignOut}>
+        {L ? "సైన్ అవుట్" : "Sign out"}
+      </Button>
+    </Centred>
   );
 }

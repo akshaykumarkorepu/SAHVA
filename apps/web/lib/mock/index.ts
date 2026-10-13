@@ -248,6 +248,7 @@ function route(method: string, pathname: string, query: URLSearchParams, body: u
     return row;
   }
   if (method === "GET" && pathname === "/clinic/me") return { ...d.me, role: mockRole() };
+  if (method === "GET" && pathname === "/whoami") return { kind: "staff", email: d.me.email };
   if (method === "GET" && pathname === "/clinic/support-access") {
     const now = Date.now();
     return supportGrants.map((g) => ({ ...g, active: !g.revoked_at && new Date(g.expires_at).getTime() > now }));

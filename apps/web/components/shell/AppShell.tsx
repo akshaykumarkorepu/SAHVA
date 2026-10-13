@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useRequireSession } from "@/lib/session";
 import { useActionCount } from "@/lib/hooks";
 import { useLiveClinic, type LiveStatus } from "@/lib/live";
 import { isActive, primaryNav, secondaryNav, visibleNav, type NavItem } from "./nav";
 import { Logo } from "./Logo";
 import { ClinicSetup } from "./ClinicSetup";
+import { whoami, type AccountKind } from "@/lib/accountHome";
 import { TrialBanner } from "./TrialBanner";
 import { VerificationBanner } from "./VerificationBanner";
 import { Icon } from "@/components/icons";
@@ -34,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (status === "unconfigured") return <SetupNeeded />;
   if (status === "loading" || status === "signed-out") return <BootScreen />;
-  if (status === "no-clinic") return <ClinicSetup email={email} onSignOut={signOut} />;
+  if (status === "no-clinic") return <NoClinic email={email} onSignOut={signOut} />;
 
   return (
     <div className="flex min-h-[100dvh] bg-surface">
@@ -371,3 +372,34 @@ const Code = ({ children }: { children: React.ReactNode }) => (
     {children}
   </code>
 );
+
+/**
+ * Signed in, but not in any clinic. Clinic set-up is only for staff
+ * accounts: a patient who reaches the dashboard is sent to their own page,
+ * not offered a clinic registration form.
+ */
+function NoClinic({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+  const router = useRouter();
+  const [kind, setKind] = React.useState<AccountKind | "unknown" | null>(null);
+  React.useEffect(() => {
+    whoami()
+      .then((w) => {
+        if (w.kind === "patient" || w.kind === "none") router.replace("/me");
+        setKind(w.kind);
+      })
+      .catch(() => setKind("unknown"));
+  }, [router]);
+  if (kind === null || kind === "patient" || kind === "none") return <BootScreen />;
+  if (kind === "admin") {
+    return (
+      <div className="grid min-h-[100dvh] place-items-center bg-surface px-4 text-center">
+        <div className="max-w-sm">
+          <p className="font-semibold text-ink">This is a SAHVA admin account.</p>
+          <p className="mt-2 text-sm text-ink-muted">Use the admin console, not the clinic site.</p>
+          <button type="button" onClick={onSignOut} className="mt-4 text-sm font-medium text-brand-700 underline">Sign out</button>
+        </div>
+      </div>
+    );
+  }
+  return <ClinicSetup email={email} onSignOut={onSignOut} />;
+}

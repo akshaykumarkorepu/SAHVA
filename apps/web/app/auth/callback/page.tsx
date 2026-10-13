@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Spinner } from "@/components/ui";
+import { homeFor, whoami } from "@/lib/accountHome";
 
 /**
  * Where Google OAuth and the email links land.
@@ -54,10 +55,18 @@ function Callback() {
     }
 
     let done = false;
-    const finish = (to: string) => {
+    // Where the account belongs (staff → dashboard, patient → /me), with the
+    // requested page honoured only inside that area.
+    const finish = (requested: string) => {
       if (done) return;
       done = true;
-      router.replace(to);
+      whoami()
+        .then((w) => {
+          const to = homeFor(w.kind, requested);
+          if (to) router.replace(to);
+          else setFailed("This is a SAHVA admin account. Sign in on the admin console instead.");
+        })
+        .catch(() => router.replace(requested));
     };
 
     supabase.auth.getSession().then(({ data }) => {

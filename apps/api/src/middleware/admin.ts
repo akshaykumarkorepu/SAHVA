@@ -98,3 +98,48 @@ export async function adminEligibility(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+export type AccountKind = "admin" | "staff" | "patient" | "staff_no_clinic" | "none";
+
+/** What a signed-in account is, in order of precedence. Pure, for testing. */
+export function accountKind(a: { admin: boolean; member: boolean; patient: boolean; staffProfile: boolean }): AccountKind {
+  if (a.admin) return "admin";
+  if (a.member) return "staff";
+  if (a.patient) return "patient";
+  if (a.staffProfile) return "staff_no_clinic";
+  return "none";
+}
+
+/**
+ * Where should this login go? The sign-in page asks after a successful
+ * password check and routes by the answer — not by which tab was clicked,
+ * which used to send staff to the patient page and patients to clinic
+ * registration. Needs only a valid session; answers only about the caller.
+ */
+export async function whoami(req: Request, res: Response, next: NextFunction) {
+  try {
+    const header = req.header("authorization");
+    const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+    const user = token ? await verifyAccessToken(token) : null;
+    if (!user) throw unauthorized("Please sign in.");
+    const [admin, member, patient, profile] = await Promise.all([
+      dbAdmin.from("platform_admins").select("disabled_at").eq("user_id", user.id).maybeSingle(),
+      dbAdmin.from("clinic_members").select("clinic_id").eq("staff_id", user.id).eq("status", "active").limit(1),
+      dbAdmin.from("patients").select("id").eq("auth_user_id", user.id).limit(1),
+      dbAdmin.from("staff_profiles").select("id").eq("id", user.id).maybeSingle(),
+    ]);
+    const failed = [admin, member, patient, profile].find((r) => r.error);
+    if (failed?.error) throw new AppError(503, "WHOAMI_FAILED", "Could not check this account.");
+    res.json({
+      kind: accountKind({
+        admin: !!admin.data && !admin.data.disabled_at,
+        member: (member.data ?? []).length > 0,
+        patient: (patient.data ?? []).length > 0,
+        staffProfile: !!profile.data,
+      }),
+      email: user.email ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
