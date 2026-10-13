@@ -61,7 +61,7 @@ const schema = z.object({
    * here took the whole API down over a feature that is not wired to a carrier
    * yet, so a voice call now fails with AI_NOT_CONFIGURED instead.
    */
-  ANTHROPIC_API_KEY: z.string().min(10).optional(),
+  ANTHROPIC_API_KEY: optional(z.string().min(10)),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-6"),
 
   /** Shared secret for machine callers (telephony webhook, voice orchestrator). */
@@ -77,7 +77,7 @@ const schema = z.object({
    * restart and are per-instance, so running more than one instance multiplies
    * every limit. Set this before scaling past one box.
    */
-  REDIS_URL: z.string().url().optional(),
+  REDIS_URL: optional(z.string().url()),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
