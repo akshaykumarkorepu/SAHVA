@@ -74,3 +74,27 @@ export function requireAdminRole(...roles: AdminRole[]) {
     next();
   };
 }
+
+/**
+ * Before the second factor: is this signed-in account a SAHVA admin at all?
+ * The sign-in page asks this before setting up an authenticator, so a clinic
+ * or patient session left in the browser is never walked into admin MFA
+ * set-up. Needs only a valid session; answers only about the caller.
+ */
+export async function adminEligibility(req: Request, res: Response, next: NextFunction) {
+  try {
+    const header = req.header("authorization");
+    const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+    const user = token ? await verifyAccessToken(token) : null;
+    if (!user) throw unauthorized("Please sign in.");
+    const { data, error } = await dbAdmin
+      .from("platform_admins")
+      .select("disabled_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw new AppError(503, "ADMIN_CHECK_FAILED", "Could not check admin access.");
+    res.json({ admin: !!data && !data.disabled_at, email: user.email ?? null });
+  } catch (err) {
+    next(err);
+  }
+}

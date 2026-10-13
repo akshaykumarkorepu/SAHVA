@@ -22,7 +22,7 @@ import { voice } from "./routes/voice.js";
 import { portal } from "./routes/portal.js";
 import { onboarding } from "./routes/onboarding.js";
 import { admin } from "./routes/admin.js";
-import { requirePlatformAdmin } from "./middleware/admin.js";
+import { adminEligibility, requirePlatformAdmin } from "./middleware/admin.js";
 import { billing } from "./routes/billing.js";
 import { razorpayWebhook } from "./routes/razorpayWebhook.js";
 import { reconcile } from "./lib/reconcile.js";
@@ -109,6 +109,7 @@ app.post("/api/internal/notifications/run", machineLimiter(), requireServiceKey(
 // something an anonymous caller should be able to enumerate.
 // SAHVA's own admins. Not clinic members, so mounted before the clinic gate;
 // requirePlatformAdmin insists on a second factor and a platform_admins row.
+app.get("/api/admin-eligibility", apiLimiter(), adminEligibility);
 app.use("/api/admin", apiLimiter(), requirePlatformAdmin, admin);
 
 // Signed in, but possibly without a clinic yet: the only thing such a user

@@ -11,6 +11,7 @@ import { Icon } from "@/components/icons";
 
 type Step =
   | { kind: "password" }
+  | { kind: "existing"; email: string | null }
   | { kind: "enroll"; factorId: string; qr: string; secret: string }
   | { kind: "verify"; factorId: string }
   | { kind: "not-admin" };
@@ -36,13 +37,31 @@ export default function AdminSignIn() {
     if (session.status === "not-admin") setStep({ kind: "not-admin" });
   }, [session.status, router]);
 
-  // Signed in with a password but not the code yet (e.g. a reload mid-way).
+  // A login is already saved in this browser but has not passed the code —
+  // a reload mid-way, or a clinic or patient login on the same site. Never
+  // carry on silently: say whose it is and let the person choose.
   React.useEffect(() => {
-    if (session.status === "needs-mfa" && step.kind === "password") void startSecondFactor();
+    if (session.status !== "needs-mfa" || step.kind !== "password") return;
+    void supabase.auth.getUser().then(({ data }) => setStep({ kind: "existing", email: data.user?.email ?? null }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.status]);
 
+  async function switchAccount() {
+    await session.signOut();
+    setEmail("");
+    setPassword("");
+    setError(null);
+    setStep({ kind: "password" });
+  }
+
   async function startSecondFactor() {
+    // Only an admin account is taken into authenticator set-up.
+    try {
+      const who = await get<{ admin: boolean }>("/admin-eligibility");
+      if (!who.admin) return setStep({ kind: "not-admin" });
+    } catch (e) {
+      return setError(e instanceof Error ? e.message : "Could not check admin access.");
+    }
     const { data, error: e } = await supabase.auth.mfa.listFactors();
     if (e) return setError(e.message);
     const verified = data.totp.find((f) => f.status === "verified");
@@ -126,13 +145,26 @@ export default function AdminSignIn() {
               Continue
             </Button>
           </form>
+        ) : step.kind === "existing" ? (
+          <div className="mt-6 space-y-4">
+            <p className="text-sm text-ink-muted">
+              This browser is already signed in as <strong className="text-ink">{step.email ?? "another account"}</strong>.
+            </p>
+            {error && <ErrorLine text={error} />}
+            <Button size="lg" className="w-full" loading={pending} onClick={() => { setPending(true); void startSecondFactor().finally(() => setPending(false)); }}>
+              Continue as {step.email ?? "this account"}
+            </Button>
+            <Button variant="secondary" className="w-full" onClick={() => void switchAccount()}>
+              Use a different account
+            </Button>
+          </div>
         ) : step.kind === "not-admin" ? (
           <div className="mt-6 space-y-4">
             <p role="alert" className="rounded-xl bg-accent-rose/[0.07] p-3 text-sm text-ink">
               This account is not a SAHVA admin. If you run a clinic, sign in on the clinic site instead.
             </p>
-            <Button variant="secondary" className="w-full" onClick={() => void session.signOut().then(() => setStep({ kind: "password" }))}>
-              Sign out
+            <Button variant="secondary" className="w-full" onClick={() => void switchAccount()}>
+              Sign out and use a different account
             </Button>
           </div>
         ) : (
