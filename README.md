@@ -361,7 +361,7 @@ watch.
 
 | Piece | Host | Config in repo |
 |---|---|---|
-| `apps/web` | Vercel | `vercel.json` |
+| `apps/web` | Vercel (Root Directory `apps/web`) | `apps/web/vercel.json` |
 | `apps/api` | Render | `render.yaml` |
 | Database | Supabase | `supabase/migrations/` |
 

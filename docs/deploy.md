@@ -53,8 +53,10 @@ returns a plain 404 for `/admin`, and the admin console serves only `/admin`
 (everything else redirects there). It is decided by the setting, not the
 host name, so it holds on preview deployments too.
 
-`vercel.json` pins the monorepo build, so leave Root Directory as the repo
-root in both projects.
+In both projects set **Root Directory to `apps/web`** (Vercel otherwise sees
+the API too and asks for a multi-service setup). Vercel installs the whole
+workspace from the repo root and runs `next build` in `apps/web`;
+`apps/web/vercel.json` only names the framework.
 
 1. <https://vercel.com/new> → import the repo → branch `saikirans-version` →
    name it e.g. `sahva` (the clinic site).
